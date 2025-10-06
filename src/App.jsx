@@ -1,11 +1,11 @@
 import React from 'react'
-import MatrixEditor from './components/MatrixEditor'
+import Matrix from './components/Matrix'
 import './App.css'
 
 function App() {
   return (
     <div className="App">
-      <MatrixEditor />
+      <Matrix />
     </div>
   )
 }
