@@ -1,0 +1,492 @@
+# Messaging Matrix - LLM Context File
+
+## Project Overview
+A React-based messaging matrix management system for organizing, editing, and visualizing marketing messages across audiences and topics. Features dual-view modes (Matrix/Tree), Google Sheets sync, and integrated Claude AI chat assistant.
+
+## Tech Stack
+- **Frontend**: React 18.2, Vite 4.4, Tailwind CSS 3.3
+- **Backend**: Express.js proxy server for Claude API
+- **Storage**: Google Sheets (via Service Account), localStorage fallback
+- **Auth**: Google Service Account with jose JWT signing
+- **UI Icons**: lucide-react
+- **AI**: Anthropic Claude API via @anthropic-ai/sdk
+
+## Architecture Overview
+
+### Data Model
+Three primary entities with hierarchical relationships:
+
+**Audiences** (rows in matrix)
+- Properties: id, key, name, order, status, strategy, buying_platform, data_source, targeting_type, device, tag, comment, campaign_name, campaign_id, lineitem_name, lineitem_id
+- Key field: `key` (e.g., "aud1", "aud2")
+
+**Topics** (columns in matrix)
+- Properties: id, key, name, order, status, tag1-tag4, created, comment
+- Key field: `key` (e.g., "top1", "top2")
+
+**Messages** (cells in matrix)
+- Properties: id, name, number, variant, audience (FK), topic (FK), version, pmmid, status, start_date, end_date, template, template_variant_classes, headline, copy1, copy2, image1-image6, flash, cta, landingUrl, comment
+- Composite identity: audience + topic + number + variant + version
+- PMMID format: `a_{audience}-t_{topic}-m_{number}-v_{variant}-n_{version}`
+
+### Message Numbering Logic
+- **Empty cell**: New message gets global next highest number, variant 'a'
+- **Cell with messages**: Same number as existing, increment variant (a→b→c...)
+- **Versioning**: Duplicate creates new version, increments version number
+- **Status lifecycle**: PLANNED → LIVE/RUNNING → PAUSED → (deleted soft-delete)
+
+### Directory Structure
+```
+messagingmatrix/
+├── src/
+│   ├── components/
+│   │   ├── Matrix.jsx              # Main app container, view toggle
+│   │   ├── TreeView.jsx            # Hierarchical tree visualization
+│   │   ├── MessageCard.jsx         # Message display card in matrix
+│   │   ├── ClaudeChat.jsx          # AI chat sidebar
+│   │   └── [legacy components]
+│   ├── hooks/
+│   │   └── useMatrix.js            # Primary data management hook
+│   ├── services/
+│   │   ├── sheets.js               # Google Sheets integration
+│   │   └── settings.js             # localStorage settings service
+│   └── api/
+│       └── claude-proxy.js         # Not used (server.js instead)
+├── server.js                       # Express proxy for Claude API
+└── package.json
+```
+
+## Core Components
+
+### Matrix.jsx (Main Component)
+**Purpose**: Application shell, view management, data orchestration
+
+**State Management**:
+- `viewMode`: 'matrix' | 'tree' - toggles between views
+- `showClaudeChat`: boolean - sidebar visibility
+- All data state delegated to useMatrix hook
+
+**Key Features**:
+- View toggle (Matrix ↔ Tree)
+- Filter controls (audience status, topic tags)
+- Message CRUD operations
+- Inline editing for audiences/topics
+- Claude chat integration
+- Google Sheets sync status
+
+**Event Handlers**:
+- `handleAddMessage(topic, audience)`: Creates new message in cell
+- `handleUpdateMessage(id, updates)`: Patches message fields
+- `handleDeleteMessage(id)`: Soft-deletes (sets status='deleted')
+- `handleDuplicateMessage(id)`: Creates new version
+- `handleMoveMessage(id, newAudience)`: Changes audience FK
+- `handleCopyMessage(id, newAudience)`: Duplicates to new audience
+
+### TreeView.jsx (Hierarchical Visualization)
+**Purpose**: Decision tree visualization with drag-and-drop repositioning
+
+**Hierarchy**:
+```
+Root: "Messaging Strategy"
+  ├─ Strategy (from audience.strategy)
+  │   └─ Targeting Type (from audience.targeting_type)
+  │       └─ Audience (audience.key)
+  │           └─ Topic (topic.key)
+  │               └─ Messages (leaf nodes)
+```
+
+**State**:
+- `nodePositions`: Object mapping `{nodeType}-{nodeId}` to {x, y} coordinates
+- `dragging`: Current drag state {type, data, offsetX, offsetY}
+
+**Rendering**:
+- `DecisionNode`: Colored rectangles with label + value
+- `MessageCard`: Status-colored message cards (leaves)
+- `Connector`: Elbow-style connectors (vertical-horizontal-vertical)
+
+**Colors**:
+- Root (purple): #7c3aed
+- Strategy (red): #dc2626 / #fee2e2
+- Targeting Type (orange): #ea580c / #ffedd5
+- Audience (blue): #2563eb / #dbeafe
+- Topic (green): #059669 / #d1fae5
+- Messages: Status-dependent (green=live, orange=paused, blue=planned, gray=draft)
+
+**Drag Implementation**:
+- Mouse-based (not HTML5 drag API)
+- Prevents text selection with `e.preventDefault()` and `select-none` classes
+- Stores custom positions, falls back to calculated defaults
+- Reset button clears custom positions
+
+### useMatrix.js (Data Hook)
+**Purpose**: Centralized data management, CRUD operations, Google Sheets sync
+
+**Core State**:
+- `audiences`, `topics`, `messages`: Array state
+- `messagesByCell`: Fast lookup object `{topicKey}-{audienceKey}` → messages[]
+- `isLoading`, `isSaving`, `error`, `lastSync`: UI state
+
+**Key Methods**:
+```javascript
+load()              // Fetch from sheets/localStorage
+save()              // Persist to sheets/localStorage
+addAudience(obj)    // Accepts name string or full object
+addTopic(obj)       // Accepts name string or full object
+addMessage(topic, audience)  // Smart numbering logic
+updateMessage(id, updates)   // Partial update
+deleteMessage(id)   // Soft delete
+moveMessage(id, newAudience) // Update audience FK + PMMID
+copyMessage(id, newAudience) // Duplicate with new audience
+getMessages(topic, audience) // O(1) lookup via messagesByCell
+```
+
+**Smart ID Generation**:
+- Auto-increments numeric IDs
+- Generates keys (aud1, top1, etc.)
+- Calculates message numbers/variants
+- Updates PMMID on audience changes
+
+### sheets.js (Google Sheets Service)
+**Purpose**: Bidirectional sync with Google Sheets, localStorage fallback
+
+**Authentication**:
+- Service Account JWT flow using jose library
+- Private key import via crypto.subtle.importKey
+- Token caching with expiry management
+
+**Sheet Structure**:
+- **Audiences**: 16 columns (A-P)
+- **Topics**: 11 columns (A-K)
+- **Messages**: 26 columns (A-Z)
+
+**Methods**:
+```javascript
+getAccessToken()              // OAuth2 token via JWT
+read(sheetName)               // GET values, cache to localStorage
+write(sheetName, values)      // Clear + PUT values
+loadAll()                     // Parallel fetch + parse
+saveAll(audiences, topics, messages)  // Serialize + parallel write
+parseAudiences/Topics/Messages(rows)  // CSV → objects
+```
+
+**Sync Strategy**:
+1. Try localStorage first
+2. Fallback to Google Sheets if configured
+3. Cache sheets data to localStorage
+4. Write to both on save
+
+### ClaudeChat.jsx (AI Sidebar)
+**Purpose**: Conversational interface for message creation/editing
+
+**Features**:
+- Streaming responses via SSE (Server-Sent Events)
+- Conversation history management
+- Context awareness (selected cell, current message)
+- Quick actions (create message, get suggestions, edit copy)
+
+**API Integration**:
+- Proxied through Express server (server.js)
+- Uses @anthropic-ai/sdk on backend
+- Streams via `/api/claude/stream` endpoint
+
+**Context Injection**:
+- Sends audience/topic context with each request
+- Includes current message data for editing
+- Maintains conversation history
+
+## Data Flow
+
+### Load Flow
+```
+useMatrix.load()
+  → sheets.loadAll()
+    → sheets.read('Audiences')
+      → Try localStorage
+      → Fallback: GET Google Sheets API
+      → sheets.parseAudiences()
+    → [repeat for Topics, Messages]
+  → setState(audiences, topics, messages)
+  → Rebuild messagesByCell lookup
+```
+
+### Save Flow
+```
+useMatrix.save()
+  → sheets.saveAll(audiences, topics, messages)
+    → Serialize to 2D arrays
+    → sheets.write('Audiences', rows)
+      → POST :clear endpoint
+      → PUT values endpoint
+      → Cache to localStorage
+    → [repeat for Topics, Messages]
+```
+
+### Message Creation Flow
+```
+User clicks "Add Message"
+  → handleAddMessage(topic, audience)
+    → useMatrix.addMessage(topic, audience)
+      → Check existing messages in cell
+      → If empty: number = max(all numbers) + 1, variant = 'a'
+      → If occupied: number = existing, variant = nextChar(max variant)
+      → Generate PMMID
+      → Auto-increment numeric ID
+      → setState([...messages, newMessage])
+  → Auto-triggers messagesByCell rebuild
+```
+
+## Key Patterns
+
+### Optimistic Updates
+- State updates immediately
+- Save operation async in background
+- No rollback (assumes success)
+
+### Soft Deletes
+- Never removes from array
+- Sets `status: 'deleted'`
+- Filtered out in rendering/lookups
+
+### O(1) Message Lookup
+- `messagesByCell` object rebuilt on messages change
+- Keys: `{topic}-{audience}`
+- Avoids O(n) filtering per cell
+
+### Compound Keys
+- Messages identified by: audience + topic + number + variant
+- PMMID synthesizes all parts for external systems
+- Numeric ID for React keys only
+
+### Drag-and-Drop Strategy
+- Mouse events (not HTML5 drag API) for SVG compatibility
+- Custom position storage in local state
+- Falls back to calculated positions
+- Connectors use actual positions, not defaults
+
+## Google Sheets Integration
+
+### Sheet Names
+- `Audiences` (required)
+- `Topics` (required)
+- `Messages` (required)
+
+### Column Mappings
+
+**Audiences** (16 cols):
+A=ID, B=Name, C=Order, D=Status, E=Strategy, F=Buying_platform, G=Data_source, H=Targeting_type, I=Device, J=Tag, K=Key, L=Comment, M=Campaign_name, N=Campaign_ID, O=Lineitem_name, P=Lineitem_ID
+
+**Topics** (11 cols):
+A=ID, B=Name, C=Key, D=Order, E=Status, F=Tag1, G=Tag2, H=Tag3, I=Tag4, J=Created, K=Comment
+
+**Messages** (26 cols):
+A=ID, B=Name, C=Number, D=Variant, E=Audience_Key, F=Topic_Key, G=Version, H=PMMID, I=Status, J=Start_date, K=End_date, L=Template, M=Template_variant_classes, N=Headline, O=Copy1, P=Copy2, Q-U=Image1-5, V=Image6, W=Flash, X=CTA, Y=Landing_URL, Z=Comment
+
+### Service Account Setup
+1. Create Google Cloud project
+2. Enable Google Sheets API
+3. Create Service Account
+4. Generate JSON key
+5. Share spreadsheet with service account email
+6. Store key in settings.serviceAccountKey
+
+## Environment Variables
+```
+VITE_GOOGLE_SHEETS_SPREADSHEET_ID=<spreadsheet-id>
+VITE_GOOGLE_SERVICE_ACCOUNT_KEY=<json-key-string>
+ANTHROPIC_API_KEY=<claude-api-key>
+```
+
+## Settings Service (localStorage)
+**Key**: `messagingmatrix_settings`
+
+**Schema**:
+```json
+{
+  "spreadsheetId": "",
+  "serviceAccountKey": "",
+  "imageBaseUrls": {
+    "image1": "https://...",
+    "image2": "https://...",
+    ...
+  },
+  "lastUpdated": "ISO timestamp"
+}
+```
+
+## Common Operations
+
+### Add New Audience
+```javascript
+const newAudience = {
+  id: nextId,
+  key: 'aud3',
+  name: 'New Segment',
+  order: 3,
+  strategy: 'Prospecting',
+  targeting_type: 'Lookalike',
+  status: 'ACTIVE'
+  // ... other fields
+};
+addAudience(newAudience);
+```
+
+### Create Message in Cell
+```javascript
+// Automatically handles numbering/variant logic
+addMessage('top1', 'aud2');
+```
+
+### Update Message Field
+```javascript
+updateMessage(messageId, {
+  headline: 'New Headline',
+  status: 'LIVE'
+});
+```
+
+### Duplicate Message to Another Audience
+```javascript
+// Keeps same number/variant, changes audience in PMMID
+copyMessage(messageId, 'aud3');
+```
+
+### Filter Messages
+```javascript
+// Via messagesByCell lookup
+const cellMessages = getMessages('top1', 'aud2');
+
+// Manual filtering
+const liveMessages = messages.filter(m =>
+  m.status === 'LIVE' && m.status !== 'deleted'
+);
+```
+
+## UI Patterns
+
+### Status Colors
+- **LIVE/RUNNING**: Green (#10b981)
+- **PAUSED**: Orange (#f59e0b)
+- **PLANNED**: Blue (#3b82f6)
+- **DRAFT**: Gray (#6b7280)
+
+### Inline Editing
+- Click audience/topic name to edit
+- Save on blur or Enter
+- Cancel on Escape
+
+### View Toggle
+- Matrix: Grid layout with cells
+- Tree: Hierarchical visualization with drag-and-drop
+
+### Filter Controls
+- Audience status dropdown
+- Topic tag filters (tag1-4)
+- Real-time filtering without persistence
+
+## Performance Considerations
+
+### O(1) Cell Lookup
+- `messagesByCell` object for instant access
+- Rebuilt via useEffect on messages change
+- Avoids nested loops in render
+
+### Parallel API Calls
+- loadAll() uses Promise.all for sheets
+- saveAll() uses Promise.all for writes
+
+### Soft Deletes
+- Deleted messages stay in array
+- Filtered at lookup time
+- Maintains ID stability
+
+### Local-First
+- localStorage primary source
+- Sheets as sync target
+- Works offline
+
+## Error Handling
+
+### Sheets API Errors
+- Logged to console
+- Falls back to localStorage
+- Error state displayed in UI
+
+### Auth Failures
+- Token refresh on expiry
+- Graceful degradation to localStorage
+
+### Validation
+- Minimal validation (trusts input)
+- Required: audience, topic for messages
+- Auto-generates IDs/keys
+
+## Extension Points
+
+### Adding New Fields
+1. Update data model in useMatrix
+2. Add column to sheets.js parsing
+3. Update UI in Matrix/TreeView
+4. Update Google Sheets columns
+
+### Custom Views
+1. Create new component
+2. Add to viewMode state
+3. Add toggle button in Matrix.jsx
+4. Pass data via props
+
+### New Message Types
+- Extend message schema
+- Update PMMID generation
+- Add UI controls in Matrix
+
+### Integration Points
+- Claude API: Extend prompts in ClaudeChat
+- External APIs: Add to services/
+- Export formats: Add to sheets.js
+
+## Debugging Tips
+
+### Check Message Lookup
+```javascript
+console.log(messagesByCell['top1-aud2']);
+```
+
+### Verify PMMID Format
+```javascript
+const msg = messages.find(m => m.id === 5);
+console.log(msg.pmmid);
+// Expected: a_aud2-t_top1-m_3-v_b-n_1
+```
+
+### Inspect Tree Structure
+```javascript
+// In TreeView component
+console.log(treeData);
+```
+
+### Monitor Sheets Sync
+```javascript
+// In sheets.js
+console.log('Loaded Audiences from:', stored ? 'localStorage' : 'Sheets');
+```
+
+## Known Limitations
+- No undo/redo
+- No real-time collaboration
+- No conflict resolution
+- No data validation
+- No permission model
+- Single spreadsheet only
+- English UI only
+- Desktop-focused (not mobile-optimized)
+
+## Future Enhancements
+- Real-time sync (WebSocket)
+- Collaborative editing (CRDT)
+- Export to CSV/JSON
+- Import from external sources
+- Template library
+- A/B test tracking
+- Analytics integration
+- Mobile responsive UI
+- Multi-language support

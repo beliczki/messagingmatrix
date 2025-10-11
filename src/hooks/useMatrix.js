@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import sheets from '../services/sheets';
+import settings from '../services/settings';
+import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 
 export const useMatrix = () => {
   // State
   const [audiences, setAudiences] = useState([]);
   const [topics, setTopics] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [keywords, setKeywords] = useState({});
   const [messagesByCell, setMessagesByCell] = useState({}); // Fast lookup: "topicKey-audienceKey" -> [messages]
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -33,6 +36,9 @@ export const useMatrix = () => {
     setError(null);
 
     try {
+      // Ensure settings are initialized before loading sheets data
+      await settings.ensureInitialized();
+
       const data = await sheets.loadAll();
 
       console.log('Loaded data:', {
@@ -48,6 +54,7 @@ export const useMatrix = () => {
       setAudiences(data.audiences);
       setTopics(data.topics);
       setMessages(data.messages);
+      setKeywords(data.keywords || {});
       setLastSync(new Date());
     } catch (err) {
       console.error('Load error:', err);
@@ -63,7 +70,37 @@ export const useMatrix = () => {
     setError(null);
 
     try {
-      await sheets.saveAll(audiences, topics, messages);
+      // Compute complete messages with auto-generated fields before saving
+      const pmmidPattern = settings.getPattern('pmmid');
+      const traffickingPatterns = settings.getPattern('trafficking');
+
+      const completeMessages = messages
+        .filter(m => m.status !== 'deleted')
+        .map(msg => {
+          try {
+            // Generate PMMID
+            const pmmid = generatePMMID(msg, audiences, pmmidPattern);
+
+            // Generate trafficking fields
+            const trafficking = generateTraffickingFields(
+              { ...msg, pmmid },
+              audiences,
+              traffickingPatterns
+            );
+
+            // Return message with all computed fields
+            return {
+              ...msg,
+              pmmid,
+              ...trafficking
+            };
+          } catch (error) {
+            console.error('Error generating fields for message:', msg.id, error);
+            return msg; // Return original if there's an error
+          }
+        });
+
+      await sheets.saveAll(audiences, topics, completeMessages);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -150,7 +187,9 @@ export const useMatrix = () => {
     }
 
     const version = 1;
-    const name = `${audience}!${topic}!m${number}${variant}!v${version}`;
+
+    // Generate PMMID
+    const pmmid = `a_${audience}-t_${topic}-m_${number}-v_${variant}-n_${version}`;
 
     // Auto-increment numeric ID
     const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
@@ -158,21 +197,39 @@ export const useMatrix = () => {
 
     setMessages(prev => [...prev, {
       id: newId,      // Numeric ID
-      name: name,     // Compound name like "aud1!top1!m1a!v1"
+      name: '',       // Empty name - user will fill it in
       number,
       variant,
       audience,
       topic,
       version,
+      pmmid,
       status: 'PLANNED',
+      start_date: '',
+      end_date: '',
       template: '',
-      landingUrl: '',
+      template_variant_classes: '',
       headline: '',
       copy1: '',
       copy2: '',
+      image1: '',
+      image2: '',
+      image3: '',
+      image4: '',
+      image5: '',
+      image6: '',
       flash: '',
       cta: '',
-      comment: ''
+      landingUrl: '',
+      comment: '',
+      // Trafficking fields
+      utm_campaign: '',
+      utm_source: '',
+      utm_medium: '',
+      utm_content: '',
+      utm_term: '',
+      utm_cd26: '',
+      final_trafficked_url: ''
     }]);
   }, [messages]);
 
@@ -190,23 +247,23 @@ export const useMatrix = () => {
     ));
   }, []);
 
-  // Move message - updates audience and name
+  // Move message - updates audience and PMMID
   const moveMessage = useCallback((id, newAudience) => {
     setMessages(prev => prev.map(m => {
       if (m.id === id) {
-        // Update name with new audience key
-        const newName = `${newAudience}!${m.topic}!m${m.number}${m.variant}!v${m.version}`;
+        // Update PMMID with new audience key
+        const newPmmid = `a_${newAudience}-t_${m.topic}-m_${m.number}-v_${m.variant}-n_${m.version}`;
         return {
           ...m,
           audience: newAudience,
-          name: newName
+          pmmid: newPmmid
         };
       }
       return m;
     }));
   }, []);
 
-  // Copy message - keeps same message number, updates audience in name
+  // Copy message - keeps same message number, updates audience in PMMID
   const copyMessage = useCallback((id, newAudience) => {
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
@@ -215,13 +272,13 @@ export const useMatrix = () => {
     const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
     const newId = maxId + 1;
 
-    // Update name with new audience key (keep same number/variant/version)
-    const newName = `${newAudience}!${msg.topic}!m${msg.number}${msg.variant}!v${msg.version}`;
+    // Update PMMID with new audience key (keep same number/variant/version)
+    const newPmmid = `a_${newAudience}-t_${msg.topic}-m_${msg.number}-v_${msg.variant}-n_${msg.version}`;
 
     setMessages(prev => [...prev, {
       ...msg,
       id: newId,           // New numeric ID
-      name: newName,       // Updated name with new audience
+      pmmid: newPmmid,     // Updated PMMID with new audience
       audience: newAudience // New audience key
     }]);
   }, [messages]);
@@ -261,16 +318,35 @@ export const useMatrix = () => {
     load();
   }, [load]);
 
+  // Save keywords
+  const saveKeywords = useCallback(async (updatedKeywords) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await sheets.saveKeywords(updatedKeywords);
+      setKeywords(updatedKeywords);
+      setLastSync(new Date());
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
   return {
     audiences,
     topics,
     messages,
+    keywords,
     isLoading,
     isSaving,
     error,
     lastSync,
     load,
     save,
+    saveKeywords,
     addAudience,
     addTopic,
     addMessage,

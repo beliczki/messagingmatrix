@@ -66,50 +66,67 @@ class MatrixSheetsService {
   // Parse audiences data
   parseAudiences(rows) {
     if (!rows || rows.length <= 1) return [];
-    
+
     const audiences = [];
     const dataRows = rows.slice(1); // Skip header
-    
+
     dataRows.forEach((row, index) => {
       if (!row || row.length === 0) return;
-      
-      const [name, key, order, status] = row;
+
+      const [id, name, order, status, strategy, buying_platform, data_source, targeting_type, device, tag, key, comment, campaign_name, campaign_id, lineitem_name, lineitem_id] = row;
       if (name && key) {
         audiences.push({
-          id: index + 1,
+          id: id?.trim() || `aud_${index + 1}`,
           name: name.trim(),
-          key: key.trim(),
           order: parseInt(order) || index + 1,
-          status: status?.trim() || 'active'
+          status: status?.trim() || 'active',
+          strategy: strategy?.trim() || '',
+          buying_platform: buying_platform?.trim() || '',
+          data_source: data_source?.trim() || '',
+          targeting_type: targeting_type?.trim() || '',
+          device: device?.trim() || '',
+          tag: tag?.trim() || '',
+          key: key.trim(),
+          comment: comment?.trim() || '',
+          campaign_name: campaign_name?.trim() || '',
+          campaign_id: campaign_id?.trim() || '',
+          lineitem_name: lineitem_name?.trim() || '',
+          lineitem_id: lineitem_id?.trim() || ''
         });
       }
     });
-    
+
     return audiences.sort((a, b) => a.order - b.order);
   }
 
   // Parse topics data
   parseTopics(rows) {
     if (!rows || rows.length <= 1) return [];
-    
+
     const topics = [];
     const dataRows = rows.slice(1); // Skip header
-    
+
     dataRows.forEach((row, index) => {
       if (!row || row.length === 0) return;
-      
-      const [name, key, order, status] = row;
+
+      const [id, name, key, order, status, tag1, tag2, tag3, tag4, created, comment] = row;
       if (name && key) {
         topics.push({
-          id: index + 1,
+          id: id?.trim() || `topic_${index + 1}`,
           name: name.trim(),
           key: key.trim(),
           order: parseInt(order) || index + 1,
-          status: status?.trim() || 'active'
+          status: status?.trim() || 'active',
+          tag1: tag1?.trim() || '',
+          tag2: tag2?.trim() || '',
+          tag3: tag3?.trim() || '',
+          tag4: tag4?.trim() || '',
+          created: created?.trim() || '',
+          comment: comment?.trim() || ''
         });
       }
     });
-    
+
     return topics.sort((a, b) => a.order - b.order);
   }
 
@@ -454,15 +471,27 @@ class MatrixSheetsService {
   async saveAudienceChanges(changes) {
     // Read current audiences to get the right row positions
     const currentData = await this.readSheet('audiences');
-    
+
     for (const change of changes) {
       if (change.action === 'create') {
         // Append new audience
         const newRow = [
+          change.data.id || '',
           change.data.name,
-          change.data.key,
           change.data.order,
-          change.data.status || 'active'
+          change.data.status || 'active',
+          change.data.strategy || '',
+          change.data.buying_platform || '',
+          change.data.data_source || '',
+          change.data.targeting_type || '',
+          change.data.device || '',
+          change.data.tag || '',
+          change.data.key,
+          change.data.comment || '',
+          change.data.campaign_name || '',
+          change.data.campaign_id || '',
+          change.data.lineitem_name || '',
+          change.data.lineitem_id || ''
         ];
         await this.appendToSheet('audiences', [newRow]);
       }
@@ -470,19 +499,26 @@ class MatrixSheetsService {
     }
   }
 
-  // Save topic changes  
+  // Save topic changes
   async saveTopicChanges(changes) {
     // Read current topics to get the right row positions
     const currentData = await this.readSheet('topics');
-    
+
     for (const change of changes) {
       if (change.action === 'create') {
         // Append new topic
         const newRow = [
+          change.data.id || '',
           change.data.name,
           change.data.key,
           change.data.order,
-          change.data.status || 'active'
+          change.data.status || 'active',
+          change.data.tag1 || '',
+          change.data.tag2 || '',
+          change.data.tag3 || '',
+          change.data.tag4 || '',
+          change.data.created || new Date().toISOString().split('T')[0],
+          change.data.comment || ''
         ];
         await this.appendToSheet('topics', [newRow]);
       }

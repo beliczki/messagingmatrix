@@ -1,0 +1,25 @@
+{
+  "spreadsheetId": "1OLdFNz2Ipqw0GA0paMA6Eh6Sk0qbJ2QQmVq_Yrao1NM",
+  "imageBaseUrls": {
+    "image1": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/",
+    "image2": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/",
+    "image3": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/",
+    "image4": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/",
+    "image5": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/",
+    "image6": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/sticker/"
+  },
+  "patterns": {
+    "pmmid": "p_{{audiences[Audience_Key].Buying_platform}}-s_{{audiences[Audience_Key].Strategy}}-a_{{Audience_Key}}-m_{{Number}}-t_{{Topic_Key}}-v_{{Variant}}-n_{{Version}}",
+    "topicKey": "{{Tag1}}_{{Tag2}}_{{Tag3}}_{{Tag4}}",
+    "trafficking": {
+      "utm_campaign": "{{audiences[Audience_Key].Campaign_name}}",
+      "utm_source": "{{audiences[Audience_Key].Buying_platform}}",
+      "utm_medium": "display",
+      "utm_content": "banner",
+      "utm_term": "con!{{audiences[Audience_Key].Buying_platform}}!{{Audience_Key}}!...!hu!{{Number}}{{Variant}}",
+      "utm_cd26": "{{PMMID}}",
+      "final_trafficked_url": "{{Landing_URL}}?utm_campaign={{utm_campaign}}&utm_source={{utm_source}}&utm_medium={{utm_medium}}&utm_content={{utm_content}}&utm_term={{utm_term}}&utm_cd26={{utm_cd26}}&"
+    }
+  },
+  "lastUpdated": "2025-10-11T22:19:54.857Z"
+}

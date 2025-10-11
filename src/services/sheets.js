@@ -208,52 +208,102 @@ class SheetsService {
 
   // Load all data
   async loadAll() {
-    const [audiences, topics, messages] = await Promise.all([
+    const [audiences, topics, messages, keywords] = await Promise.all([
       this.read('Audiences'),
       this.read('Topics'),
-      this.read('Messages')
+      this.read('Messages'),
+      this.read('Keywords')
     ]);
 
     return {
       audiences: this.parseAudiences(audiences),
       topics: this.parseTopics(topics),
-      messages: this.parseMessages(messages)
+      messages: this.parseMessages(messages),
+      keywords: this.parseKeywords(keywords)
     };
   }
 
   // Save all data
   async saveAll(audiences, topics, messages) {
     const audienceRows = [
-      ['ID', 'Name', 'Key', 'Order', 'Status'],
-      ...audiences.map(a => [a.id, a.name, a.key, a.order, a.status || ''])
+      ['ID', 'Name', 'Order', 'Status', 'Product', 'Strategy', 'Buying_platform', 'Data_source', 'Targeting_type', 'Device', 'Tag', 'Key', 'Comment', 'Campaign_name', 'Campaign_ID', 'Lineitem_name', 'Lineitem_ID'],
+      ...audiences.map(a => [
+        a.id,
+        a.name,
+        a.order,
+        a.status || '',
+        a.product || '',
+        a.strategy || '',
+        a.buying_platform || '',
+        a.data_source || '',
+        a.targeting_type || '',
+        a.device || '',
+        a.tag || '',
+        a.key,
+        a.comment || '',
+        a.campaign_name || '',
+        a.campaign_id || '',
+        a.lineitem_name || '',
+        a.lineitem_id || ''
+      ])
     ];
 
     const topicRows = [
-      ['ID', 'Name', 'Key', 'Order', 'Status'],
-      ...topics.map(t => [t.id, t.name, t.key, t.order, t.status || ''])
+      ['ID', 'Name', 'Key', 'Order', 'Status', 'Product', 'Tag1', 'Tag2', 'Tag3', 'Tag4', 'Created', 'Comment'],
+      ...topics.map(t => [
+        t.id,
+        t.name,
+        t.key,
+        t.order,
+        t.status || '',
+        t.product || '',
+        t.tag1 || '',
+        t.tag2 || '',
+        t.tag3 || '',
+        t.tag4 || '',
+        t.created || '',
+        t.comment || ''
+      ])
     ];
 
     const messageRows = [
-      ['ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'Status', 'Template', 'Landing_URL', 'Headline', 'Copy1', 'Copy2', 'Flash', 'CTA', 'Comment'],
+      ['ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'CTA', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
       ...messages
         .filter(m => m.status !== 'deleted')
         .map(m => [
           m.id || '',           // A: Numeric ID
           m.name || '',         // B: Name (compound key like "aud1!top1!m1a!v1")
-          m.number || 1,
-          m.variant || 'a',
-          m.audience,
-          m.topic,
-          m.version || 1,
-          m.status || '',
-          m.template || '',
-          m.landingUrl || '',
-          m.headline || '',
-          m.copy1 || '',
-          m.copy2 || '',
-          m.flash || '',
-          m.cta || '',
-          m.comment || ''
+          m.number || 1,        // C: Number
+          m.variant || 'a',     // D: Variant
+          m.audience,           // E: Audience_Key
+          m.topic,              // F: Topic_Key
+          m.version || 1,       // G: Version
+          m.pmmid || '',        // H: PMMID
+          m.status || '',       // I: Status
+          m.start_date || '',   // J: Start_date
+          m.end_date || '',     // K: End_date
+          m.template || '',     // L: Template
+          m.template_variant_classes || '', // M: Template_variant_classes
+          m.headline || '',     // N: Headline
+          m.copy1 || '',        // O: Copy1
+          m.copy2 || '',        // P: Copy2
+          m.image1 || '',       // Q: Image1
+          m.image2 || '',       // R: Image2
+          m.image3 || '',       // S: Image3
+          m.image4 || '',       // T: Image4
+          m.image5 || '',       // U: Image5
+          m.image6 || '',       // V: Image6
+          m.flash || '',        // W: Flash
+          m.cta || '',          // X: CTA
+          m.landingUrl || '',   // Y: Landing_URL
+          m.comment || '',      // Z: Comment
+          m.utm_campaign || '', // AA: UTM_Campaign
+          m.utm_source || '',   // AB: UTM_Source
+          m.utm_medium || '',   // AC: UTM_Medium
+          m.utm_content || '',  // AD: UTM_Content
+          m.utm_term || '',     // AE: UTM_Term
+          m.utm_cd26 || '',     // AF: UTM_CD26
+          m.final_trafficked_url || '' // AG: Final_Trafficked_URL
         ])
     ];
 
@@ -264,70 +314,186 @@ class SheetsService {
     ]);
   }
 
-  // Parse audiences
-  // Columns: A=ID, B=Name, C=Key, D=Order, E=Status
+  // Helper function to create a column map from header row
+  createColumnMap(headerRow) {
+    const map = {};
+    headerRow.forEach((header, index) => {
+      map[header] = index;
+    });
+    return map;
+  }
+
+  // Helper function to get value from row using column name
+  getValue(row, columnMap, columnName, defaultValue = '') {
+    const index = columnMap[columnName];
+    return (index !== undefined && row[index] !== undefined) ? row[index] : defaultValue;
+  }
+
+  // Parse audiences using column names instead of indexes
   parseAudiences(rows) {
     if (!rows || rows.length < 2) return [];
-    return rows.slice(1).map((row, idx) => ({
-      id: parseInt(row[0]) || idx + 1,  // A: Numeric ID
-      name: row[1] || '',                // B: Name
-      key: row[2] || `aud${idx + 1}`,   // C: Key
-      order: parseInt(row[3]) || idx + 1,
-      status: row[4] || ''
-    }));
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1).map((row, idx) => {
+      return {
+        id: parseInt(this.getValue(row, columnMap, 'ID')) || idx + 1,
+        name: this.getValue(row, columnMap, 'Name'),
+        order: parseInt(this.getValue(row, columnMap, 'Order')) || idx + 1,
+        status: this.getValue(row, columnMap, 'Status'),
+        product: this.getValue(row, columnMap, 'Product'),
+        strategy: this.getValue(row, columnMap, 'Strategy'),
+        buying_platform: this.getValue(row, columnMap, 'Buying_platform'),
+        data_source: this.getValue(row, columnMap, 'Data_source'),
+        targeting_type: this.getValue(row, columnMap, 'Targeting_type'),
+        device: this.getValue(row, columnMap, 'Device'),
+        tag: this.getValue(row, columnMap, 'Tag'),
+        key: this.getValue(row, columnMap, 'Key') || `aud${idx + 1}`,
+        comment: this.getValue(row, columnMap, 'Comment'),
+        campaign_name: this.getValue(row, columnMap, 'Campaign_name'),
+        campaign_id: this.getValue(row, columnMap, 'Campaign_ID'),
+        lineitem_name: this.getValue(row, columnMap, 'Lineitem_name'),
+        lineitem_id: this.getValue(row, columnMap, 'Lineitem_ID')
+      };
+    });
   }
 
-  // Parse topics
-  // Columns: A=ID, B=Name, C=Key, D=Order, E=Status
+  // Parse topics using column names instead of indexes
   parseTopics(rows) {
     if (!rows || rows.length < 2) return [];
-    return rows.slice(1).map((row, idx) => ({
-      id: parseInt(row[0]) || idx + 1,  // A: Numeric ID
-      name: row[1] || '',                // B: Name
-      key: row[2] || `top${idx + 1}`,   // C: Key
-      order: parseInt(row[3]) || idx + 1,
-      status: row[4] || ''
-    }));
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1).map((row, idx) => {
+      return {
+        id: parseInt(this.getValue(row, columnMap, 'ID')) || idx + 1,
+        name: this.getValue(row, columnMap, 'Name'),
+        key: this.getValue(row, columnMap, 'Key') || `top${idx + 1}`,
+        order: parseInt(this.getValue(row, columnMap, 'Order')) || idx + 1,
+        status: this.getValue(row, columnMap, 'Status'),
+        product: this.getValue(row, columnMap, 'Product'),
+        tag1: this.getValue(row, columnMap, 'Tag1'),
+        tag2: this.getValue(row, columnMap, 'Tag2'),
+        tag3: this.getValue(row, columnMap, 'Tag3'),
+        tag4: this.getValue(row, columnMap, 'Tag4'),
+        created: this.getValue(row, columnMap, 'Created'),
+        comment: this.getValue(row, columnMap, 'Comment')
+      };
+    });
   }
 
-  // Parse messages
-  // Columns: A=ID, B=Name, C=Number, D=Variant, E=Audience_Key, F=Topic_Key, G=Version, H=Status, I=Template, J=Landing_URL, K=Headline, L=Copy1, M=Copy2, N=Flash, O=CTA, P=Comment
+  // Parse messages using column names instead of indexes
   parseMessages(rows) {
     if (!rows || rows.length < 2) return [];
 
     console.log('Parsing messages from sheet:', rows);
 
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
     return rows.slice(1)
       .filter(row => {
         // Skip empty rows or rows without required fields
-        const hasId = row[0] || row[1];
-        const hasAudience = row[4];
-        const hasTopic = row[5];
+        const hasId = this.getValue(row, columnMap, 'ID') || this.getValue(row, columnMap, 'Name');
+        const hasAudience = this.getValue(row, columnMap, 'Audience_Key');
+        const hasTopic = this.getValue(row, columnMap, 'Topic_Key');
         return hasId && hasAudience && hasTopic;
       })
       .map((row) => {
         const message = {
-          id: parseInt(row[0]) || null,  // A: Numeric ID
-          name: row[1] || row[0],        // B: Name (compound key)
-          number: parseInt(row[2]) || 1, // C: Number
-          variant: row[3] || 'a',        // D: Variant
-          audience: row[4],              // E: Audience_Key
-          topic: row[5],                 // F: Topic_Key
-          version: parseInt(row[6]) || 1, // G: Version
-          status: row[7] || '',          // H: Status (empty = PLANNED)
-          template: row[8] || '',        // I: Template
-          landingUrl: row[9] || '',      // J: Landing_URL
-          headline: row[10] || '',       // K: Headline
-          copy1: row[11] || '',          // L: Copy1
-          copy2: row[12] || '',          // M: Copy2
-          flash: row[13] || '',          // N: Flash
-          cta: row[14] || '',            // O: CTA
-          comment: row[15] || ''         // P: Comment
+          id: parseInt(this.getValue(row, columnMap, 'ID')) || null,
+          name: this.getValue(row, columnMap, 'Name'),
+          number: parseInt(this.getValue(row, columnMap, 'Number')) || 1,
+          variant: this.getValue(row, columnMap, 'Variant') || 'a',
+          audience: this.getValue(row, columnMap, 'Audience_Key'),
+          topic: this.getValue(row, columnMap, 'Topic_Key'),
+          version: parseInt(this.getValue(row, columnMap, 'Version')) || 1,
+          pmmid: this.getValue(row, columnMap, 'PMMID'),
+          status: this.getValue(row, columnMap, 'Status'),
+          start_date: this.getValue(row, columnMap, 'Start_date'),
+          end_date: this.getValue(row, columnMap, 'End_date'),
+          template: this.getValue(row, columnMap, 'Template'),
+          template_variant_classes: this.getValue(row, columnMap, 'Template_variant_classes'),
+          headline: this.getValue(row, columnMap, 'Headline'),
+          copy1: this.getValue(row, columnMap, 'Copy1'),
+          copy2: this.getValue(row, columnMap, 'Copy2'),
+          image1: this.getValue(row, columnMap, 'Image1'),
+          image2: this.getValue(row, columnMap, 'Image2'),
+          image3: this.getValue(row, columnMap, 'Image3'),
+          image4: this.getValue(row, columnMap, 'Image4'),
+          image5: this.getValue(row, columnMap, 'Image5'),
+          image6: this.getValue(row, columnMap, 'Image6'),
+          flash: this.getValue(row, columnMap, 'Flash'),
+          cta: this.getValue(row, columnMap, 'CTA'),
+          landingUrl: this.getValue(row, columnMap, 'Landing_URL'),
+          comment: this.getValue(row, columnMap, 'Comment'),
+          // Trafficking fields
+          utm_campaign: this.getValue(row, columnMap, 'UTM_Campaign'),
+          utm_source: this.getValue(row, columnMap, 'UTM_Source'),
+          utm_medium: this.getValue(row, columnMap, 'UTM_Medium'),
+          utm_content: this.getValue(row, columnMap, 'UTM_Content'),
+          utm_term: this.getValue(row, columnMap, 'UTM_Term'),
+          utm_cd26: this.getValue(row, columnMap, 'UTM_CD26'),
+          final_trafficked_url: this.getValue(row, columnMap, 'Final_Trafficked_URL')
         };
 
         console.log(`Parsed: ${message.name} (ID: ${message.id}) -> Topic:"${message.topic}" Audience:"${message.audience}" Headline:"${message.headline}"`);
         return message;
       });
+  }
+
+  // Parse keywords - three column structure (form, field, values)
+  parseKeywords(rows) {
+    if (!rows || rows.length < 2) return {};
+
+    const keywords = {};
+
+    rows.slice(1).forEach((row) => {
+      const form = row[0];   // First column: form name (audiences, topics, messages)
+      const field = row[1];  // Second column: field name (product, strategy, etc)
+      const values = row[2]; // Third column: comma-separated values
+
+      // Include field even if values are empty (form and field must be present)
+      if (form && field) {
+        // Normalize form and field to lowercase with underscores
+        const normalizedForm = form.toLowerCase().trim();
+        const normalizedField = field.toLowerCase().trim().replace(/\s+/g, '_');
+
+        // Create nested structure: keywords.audiences.product = ['ANY', 'SZK', ...]
+        if (!keywords[normalizedForm]) {
+          keywords[normalizedForm] = {};
+        }
+        // If values is empty, create empty array
+        keywords[normalizedForm][normalizedField] = values
+          ? values.split(',').map(v => v.trim()).filter(v => v)
+          : [];
+      }
+    });
+
+    console.log('Parsed keywords:', keywords);
+    return keywords;
+  }
+
+  // Save keywords
+  async saveKeywords(keywords) {
+    const keywordRows = [
+      ['Category', 'Value', 'Label']
+    ];
+
+    // Add all keywords by category
+    Object.entries(keywords).forEach(([category, values]) => {
+      values.forEach(item => {
+        keywordRows.push([
+          category.charAt(0).toUpperCase() + category.slice(1),
+          item.value,
+          item.label || item.value
+        ]);
+      });
+    });
+
+    await this.write('Keywords', keywordRows);
   }
 
   // Get spreadsheet URL

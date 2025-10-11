@@ -1,79 +1,138 @@
-// Settings Service - Persistent settings storage
+// Settings Service - Persistent settings storage via API
 class SettingsService {
   constructor() {
-    this.storageKey = 'messagingmatrix_settings';
-    this.settings = this.load();
+    this.settings = null;
+    this.apiUrl = 'http://localhost:3003/api/config';
+    this.initialized = false;
+    this.initPromise = this.init();
   }
 
-  // Load settings from localStorage
-  load() {
+  // Initialize settings from config file via API
+  async init() {
+    if (this.initialized) return;
+
     try {
-      const stored = localStorage.getItem(this.storageKey);
-      if (stored) {
-        return JSON.parse(stored);
+      const response = await fetch(this.apiUrl);
+      if (response.ok) {
+        this.settings = await response.json();
+        this.initialized = true;
+      } else {
+        throw new Error(`Failed to load config from server: ${response.status}`);
       }
     } catch (error) {
-      console.error('Error loading settings:', error);
+      console.error('Error loading settings from server:', error);
+      throw new Error('Unable to load configuration. Make sure the server is running on port 3003 and config.json exists.');
     }
-
-    // Default settings
-    return {
-      spreadsheetId: import.meta.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID || '',
-      serviceAccountKey: import.meta.env.VITE_GOOGLE_SERVICE_ACCOUNT_KEY || '',
-      lastUpdated: null
-    };
   }
 
-  // Save settings to localStorage
-  save(settings) {
+  // Wait for initialization
+  async ensureInitialized() {
+    if (!this.initialized) {
+      await this.initPromise;
+    }
+  }
+
+  // Load settings (kept for backward compatibility, but now async)
+  async load() {
+    await this.ensureInitialized();
+    return this.settings;
+  }
+
+  // Save settings to config file via API
+  async save(settings) {
     try {
-      this.settings = {
-        ...settings,
-        lastUpdated: new Date().toISOString()
-      };
-      localStorage.setItem(this.storageKey, JSON.stringify(this.settings));
-      return true;
+      await this.ensureInitialized();
+
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        this.settings = result.config;
+        return true;
+      } else {
+        console.error('Failed to save config to server');
+        return false;
+      }
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('Error saving settings to server:', error);
       return false;
     }
   }
 
-  // Get a specific setting
+  // Get a specific setting (synchronous - assumes initialized)
   get(key) {
-    return this.settings[key];
+    return this.settings?.[key];
   }
 
   // Set a specific setting
-  set(key, value) {
+  async set(key, value) {
+    await this.ensureInitialized();
     this.settings[key] = value;
-    this.save(this.settings);
+    await this.save(this.settings);
   }
 
-  // Get spreadsheet ID (with fallback to env variable)
+  // Get spreadsheet ID (from config.json only)
   getSpreadsheetId() {
-    return this.settings.spreadsheetId || import.meta.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID || '';
+    return this.settings?.spreadsheetId || '';
   }
 
   // Get service account key (with fallback to env variable)
   getServiceAccountKey() {
-    return this.settings.serviceAccountKey || import.meta.env.VITE_GOOGLE_SERVICE_ACCOUNT_KEY || '';
+    return this.settings?.serviceAccountKey || import.meta.env.VITE_GOOGLE_SERVICE_ACCOUNT_KEY || '';
   }
 
   // Update spreadsheet ID
-  setSpreadsheetId(id) {
-    this.set('spreadsheetId', id);
+  async setSpreadsheetId(id) {
+    await this.set('spreadsheetId', id);
   }
 
-  // Reset to default settings
-  reset() {
-    localStorage.removeItem(this.storageKey);
-    this.settings = this.load();
+  // Get image base URLs
+  getImageBaseUrls() {
+    return this.settings?.imageBaseUrls || {};
+  }
+
+  // Set image base URLs
+  async setImageBaseUrls(urls) {
+    await this.set('imageBaseUrls', urls);
+  }
+
+  // Reset to default settings (reload from config.json)
+  async reset() {
+    this.initialized = false;
+    await this.init();
   }
 
   // Get all settings
   getAll() {
+    if (!this.settings) {
+      throw new Error('Settings not initialized. Make sure the server is running.');
+    }
     return { ...this.settings };
+  }
+
+  // Get patterns
+  getPatterns() {
+    if (!this.settings?.patterns) {
+      throw new Error('Patterns not configured. Check config.json file.');
+    }
+    return this.settings.patterns;
+  }
+
+  // Get specific pattern
+  getPattern(key) {
+    const patterns = this.getPatterns();
+    return patterns[key];
+  }
+
+  // Set patterns
+  async setPatterns(patterns) {
+    await this.set('patterns', patterns);
   }
 }
 
