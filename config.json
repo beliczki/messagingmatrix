@@ -21,5 +21,15 @@
       "final_trafficked_url": "{{Landing_URL}}?utm_campaign={{utm_campaign}}&utm_source={{utm_source}}&utm_medium={{utm_medium}}&utm_content={{utm_content}}&utm_term={{utm_term}}&utm_cd26={{utm_cd26}}&"
     }
   },
-  "lastUpdated": "2025-10-11T22:19:54.857Z"
+  "lookAndFeel": {
+      "logo": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg",
+      "headerColor": "#2870ed",
+      "logoStyle": "height: 25px; margin-top: -6px;",
+      "buttonColor": "#ff6130",
+      "buttonStyle": "border: 1px solid white;",
+      "secondaryColor1": "#eb4c79",
+      "secondaryColor2": "#02a3a4",
+      "secondaryColor3": "#711c7a"
+  },
+ "lastUpdated": "2025-10-11T22:19:54.857Z"
 }

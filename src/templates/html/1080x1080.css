@@ -1,0 +1,44 @@
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* 1080x1080 */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+
+html {
+  font-size: 32px;
+}
+#adContainer {
+  width: 1080px !important;
+  height: 1080px !important;
+}
+
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+  background-size: 210%;
+  background-position: -776px -352px;
+}
+
+
+/* -----------------------------------------*/
+/* card positioning ----------------------- */
+/* -----------------------------------------*/
+body #cardContainer {
+  transform-origin: 0% 100%;
+  transform: scale(0.6);
+  right: auto;
+  left: 166px;
+  top:auto;
+  bottom: 1rem;
+}
+
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+
+.sizebr.br1080x1080 {
+    display: inline-block;
+} 

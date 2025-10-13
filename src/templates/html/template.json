@@ -1,0 +1,101 @@
+{
+    "default_size": "300x250",
+    "placeholders": {
+
+        "advert_name": {
+            "type": "text",
+	        "default": "",
+            "binding": "Name"
+        },
+        "click_url": {
+            "type": "url",
+	        "default": "",
+            "binding": "Final_Trafficked_URL"
+        },
+        "template_variant_class": {
+            "type": "tag",
+            "default": "",
+            "binding": "Template_variant_classes"
+        },
+        "headline_text_1": {
+            "type": "text",
+            "default": " ",
+            "binding": "Headline"
+        },
+        "copy_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding": "Copy1"
+        },
+        "copy_text_2": {
+            "type": "text",
+	        "default": "",
+            "binding": "Copy2"
+        },
+        "disclaimer_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding": "Disclaimer"
+        },
+        "cta_text_1": {
+            "type": "text",
+	        "default": "Érdekel",
+            "binding": "CTA"
+        },
+        "background_video_1": {
+            "type": "video",
+	        "default": "",
+            "binding": ""
+        },
+        "background_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image1"
+        },
+        "background_image_2": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image2"
+        },
+        "background_image_3": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image3"
+        },
+        "background_image_4": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image4"
+        },
+        "brand_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image5"
+        },
+        "sticker_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding": "Image6"
+        },
+        "headline_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding": ""
+        },
+        "copy_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding": ""
+        },
+        "copy_style_2": {
+            "type": "style",
+	        "default": "",
+            "binding": ""
+        },
+        "disclaimer_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding": ""
+        }
+    }
+}
