@@ -1,18 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, useParams } from 'react-router-dom';
 import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User } from 'lucide-react';
 import Matrix from './components/Matrix';
 import AssetsLibrary from './components/AssetsLibrary';
 import Monitoring from './components/Monitoring';
+import Templates from './components/Templates';
 import Users from './components/Users';
 import Settings from './components/Settings';
 import Login from './components/Login';
+import PreviewView from './components/PreviewView';
 import { useAuth } from './contexts/AuthContext';
+import { useMatrix } from './hooks/useMatrix';
+import settings from './services/settings';
 import './App.css';
+
+// Component to wrap PreviewView
+const PreviewViewWrapper = () => {
+  const { shareId } = useParams();
+  return <PreviewView previewId={shareId} />;
+};
 
 const App = () => {
   const { currentUser, loading, logout } = useAuth();
   const [currentModule, setCurrentModule] = useState('matrix');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lookAndFeel, setLookAndFeel] = useState({
+    logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
+    headerColor: '#2870ed',
+    logoStyle: 'height: 25px; margin-top: -6px;',
+    buttonColor: '#ff6130',
+    buttonStyle: 'border: 1px solid white;',
+    secondaryColor1: '#eb4c79',
+    secondaryColor2: '#02a3a4',
+    secondaryColor3: '#711c7a'
+  });
+
+  // Load matrix data once at app level to share across all components
+  const matrixData = useMatrix();
+
+  // Load look and feel settings
+  useEffect(() => {
+    const loadLookAndFeel = async () => {
+      try {
+        await settings.ensureInitialized();
+        const laf = settings.getLookAndFeel();
+        setLookAndFeel(laf);
+      } catch (error) {
+        console.error('Error loading look and feel settings:', error);
+      }
+    };
+    loadLookAndFeel();
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -28,16 +66,11 @@ const App = () => {
     );
   }
 
-  // Show login if not authenticated
-  if (!currentUser) {
-    return <Login />;
-  }
-
   const modules = [
     { id: 'matrix', name: 'Messaging Matrix', icon: Table, component: Matrix, color: 'blue' },
     { id: 'assets', name: 'Assets Library', icon: Image, component: AssetsLibrary, color: 'blue' },
     { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
-    { id: 'templates', name: 'Templates', icon: FileCode, component: AssetsLibrary, color: 'orange' },
+    { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
     { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple' },
     { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray' }
   ];
@@ -49,7 +82,8 @@ const App = () => {
     setMenuOpen(false);
   };
 
-  return (
+  // Authenticated app layout
+  const AuthenticatedApp = () => (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Slide-in Menu */}
       <div
@@ -123,10 +157,22 @@ const App = () => {
           <CurrentModuleComponent
             onMenuToggle={() => setMenuOpen(!menuOpen)}
             currentModuleName={modules.find(m => m.id === currentModule)?.name}
+            matrixData={matrixData}
+            lookAndFeel={lookAndFeel}
           />
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <Routes>
+      {/* Public preview route - no authentication required */}
+      <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
+
+      {/* All other routes require authentication */}
+      <Route path="*" element={currentUser ? <AuthenticatedApp /> : <Login />} />
+    </Routes>
   );
 };
 

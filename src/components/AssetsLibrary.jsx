@@ -1,37 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon, Menu, Grid, List, Upload, X, Search, Calendar, Tag, Monitor } from 'lucide-react';
+import { Image as ImageIcon, Grid, List, Upload, X, Filter, Calendar, Tag, Monitor, Download, ExternalLink, CheckSquare, Square, Share2, Copy, Check, LayoutGrid } from 'lucide-react';
+import PageHeader, { getButtonStyle } from './PageHeader';
+import Share from './AssetLibrary/Share';
+import Preview from './AssetLibrary/Preview';
 
 // Helper function to extract metadata from filename
 const extractMetadata = (filename) => {
-  // Remove extension
   const nameWithoutExt = filename.replace(/\.(jpg|jpeg|png|mp4|gif)$/i, '');
-
-  // Split by underscores
   const parts = nameWithoutExt.split('_');
-
-  // Extract size (e.g., 1080x1080, 300x250)
   const sizeMatch = nameWithoutExt.match(/(\d+)x(\d+)/);
   const size = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}` : null;
 
-  // Extract date (e.g., 251006, YYMMDD format)
   const dateMatch = nameWithoutExt.match(/(\d{6})/);
   let date = null;
   if (dateMatch) {
     const dateStr = dateMatch[1];
-    // Convert YYMMDD to proper date
     const year = 20 + parseInt(dateStr.substring(0, 2));
     const month = parseInt(dateStr.substring(2, 4));
     const day = parseInt(dateStr.substring(4, 6));
     date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
-  // Extract platform/variant keywords
   const platforms = [];
   if (nameWithoutExt.toLowerCase().includes('fb')) platforms.push('Facebook');
   if (nameWithoutExt.toLowerCase().includes('google') || nameWithoutExt.toLowerCase().includes('pmax')) platforms.push('Google');
   if (nameWithoutExt.toLowerCase().includes('banner')) platforms.push('Display');
 
-  // Extract campaign type/stage
   const tags = [];
   if (nameWithoutExt.toLowerCase().includes('pro')) tags.push('Prospecting');
   if (nameWithoutExt.toLowerCase().includes('rem')) tags.push('Remarketing');
@@ -39,13 +33,11 @@ const extractMetadata = (filename) => {
   if (nameWithoutExt.toLowerCase().includes('cube')) tags.push('Cube');
   if (nameWithoutExt.toLowerCase().includes('halfpage')) tags.push('Half Page');
 
-  // Extract product name (usually second part after ERSTE)
   let product = '';
   if (parts.length > 1) {
-    product = parts[1].replace(/^\d+/, ''); // Remove leading numbers
+    product = parts[1].replace(/^\d+/, '');
   }
 
-  // Extract variant (letters like a, b, c, d or numbers)
   const variantMatch = nameWithoutExt.match(/_([A-Za-z]|[0-9]+)(?:_|\.|$)/);
   const variant = variantMatch ? variantMatch[1] : null;
 
@@ -61,13 +53,23 @@ const extractMetadata = (filename) => {
   };
 };
 
-const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
+const AssetsLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [assets, setAssets] = useState([]);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterPlatform, setFilterPlatform] = useState('all');
-  const [filterSize, setFilterSize] = useState('all');
+  const [viewMode, setViewMode] = useState('grid4'); // 'grid3' or 'grid4' or 'list'
+  const [filterText, setFilterText] = useState('');
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const [pendingUploads, setPendingUploads] = useState([]);
+  const [showMetadataDialog, setShowMetadataDialog] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [selectorMode, setSelectorMode] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareTitle, setShareTitle] = useState('');
+  const [generatedShareUrl, setGeneratedShareUrl] = useState(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
   useEffect(() => {
     loadAssets();
@@ -75,14 +77,10 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
 
   const loadAssets = async () => {
     try {
-      // Get all files from src/assets directory
-      // Using import.meta.glob to get all assets
       const assetModules = import.meta.glob('/src/assets/*.*', { eager: true, as: 'url' });
-
       const assetList = Object.entries(assetModules).map(([path, url]) => {
         const filename = path.split('/').pop();
         const metadata = extractMetadata(filename);
-
         return {
           ...metadata,
           path,
@@ -91,214 +89,351 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
         };
       });
 
+      // Fetch file stats from backend to get actual modification times
+      try {
+        const response = await fetch('http://localhost:3003/api/assets/stats');
+        if (response.ok) {
+          const stats = await response.json();
+
+          // Add modification time to each asset
+          assetList.forEach(asset => {
+            const stat = stats.find(s => s.filename === asset.filename);
+            if (stat) {
+              asset.modifiedTime = new Date(stat.mtime).getTime();
+            }
+          });
+
+          // Sort by modification time descending (newest first)
+          assetList.sort((a, b) => {
+            // If both have modification times, use those
+            if (a.modifiedTime && b.modifiedTime) {
+              return b.modifiedTime - a.modifiedTime;
+            }
+            // If one has modification time, it goes first
+            if (a.modifiedTime) return -1;
+            if (b.modifiedTime) return 1;
+
+            // Fallback to date from filename
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return b.date.localeCompare(a.date);
+          });
+        }
+      } catch (error) {
+        console.error('Could not fetch file stats, falling back to filename date:', error);
+        // Fallback: Sort by date from filename
+        assetList.sort((a, b) => {
+          if (!a.date && !b.date) return 0;
+          if (!a.date) return 1;
+          if (!b.date) return -1;
+          return b.date.localeCompare(a.date);
+        });
+      }
+
       setAssets(assetList);
     } catch (error) {
       console.error('Error loading assets:', error);
     }
   };
 
-  // Filter assets
+  const toggleSelectorMode = () => {
+    setSelectorMode(!selectorMode);
+    if (selectorMode) {
+      setSelectedAssetIds(new Set());
+    }
+  };
+
+  const toggleAssetSelection = (assetId) => {
+    const newSelection = new Set(selectedAssetIds);
+    if (newSelection.has(assetId)) {
+      newSelection.delete(assetId);
+    } else {
+      newSelection.add(assetId);
+    }
+    setSelectedAssetIds(newSelection);
+  };
+
+  const closeShareDialog = () => {
+    setShowShareDialog(false);
+    setShareTitle('');
+    setGeneratedShareUrl(null);
+    setCopiedUrl(false);
+    setSelectedAssetIds(new Set());
+    setSelectorMode(false);
+    setSelectedBaseColor(lookAndFeel?.headerColor || '#2870ed');
+  };
+
+  const handleFileUpload = async (files) => {
+    const fileArray = Array.from(files);
+    const previews = [];
+
+    for (const file of fileArray) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('http://localhost:3003/api/assets/preview-metadata', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Preview failed');
+        }
+
+        const result = await response.json();
+        previews.push({
+          originalName: result.originalName,
+          tempFilename: result.tempFilename,
+          metadata: result.metadata
+        });
+      } catch (error) {
+        console.error('Error previewing file:', error);
+        alert(`Failed to preview ${file.name}: ${error.message}`);
+      }
+    }
+
+    if (previews.length > 0) {
+      setPendingUploads(previews);
+      setShowUploadDialog(false);
+      setShowMetadataDialog(true);
+    }
+  };
+
+  const handleConfirmUploads = async () => {
+    setShowMetadataDialog(false);
+    setUploadingFiles(pendingUploads);
+    setUploadProgress({});
+
+    for (const upload of pendingUploads) {
+      try {
+        const response = await fetch('http://localhost:3003/api/assets/confirm-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tempFilename: upload.tempFilename,
+            metadata: upload.metadata
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Upload confirmation failed');
+        }
+
+        const result = await response.json();
+        console.log('File uploaded:', result);
+
+        setUploadProgress(prev => ({
+          ...prev,
+          [upload.originalName]: 'completed'
+        }));
+      } catch (error) {
+        console.error('Error confirming upload:', error);
+        setUploadProgress(prev => ({
+          ...prev,
+          [upload.originalName]: 'error'
+        }));
+      }
+    }
+
+    await loadAssets();
+
+    setTimeout(() => {
+      setUploadingFiles([]);
+      setUploadProgress({});
+      setPendingUploads([]);
+    }, 1500);
+  };
+
+  const handleCancelUploads = async () => {
+    for (const upload of pendingUploads) {
+      try {
+        await fetch('http://localhost:3003/api/assets/cancel-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tempFilename: upload.tempFilename })
+        });
+      } catch (error) {
+        console.error('Error canceling upload:', error);
+      }
+    }
+
+    setPendingUploads([]);
+    setShowMetadataDialog(false);
+  };
+
+  const updatePendingMetadata = (index, field, value) => {
+    setPendingUploads(prev => {
+      const updated = [...prev];
+      updated[index].metadata[field] = value;
+      return updated;
+    });
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileUpload(files);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
   const filteredAssets = assets.filter(asset => {
-    const matchesSearch = asset.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.product.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    if (!filterText.trim()) return true;
 
-    const matchesPlatform = filterPlatform === 'all' ||
-                           asset.platforms.some(p => p.toLowerCase() === filterPlatform.toLowerCase());
+    const searchableText = [
+      asset.filename,
+      asset.product,
+      asset.size,
+      asset.date,
+      ...asset.platforms,
+      ...asset.tags,
+      asset.variant
+    ].filter(Boolean).join(' ').toLowerCase();
 
-    const matchesSize = filterSize === 'all' || asset.size === filterSize;
+    const filterLower = filterText.toLowerCase();
 
-    return matchesSearch && matchesPlatform && matchesSize;
+    // Check if the filter contains 'or' operator
+    if (filterLower.includes(' or ')) {
+      // Split by ' or ' and check if any term matches
+      const orTerms = filterLower.split(' or ').map(t => t.trim()).filter(t => t.length > 0);
+      return orTerms.some(term => {
+        // Each term can still contain 'and' conditions
+        if (term.includes(' and ')) {
+          const andTerms = term.split(' and ').map(t => t.trim()).filter(t => t.length > 0);
+          return andTerms.every(andTerm => searchableText.includes(andTerm));
+        }
+        return searchableText.includes(term);
+      });
+    } else if (filterLower.includes(' and ')) {
+      // Split by ' and ' and check if all terms match
+      const andTerms = filterLower.split(' and ').map(t => t.trim()).filter(t => t.length > 0);
+      return andTerms.every(term => searchableText.includes(term));
+    } else {
+      // Default behavior: split by whitespace and use AND logic
+      const terms = filterLower.split(/\s+/).filter(t => t.length > 0);
+      return terms.every(term => searchableText.includes(term));
+    }
   });
-
-  // Get unique platforms and sizes for filters
-  const allPlatforms = [...new Set(assets.flatMap(a => a.platforms))];
-  const allSizes = [...new Set(assets.map(a => a.size).filter(Boolean))].sort();
-
-  const AssetCard = ({ asset }) => {
-    const isVideo = asset.extension === 'mp4';
-    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
-
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-        {/* Preview */}
-        <div className="aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
-          {isImage && (
-            <img
-              src={asset.url}
-              alt={asset.filename}
-              className="w-full h-full object-contain"
-              loading="lazy"
-            />
-          )}
-          {isVideo && (
-            <video
-              src={asset.url}
-              className="w-full h-full object-contain"
-              controls
-              preload="metadata"
-            />
-          )}
-          {!isImage && !isVideo && (
-            <ImageIcon size={48} className="text-gray-400" />
-          )}
-        </div>
-
-        {/* Metadata */}
-        <div className="p-4">
-          <h3 className="font-semibold text-gray-800 text-sm mb-2 truncate" title={asset.filename}>
-            {asset.product || asset.filename}
-          </h3>
-
-          <div className="space-y-2 text-xs">
-            {asset.size && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Monitor size={14} />
-                <span>{asset.size}</span>
-              </div>
-            )}
-
-            {asset.date && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Calendar size={14} />
-                <span>{asset.date}</span>
-              </div>
-            )}
-
-            {asset.variant && (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Tag size={14} />
-                <span>Variant: {asset.variant.toUpperCase()}</span>
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-1 mt-2">
-              {asset.platforms.map(platform => (
-                <span key={platform} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                  {platform}
-                </span>
-              ))}
-              {asset.tags.map(tag => (
-                <span key={tag} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const AssetRow = ({ asset }) => {
-    const isVideo = asset.extension === 'mp4';
-    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
-
-    return (
-      <tr className="border-b border-gray-100 hover:bg-gray-50">
-        <td className="py-3 px-4">
-          <div className="flex items-center gap-3">
-            <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-              {isImage && (
-                <img
-                  src={asset.url}
-                  alt={asset.filename}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
-              )}
-              {isVideo && (
-                <video
-                  src={asset.url}
-                  className="w-full h-full object-cover"
-                  preload="metadata"
-                />
-              )}
-              {!isImage && !isVideo && (
-                <ImageIcon size={24} className="text-gray-400" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-gray-800 truncate">{asset.product || 'Untitled'}</p>
-              <p className="text-xs text-gray-500 truncate">{asset.filename}</p>
-            </div>
-          </div>
-        </td>
-        <td className="py-3 px-4">
-          {asset.size && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-              <Monitor size={12} />
-              {asset.size}
-            </span>
-          )}
-        </td>
-        <td className="py-3 px-4 text-sm text-gray-600">
-          {asset.date || '-'}
-        </td>
-        <td className="py-3 px-4">
-          {asset.variant && (
-            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-              {asset.variant.toUpperCase()}
-            </span>
-          )}
-        </td>
-        <td className="py-3 px-4">
-          <div className="flex flex-wrap gap-1">
-            {asset.platforms.map(platform => (
-              <span key={platform} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                {platform}
-              </span>
-            ))}
-            {asset.tags.slice(0, 2).map(tag => (
-              <span key={tag} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                {tag}
-              </span>
-            ))}
-            {asset.tags.length > 2 && (
-              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                +{asset.tags.length - 2}
-              </span>
-            )}
-          </div>
-        </td>
-      </tr>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onMenuToggle}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-              title="Open Menu"
-            >
-              <Menu size={24} className="text-gray-700" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">{currentModuleName || 'Assets Library'}</h1>
-          </div>
+      <PageHeader
+        onMenuToggle={onMenuToggle}
+        title={currentModuleName || 'Assets Library'}
+        lookAndFeel={lookAndFeel}
+      >
+        {selectorMode && selectedAssetIds.size > 0 && (
+          <button
+            onClick={() => {
+              // Randomly select a base color when opening the dialog
+              const colors = [
+                lookAndFeel?.headerColor || '#2870ed',
+                lookAndFeel?.secondaryColor1 || '#eb4c79',
+                lookAndFeel?.secondaryColor2 || '#02a3a4',
+                lookAndFeel?.secondaryColor3 || '#711c7a'
+              ];
+              const randomColor = colors[Math.floor(Math.random() * colors.length)];
+              setSelectedBaseColor(randomColor);
+              setShowShareDialog(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity"
+            style={getButtonStyle(lookAndFeel)}
+          >
+            <Share2 size={16} />
+            Share ({selectedAssetIds.size})
+          </button>
+        )}
+        <button
+          onClick={() => setShowUploadDialog(true)}
+          className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity"
+          style={getButtonStyle(lookAndFeel)}
+        >
+          <Upload size={16} />
+          Upload
+        </button>
+      </PageHeader>
 
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
+      {/* Content */}
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Filter and Controls Row */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-2 flex-1">
+              <Filter size={18} className="text-gray-400" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Filter assets (use 'and' / 'or' operators)..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={toggleSelectorMode}
+              className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+                selectorMode
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
+              {selectorMode ? 'Selecting' : 'Select'}
+            </button>
+
+            {selectorMode && (
+              <>
+                <button
+                  onClick={() => {
+                    const allFilteredIds = new Set(filteredAssets.map(asset => asset.id));
+                    setSelectedAssetIds(allFilteredIds);
+                  }}
+                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => setSelectedAssetIds(new Set())}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                >
+                  Deselect All
+                </button>
+              </>
+            )}
+
             <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors text-xs ${
-                  viewMode === 'grid'
+                onClick={() => setViewMode('grid3')}
+                className={`flex items-center px-3 py-2 rounded transition-colors ${
+                  viewMode === 'grid3'
                     ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
-                title="Grid View"
+                title="3 Columns"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('grid4')}
+                className={`flex items-center px-3 py-2 rounded transition-colors ${
+                  viewMode === 'grid4'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="4 Columns"
               >
                 <Grid size={16} />
-                Grid
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors text-xs ${
+                className={`flex items-center px-3 py-2 rounded transition-colors ${
                   viewMode === 'list'
                     ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
@@ -306,93 +441,239 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
                 title="List View"
               >
                 <List size={16} />
-                List
               </button>
             </div>
-
-            {/* Upload Button */}
-            <button
-              onClick={() => setShowUploadDialog(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-            >
-              <Upload size={16} />
-              Upload
-            </button>
           </div>
-        </div>
-      </div>
+          {/* Assets Grid */}
+          {viewMode === 'grid3' ? (
+            <div className="columns-1 sm:columns-2 lg:columns-3 gap-4">
+              {filteredAssets.map(asset => {
+                const isVideo = asset.extension === 'mp4';
+                const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
+                const isSelected = selectedAssetIds.has(asset.id);
 
-      {/* Content */}
-      <div className="p-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Search */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search
-                </label>
-                <div className="relative">
-                  <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search assets..."
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
+                let longPressTimer = null;
 
-              {/* Platform Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Platform
-                </label>
-                <select
-                  value={filterPlatform}
-                  onChange={(e) => setFilterPlatform(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Platforms</option>
-                  {allPlatforms.map(platform => (
-                    <option key={platform} value={platform}>{platform}</option>
-                  ))}
-                </select>
-              </div>
+                const handleMouseDown = () => {
+                  longPressTimer = setTimeout(() => {
+                    setSelectorMode(true);
+                  }, 500);
+                };
 
-              {/* Size Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Size
-                </label>
-                <select
-                  value={filterSize}
-                  onChange={(e) => setFilterSize(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Sizes</option>
-                  {allSizes.map(size => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-              </div>
+                const handleMouseUp = () => {
+                  if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                  }
+                };
+
+                const handleClick = () => {
+                  if (selectorMode) {
+                    toggleAssetSelection(asset.id);
+                  } else {
+                    setSelectedAsset(asset);
+                  }
+                };
+
+                return (
+                  <div
+                    key={asset.id}
+                    className="group cursor-pointer mb-4 break-inside-avoid"
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={handleMouseDown}
+                    onTouchEnd={handleMouseUp}
+                    onClick={handleClick}
+                  >
+                    <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                      {selectorMode && (
+                        <div className="absolute top-2 right-2 z-[5]">
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-blue-500 border-blue-500'
+                              : 'bg-white/80 border-white backdrop-blur-sm'
+                          }`}>
+                            {isSelected && <Check size={16} className="text-white" />}
+                          </div>
+                        </div>
+                      )}
+
+                      {isImage && (
+                        <img
+                          src={asset.url}
+                          alt={asset.filename}
+                          className="w-full h-auto object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      {isVideo && (
+                        <video
+                          src={asset.url}
+                          className="w-full h-auto object-cover"
+                          preload="metadata"
+                        />
+                      )}
+                      {!isImage && !isVideo && (
+                        <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
+                          <ImageIcon size={48} className="text-gray-400" />
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
+                        <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
+                          {asset.product || asset.filename}
+                        </h3>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                            {asset.extension}
+                          </span>
+                          {asset.size && (
+                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                              {asset.size}
+                            </span>
+                          )}
+                          {asset.variant && (
+                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                              v{asset.variant.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        {(asset.platforms.length > 0 || asset.tags.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {asset.platforms.map(platform => (
+                              <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                {platform}
+                              </span>
+                            ))}
+                            {asset.tags.slice(0, 2).map(tag => (
+                              <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          ) : viewMode === 'grid4' ? (
+            <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+              {filteredAssets.map(asset => {
+                const isVideo = asset.extension === 'mp4';
+                const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
+                const isSelected = selectedAssetIds.has(asset.id);
 
-            {/* Stats */}
-            <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-gray-600">
-              <span>Showing {filteredAssets.length} of {assets.length} assets</span>
-              <span>{allPlatforms.length} platforms • {allSizes.length} sizes</span>
-            </div>
-          </div>
+                let longPressTimer = null;
 
-          {/* Assets Grid/List */}
-          {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredAssets.map(asset => (
-                <AssetCard key={asset.id} asset={asset} />
-              ))}
+                const handleMouseDown = () => {
+                  longPressTimer = setTimeout(() => {
+                    setSelectorMode(true);
+                  }, 500);
+                };
+
+                const handleMouseUp = () => {
+                  if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                  }
+                };
+
+                const handleClick = () => {
+                  if (selectorMode) {
+                    toggleAssetSelection(asset.id);
+                  } else {
+                    setSelectedAsset(asset);
+                  }
+                };
+
+                return (
+                  <div
+                    key={asset.id}
+                    className="group cursor-pointer mb-4 break-inside-avoid"
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={handleMouseDown}
+                    onTouchEnd={handleMouseUp}
+                    onClick={handleClick}
+                  >
+                    <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                      {selectorMode && (
+                        <div className="absolute top-2 right-2 z-[5]">
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-blue-500 border-blue-500'
+                              : 'bg-white/80 border-white backdrop-blur-sm'
+                          }`}>
+                            {isSelected && <Check size={16} className="text-white" />}
+                          </div>
+                        </div>
+                      )}
+
+                      {isImage && (
+                        <img
+                          src={asset.url}
+                          alt={asset.filename}
+                          className="w-full h-auto object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      {isVideo && (
+                        <video
+                          src={asset.url}
+                          className="w-full h-auto object-cover"
+                          preload="metadata"
+                        />
+                      )}
+                      {!isImage && !isVideo && (
+                        <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
+                          <ImageIcon size={48} className="text-gray-400" />
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
+                        <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
+                          {asset.product || asset.filename}
+                        </h3>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                            {asset.extension}
+                          </span>
+                          {asset.size && (
+                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                              {asset.size}
+                            </span>
+                          )}
+                          {asset.variant && (
+                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                              v{asset.variant.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        {(asset.platforms.length > 0 || asset.tags.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {asset.platforms.map(platform => (
+                              <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                {platform}
+                              </span>
+                            ))}
+                            {asset.tags.slice(0, 2).map(tag => (
+                              <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -408,9 +689,77 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAssets.map(asset => (
-                      <AssetRow key={asset.id} asset={asset} />
-                    ))}
+                    {filteredAssets.map(asset => {
+                      const isVideo = asset.extension === 'mp4';
+                      const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
+                      const isSelected = selectedAssetIds.has(asset.id);
+
+                      return (
+                        <tr
+                          key={asset.id}
+                          className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+                          onClick={() => {
+                            if (selectorMode) {
+                              toggleAssetSelection(asset.id);
+                            } else {
+                              setSelectedAsset(asset);
+                            }
+                          }}
+                        >
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              {selectorMode && (
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                                  isSelected
+                                    ? 'bg-blue-500 border-blue-500'
+                                    : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <Check size={14} className="text-white" />}
+                                </div>
+                              )}
+                              <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {isImage && <img src={asset.url} alt={asset.filename} className="w-full h-full object-cover" loading="lazy" />}
+                                {isVideo && <video src={asset.url} className="w-full h-full object-cover" preload="metadata" />}
+                                {!isImage && !isVideo && <ImageIcon size={24} className="text-gray-400" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-gray-800 truncate">{asset.product || 'Untitled'}</p>
+                                <p className="text-xs text-gray-500 truncate">{asset.filename}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {asset.size && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                                <Monitor size={12} />
+                                {asset.size}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{asset.date || '-'}</td>
+                          <td className="py-3 px-4">
+                            {asset.variant && (
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                                {asset.variant.toUpperCase()}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1">
+                              {asset.platforms.map(platform => (
+                                <span key={platform} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{platform}</span>
+                              ))}
+                              {asset.tags.slice(0, 2).map(tag => (
+                                <span key={tag} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{tag}</span>
+                              ))}
+                              {asset.tags.length > 2 && (
+                                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">+{asset.tags.length - 2}</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -421,7 +770,6 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
             <div className="text-center py-12 text-gray-500">
               <ImageIcon size={48} className="mx-auto mb-4 text-gray-300" />
               <p>No assets found</p>
-              <p className="text-sm mt-2">Try adjusting your filters or upload new assets</p>
             </div>
           )}
         </div>
@@ -432,43 +780,207 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">Upload Asset</h3>
-                <p className="text-sm text-gray-600 mt-1">Add new files to your library</p>
-              </div>
-              <button
-                onClick={() => setShowUploadDialog(false)}
-                className="p-2 hover:bg-gray-100 rounded transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
+              <h3 className="text-lg font-bold text-gray-800">Upload Assets</h3>
+              <button onClick={() => setShowUploadDialog(false)} className="p-2 hover:bg-gray-100 rounded">
+                <X size={20} />
               </button>
             </div>
-
             <div className="p-6">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
+                onClick={() => document.getElementById('file-input').click()}
+              >
                 <Upload size={48} className="mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-700 mb-2">Drag and drop files here</p>
-                <p className="text-sm text-gray-500 mb-4">or</p>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                  Browse Files
-                </button>
-                <p className="text-xs text-gray-500 mt-4">
-                  Supports: JPG, PNG, MP4, GIF (max 50MB)
-                </p>
+                <p className="text-gray-700 mb-2 font-medium">Drag and drop files here</p>
+                <p className="text-sm text-gray-500">or click to browse</p>
+                <input
+                  id="file-input"
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  onChange={(e) => handleFileUpload(e.target.files)}
+                  className="hidden"
+                />
+              </div>
+
+              {uploadingFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {uploadingFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                      {uploadProgress[file.name] === 'completed' && (
+                        <Check size={16} className="text-green-500 ml-2" />
+                      )}
+                      {uploadProgress[file.name] === 'error' && (
+                        <X size={16} className="text-red-500 ml-2" />
+                      )}
+                      {!uploadProgress[file.name] && (
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin ml-2" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Metadata Confirmation Dialog */}
+      {showMetadataDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold text-gray-800">Confirm File Metadata</h3>
+              <button onClick={handleCancelUploads} className="p-2 hover:bg-gray-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-600 mb-4">
+                Review and edit the metadata for each file. Files will be renamed as: <br />
+                <code className="text-xs bg-gray-100 px-2 py-1 rounded">product_platform_size_variant_templateSource.ext</code>
+              </p>
+              <div className="space-y-4">
+                {pendingUploads.map((upload, index) => (
+                  <div key={index} className="border rounded-lg p-4">
+                    <p className="font-semibold text-gray-800 mb-3 truncate">{upload.originalName}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.product}
+                          onChange={(e) => updatePendingMetadata(index, 'product', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Platform</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.platform}
+                          onChange={(e) => updatePendingMetadata(index, 'platform', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Size</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.size}
+                          onChange={(e) => updatePendingMetadata(index, 'size', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Variant</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.variant}
+                          onChange={(e) => updatePendingMetadata(index, 'variant', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Template Source</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.templateSource}
+                          onChange={(e) => updatePendingMetadata(index, 'templateSource', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Extension</label>
+                        <input
+                          type="text"
+                          value={upload.metadata.ext}
+                          readOnly
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-gray-50 cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500">
+                        New filename: <span className="font-mono">{`${upload.metadata.product}_${upload.metadata.platform}_${upload.metadata.size}_${upload.metadata.variant}_${upload.metadata.templateSource}.${upload.metadata.ext}`}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+            <div className="flex items-center justify-end gap-3 p-6 border-t">
               <button
-                onClick={() => setShowUploadDialog(false)}
+                onClick={handleCancelUploads}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleConfirmUploads}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              >
+                <Upload size={16} />
+                Confirm & Upload ({pendingUploads.length})
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Progress Dialog */}
+      {uploadingFiles.length > 0 && !showMetadataDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold text-gray-800">Uploading Files...</h3>
+            </div>
+            <div className="p-6">
+              <div className="space-y-2">
+                {uploadingFiles.map((upload, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm text-gray-700 truncate flex-1">{upload.originalName}</span>
+                    {uploadProgress[upload.originalName] === 'completed' && (
+                      <Check size={16} className="text-green-500 ml-2" />
+                    )}
+                    {uploadProgress[upload.originalName] === 'error' && (
+                      <X size={16} className="text-red-500 ml-2" />
+                    )}
+                    {!uploadProgress[upload.originalName] && (
+                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin ml-2" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Dialog */}
+      <Share
+        isOpen={showShareDialog}
+        onClose={closeShareDialog}
+        selectedAssetIds={selectedAssetIds}
+        shareTitle={shareTitle}
+        setShareTitle={setShareTitle}
+        selectedBaseColor={selectedBaseColor}
+        setSelectedBaseColor={setSelectedBaseColor}
+        generatedShareUrl={generatedShareUrl}
+        setGeneratedShareUrl={setGeneratedShareUrl}
+        copiedUrl={copiedUrl}
+        setCopiedUrl={setCopiedUrl}
+        lookAndFeel={lookAndFeel}
+      />
+
+      {/* Asset Preview */}
+      <Preview
+        asset={selectedAsset}
+        onClose={() => setSelectedAsset(null)}
+      />
     </div>
   );
 };
