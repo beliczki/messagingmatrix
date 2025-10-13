@@ -91,7 +91,7 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
       // Fetch file stats from backend to get actual modification times
       try {
-        const response = await fetch('http://localhost:3003/api/assets/stats');
+        const response = await fetch('/api/assets/stats');
         if (response.ok) {
           const stats = await response.json();
 
@@ -173,7 +173,7 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('http://localhost:3003/api/assets/preview-metadata', {
+        const response = await fetch('/api/assets/preview-metadata', {
           method: 'POST',
           body: formData
         });
@@ -208,7 +208,7 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
     for (const upload of pendingUploads) {
       try {
-        const response = await fetch('http://localhost:3003/api/assets/confirm-upload', {
+        const response = await fetch('/api/assets/confirm-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -249,7 +249,7 @@ const AssetsLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const handleCancelUploads = async () => {
     for (const upload of pendingUploads) {
       try {
-        await fetch('http://localhost:3003/api/assets/cancel-upload', {
+        await fetch('/api/assets/cancel-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tempFilename: upload.tempFilename })

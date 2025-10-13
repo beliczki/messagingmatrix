@@ -2,7 +2,7 @@
 class SettingsService {
   constructor() {
     this.settings = null;
-    this.apiUrl = 'http://localhost:3003/api/config';
+    this.apiUrl = '/api/config';
     this.initialized = false;
     this.initPromise = this.init();
   }
@@ -133,6 +133,25 @@ class SettingsService {
   // Set patterns
   async setPatterns(patterns) {
     await this.set('patterns', patterns);
+  }
+
+  // Get look and feel settings
+  getLookAndFeel() {
+    return this.settings?.lookAndFeel || {
+      logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
+      headerColor: '#2870ed',
+      logoStyle: 'height: 25px; margin-top: -6px;',
+      buttonColor: '#ff6130',
+      buttonStyle: 'border: 1px solid white;',
+      secondaryColor1: '#eb4c79',
+      secondaryColor2: '#02a3a4',
+      secondaryColor3: '#711c7a'
+    };
+  }
+
+  // Set look and feel settings
+  async setLookAndFeel(lookAndFeel) {
+    await this.set('lookAndFeel', lookAndFeel);
   }
 }
 

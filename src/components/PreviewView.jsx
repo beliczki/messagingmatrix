@@ -48,7 +48,7 @@ const PublicPreviewView = ({ previewId }) => {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch('http://localhost:3003/api/config');
+        const response = await fetch('/api/config');
         if (response.ok) {
           const config = await response.json();
           setLookAndFeel(config.lookAndFeel);

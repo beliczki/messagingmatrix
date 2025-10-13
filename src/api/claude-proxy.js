@@ -3,7 +3,7 @@
 export async function callClaudeAPI(apiKey, messages, model = 'claude-3-5-sonnet-20241022', maxTokens = 4096) {
   try {
     // Call our backend proxy server
-    const response = await fetch('http://localhost:3003/api/claude', {
+    const response = await fetch('/api/claude', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
