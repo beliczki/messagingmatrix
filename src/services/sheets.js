@@ -111,19 +111,13 @@ class SheetsService {
       return JSON.parse(stored);
     }
 
-    // Try reading from Google Sheets using service account if configured
-    if (this.serviceAccountKey && this.spreadsheetId) {
+    // Try reading from Google Sheets via server API if configured
+    if (this.spreadsheetId) {
       try {
-        const token = await this.getAccessToken();
-        const url = `${this.baseUrl}/${this.spreadsheetId}/values/${sheetName}`;
-        console.log(`Fetching ${sheetName} from Google Sheets with service account:`, url);
+        const url = `/api/sheets/${this.spreadsheetId}/values/${sheetName}`;
+        console.log(`Fetching ${sheetName} from Google Sheets via server:`, url);
 
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
+        const response = await fetch(url);
 
         if (response.ok) {
           const data = await response.json();
@@ -139,7 +133,7 @@ class SheetsService {
         console.error(`Failed to read ${sheetName} from Google Sheets:`, e);
       }
     } else {
-      console.warn('Google Sheets service account key or spreadsheet ID not configured');
+      console.warn('Google Sheets spreadsheet ID not configured');
     }
 
     return [];
@@ -150,18 +144,15 @@ class SheetsService {
     // Always save to localStorage
     localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
 
-    // Try to write to Google Sheets if service account is configured
-    if (this.serviceAccountKey && this.spreadsheetId) {
+    // Try to write to Google Sheets via server API if configured
+    if (this.spreadsheetId) {
       try {
-        const token = await this.getAccessToken();
-
         // Step 1: Clear the entire sheet first
-        const clearUrl = `${this.baseUrl}/${this.spreadsheetId}/values/${sheetName}:clear`;
+        const clearUrl = `/api/sheets/${this.spreadsheetId}/values/${sheetName}/clear`;
 
         const clearResponse = await fetch(clearUrl, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         });
@@ -175,16 +166,14 @@ class SheetsService {
         console.log(`Cleared ${sheetName}`);
 
         // Step 2: Write new data
-        const url = `${this.baseUrl}/${this.spreadsheetId}/values/${sheetName}?valueInputOption=RAW`;
+        const url = `/api/sheets/${this.spreadsheetId}/values/${sheetName}`;
 
         const response = await fetch(url, {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            range: sheetName,
             values: values,
           }),
         });

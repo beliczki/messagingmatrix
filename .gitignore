@@ -32,3 +32,4 @@ dist-ssr
 SECRETS_SETUP.md
 secrets.local.js
 config.local.js
+service-account.json

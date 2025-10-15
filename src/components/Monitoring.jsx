@@ -1,24 +1,12 @@
 import React from 'react';
-import { BarChart3, Menu } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
+import PageHeader from './PageHeader';
 
-const Monitoring = ({ onMenuToggle, currentModuleName }) => {
+const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onMenuToggle}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-              title="Open Menu"
-            >
-              <Menu size={24} className="text-gray-700" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">{currentModuleName || 'Monitoring'}</h1>
-          </div>
-        </div>
-      </div>
+      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Monitoring'} lookAndFeel={lookAndFeel} />
 
       {/* Content */}
       <div className="p-8">

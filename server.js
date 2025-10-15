@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { SignJWT, importPKCS8 } from 'jose';
 
 dotenv.config();
 
@@ -12,6 +13,78 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3003;
+
+// Load Google Service Account
+let serviceAccount = null;
+let accessToken = null;
+let tokenExpiry = null;
+
+try {
+  const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
+  const fullPath = path.join(__dirname, serviceAccountPath);
+  if (fs.existsSync(fullPath)) {
+    serviceAccount = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    console.log('✓ Service account loaded:', serviceAccount.client_email);
+  } else {
+    console.warn('⚠ Service account file not found at:', fullPath);
+  }
+} catch (error) {
+  console.error('✗ Error loading service account:', error.message);
+}
+
+// Get Google OAuth2 access token using service account
+async function getAccessToken() {
+  // Return cached token if still valid
+  if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
+    return accessToken;
+  }
+
+  if (!serviceAccount) {
+    throw new Error('Service account not configured');
+  }
+
+  try {
+    // Import the private key
+    const privateKey = await importPKCS8(serviceAccount.private_key, 'RS256');
+
+    // Create JWT
+    const now = Math.floor(Date.now() / 1000);
+    const jwt = await new SignJWT({
+      iss: serviceAccount.client_email,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now,
+    })
+      .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+      .sign(privateKey);
+
+    // Exchange JWT for access token
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Failed to get access token: ${JSON.stringify(error)}`);
+    }
+
+    const data = await response.json();
+    accessToken = data.access_token;
+    tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // Refresh 1 min early
+
+    console.log('✓ Google OAuth2 token obtained');
+    return accessToken;
+  } catch (error) {
+    console.error('✗ Error getting access token:', error);
+    throw error;
+  }
+}
 
 // Configure CORS with explicit options for Chrome compatibility
 app.use(cors({
@@ -29,6 +102,136 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Google Sheets API endpoints
+const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
+
+// Get spreadsheet data (read from a specific sheet/range)
+app.get('/api/sheets/:spreadsheetId/values/:range', async (req, res) => {
+  try {
+    const { spreadsheetId, range } = req.params;
+    const token = await getAccessToken();
+
+    const url = `${SHEETS_BASE_URL}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+    console.log(`Fetching sheet data: ${url}`);
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Google Sheets API error:', error);
+      return res.status(response.status).json({ error: error.error?.message || 'Failed to read sheet' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error reading sheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update spreadsheet data (write to a specific sheet/range)
+app.put('/api/sheets/:spreadsheetId/values/:range', async (req, res) => {
+  try {
+    const { spreadsheetId, range } = req.params;
+    const { values } = req.body;
+    const token = await getAccessToken();
+
+    const url = `${SHEETS_BASE_URL}/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+    console.log(`Updating sheet data: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        range,
+        values
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Google Sheets API error:', error);
+      return res.status(response.status).json({ error: error.error?.message || 'Failed to update sheet' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error updating sheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear spreadsheet data
+app.post('/api/sheets/:spreadsheetId/values/:range/clear', async (req, res) => {
+  try {
+    const { spreadsheetId, range } = req.params;
+    const token = await getAccessToken();
+
+    const url = `${SHEETS_BASE_URL}/${spreadsheetId}/values/${encodeURIComponent(range)}:clear`;
+    console.log(`Clearing sheet data: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Google Sheets API error:', error);
+      return res.status(response.status).json({ error: error.error?.message || 'Failed to clear sheet' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error clearing sheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get spreadsheet metadata
+app.get('/api/sheets/:spreadsheetId', async (req, res) => {
+  try {
+    const { spreadsheetId } = req.params;
+    const token = await getAccessToken();
+
+    const url = `${SHEETS_BASE_URL}/${spreadsheetId}`;
+    console.log(`Fetching spreadsheet metadata: ${url}`);
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Google Sheets API error:', error);
+      return res.status(response.status).json({ error: error.error?.message || 'Failed to get spreadsheet info' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting spreadsheet info:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Get config
 app.get('/api/config', (req, res) => {
@@ -97,6 +300,234 @@ app.post('/api/claude', async (req, res) => {
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Share/Preview endpoints
+const sharesDir = path.join(__dirname, 'public', 'share');
+
+// Ensure shares directory exists
+if (!fs.existsSync(sharesDir)) {
+  fs.mkdirSync(sharesDir, { recursive: true });
+}
+
+// Get share by ID
+app.get('/api/shares/:shareId', (req, res) => {
+  try {
+    const { shareId } = req.params;
+    const sharePath = path.join(sharesDir, shareId, 'share.json');
+
+    if (!fs.existsSync(sharePath)) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    const shareData = JSON.parse(fs.readFileSync(sharePath, 'utf8'));
+    res.json(shareData);
+  } catch (error) {
+    console.error('Error reading share:', error);
+    res.status(500).json({ error: 'Failed to read share' });
+  }
+});
+
+// Create new share
+app.post('/api/shares', (req, res) => {
+  try {
+    const { assetIds, title, baseColor } = req.body;
+
+    // Generate unique share ID
+    const shareId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const shareDir = path.join(sharesDir, shareId);
+
+    // Create share directory
+    fs.mkdirSync(shareDir, { recursive: true });
+
+    // Create share data
+    const shareData = {
+      shareId,
+      assetIds,
+      title,
+      baseColor,
+      createdAt: new Date().toISOString(),
+      comments: []
+    };
+
+    // Write share.json
+    fs.writeFileSync(
+      path.join(shareDir, 'share.json'),
+      JSON.stringify(shareData, null, 2),
+      'utf8'
+    );
+
+    // Return share info
+    res.json({
+      shareId,
+      url: `/share/${shareId}`
+    });
+  } catch (error) {
+    console.error('Error creating share:', error);
+    res.status(500).json({ error: 'Failed to create share' });
+  }
+});
+
+// Add comment to share
+app.post('/api/shares/:shareId/comments', (req, res) => {
+  try {
+    const { shareId } = req.params;
+    const { author, text } = req.body;
+    const sharePath = path.join(sharesDir, shareId, 'share.json');
+
+    if (!fs.existsSync(sharePath)) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    const shareData = JSON.parse(fs.readFileSync(sharePath, 'utf8'));
+
+    const comment = {
+      id: Date.now().toString(),
+      author,
+      text,
+      timestamp: new Date().toISOString()
+    };
+
+    shareData.comments.push(comment);
+
+    fs.writeFileSync(sharePath, JSON.stringify(shareData, null, 2), 'utf8');
+
+    res.json({ comment });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    res.status(500).json({ error: 'Failed to add comment' });
+  }
+});
+
+// Template endpoints
+const templatesDir = path.join(__dirname, 'src', 'templates');
+
+// List all templates
+app.get('/api/templates', (req, res) => {
+  try {
+    if (!fs.existsSync(templatesDir)) {
+      return res.json([]);
+    }
+
+    const templates = fs.readdirSync(templatesDir, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => {
+        const templatePath = path.join(templatesDir, dirent.name);
+        const templateJsonPath = path.join(templatePath, 'template.json');
+
+        // Get all files in template directory
+        const files = fs.existsSync(templatePath)
+          ? fs.readdirSync(templatePath)
+          : [];
+
+        // Extract dimensions from CSS filenames (e.g., "300x250.css" -> "300x250")
+        const dimensions = files
+          .filter(file => /^\d+x\d+\.css$/.test(file))
+          .map(file => file.replace('.css', ''))
+          .sort();
+
+        // Get file metadata including last modified time
+        const filesWithMeta = files.map(file => {
+          const filePath = path.join(templatePath, file);
+          const stats = fs.statSync(filePath);
+          return {
+            name: file,
+            lastModified: stats.mtime.toISOString(),
+            size: stats.size
+          };
+        });
+
+        // Find the most recently modified file
+        const lastModifiedFile = filesWithMeta.length > 0
+          ? filesWithMeta.reduce((latest, current) =>
+              new Date(current.lastModified) > new Date(latest.lastModified) ? current : latest
+            ).name
+          : null;
+
+        // Read template.json if it exists
+        let templateData = {};
+        if (fs.existsSync(templateJsonPath)) {
+          try {
+            templateData = JSON.parse(fs.readFileSync(templateJsonPath, 'utf8'));
+          } catch (err) {
+            console.error(`Error parsing template.json for ${dirent.name}:`, err);
+          }
+        }
+
+        return {
+          name: dirent.name,
+          dimensions,
+          files,
+          filesWithMeta,
+          lastModifiedFile,
+          lastModified: filesWithMeta.length > 0
+            ? filesWithMeta.reduce((latest, current) =>
+                new Date(current.lastModified) > new Date(latest.lastModified) ? current : latest
+              ).lastModified
+            : new Date().toISOString(),
+          description: 'Template',
+          ...templateData
+        };
+      });
+
+    res.json(templates);
+  } catch (error) {
+    console.error('Error listing templates:', error);
+    res.status(500).json({ error: 'Failed to list templates' });
+  }
+});
+
+// Get template file content
+app.get('/api/templates/:templateName/:fileName', (req, res) => {
+  try {
+    const { templateName, fileName } = req.params;
+    const filePath = path.join(templatesDir, templateName, fileName);
+
+    // Security check: ensure the path is within templates directory
+    const resolvedPath = path.resolve(filePath);
+    const resolvedTemplatesDir = path.resolve(templatesDir);
+    if (!resolvedPath.startsWith(resolvedTemplatesDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    res.json({ content });
+  } catch (error) {
+    console.error('Error reading template file:', error);
+    res.status(500).json({ error: 'Failed to read template file' });
+  }
+});
+
+// Save template file content
+app.post('/api/templates/:templateName/:fileName', (req, res) => {
+  try {
+    const { templateName, fileName } = req.params;
+    const { content } = req.body;
+    const filePath = path.join(templatesDir, templateName, fileName);
+
+    // Security check: ensure the path is within templates directory
+    const resolvedPath = path.resolve(filePath);
+    const resolvedTemplatesDir = path.resolve(templatesDir);
+    if (!resolvedPath.startsWith(resolvedTemplatesDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Ensure template directory exists
+    const templateDir = path.join(templatesDir, templateName);
+    if (!fs.existsSync(templateDir)) {
+      fs.mkdirSync(templateDir, { recursive: true });
+    }
+
+    fs.writeFileSync(filePath, content, 'utf8');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving template file:', error);
+    res.status(500).json({ error: 'Failed to save template file' });
   }
 });
 

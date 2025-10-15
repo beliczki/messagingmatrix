@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Menu, Save, RefreshCw, AlertCircle, Check, ExternalLink } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette } from 'lucide-react';
 import settings from '../services/settings';
+import PageHeader, { getButtonStyle } from './PageHeader';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -14,6 +15,21 @@ const GoogleSheetsIcon = ({ size = 16 }) => (
     <rect x="27" y="18" width="2" height="18" fill="white"/>
   </svg>
 );
+
+// Helper function to parse CSS string into style object
+const parseStyle = (styleString) => {
+  if (!styleString) return {};
+  const styleObj = {};
+  styleString.split(';').forEach(rule => {
+    const [property, value] = rule.split(':').map(s => s.trim());
+    if (property && value) {
+      // Convert kebab-case to camelCase
+      const camelProperty = property.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+      styleObj[camelProperty] = value;
+    }
+  });
+  return styleObj;
+};
 
 const Settings = ({ onMenuToggle, currentModuleName }) => {
   const [config, setConfig] = useState({
@@ -38,7 +54,18 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       image5: '',
       image6: ''
     },
-    spreadsheetId: ''
+    spreadsheetId: '',
+    treeStructure: 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
+    lookAndFeel: {
+      logo: '',
+      headerColor: '#2870ed',
+      logoStyle: 'height: 25px; margin-top: -6px;',
+      buttonColor: '#ff6130',
+      buttonStyle: 'border: 1px solid white;',
+      secondaryColor1: '#eb4c79',
+      secondaryColor2: '#02a3a4',
+      secondaryColor3: '#711c7a'
+    }
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,7 +99,9 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       const success = await settings.save({
         spreadsheetId: config.spreadsheetId,
         imageBaseUrls: config.imageBaseUrls,
-        patterns: config.patterns
+        patterns: config.patterns,
+        treeStructure: config.treeStructure,
+        lookAndFeel: config.lookAndFeel
       });
 
       if (success) {
@@ -116,30 +145,17 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onMenuToggle}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-              title="Open Menu"
-            >
-              <Menu size={24} className="text-gray-700" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">{currentModuleName || 'Settings'}</h1>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={saveConfig}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              <Save size={16} />
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </div>
-      </div>
+      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Settings'} lookAndFeel={config.lookAndFeel}>
+        <button
+          onClick={saveConfig}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50"
+          style={getButtonStyle(config.lookAndFeel)}
+        >
+          <Save size={16} />
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </PageHeader>
 
       {/* Content */}
       <div className="p-8">
@@ -200,6 +216,214 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
             </div>
           </div>
 
+          {/* Look and Feel Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Palette size={20} className="text-purple-600" />
+              Look and Feel
+            </h2>
+
+            {/* Live Header Preview */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Header Preview
+              </label>
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <div style={{ backgroundColor: config.lookAndFeel.headerColor }} className="shadow-sm border-b">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button className="p-2 hover:bg-white hover:bg-opacity-10 rounded transition-colors">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                          <line x1="3" y1="12" x2="21" y2="12"></line>
+                          <line x1="3" y1="6" x2="21" y2="6"></line>
+                          <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                      </button>
+                      {config.lookAndFeel.logo && (
+                        <img
+                          src={config.lookAndFeel.logo}
+                          alt="Logo"
+                          style={parseStyle(config.lookAndFeel.logoStyle)}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      <h1 className="text-xl font-bold text-white">Settings Preview</h1>
+                    </div>
+                    <button
+                      className="px-4 py-2 rounded text-white transition-colors font-medium text-sm"
+                      style={{
+                        backgroundColor: config.lookAndFeel.buttonColor,
+                        ...(config.lookAndFeel.buttonStyle ? parseStyle(config.lookAndFeel.buttonStyle) : {})
+                      }}
+                    >
+                      Action Button
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Live preview updates in real-time as you change colors and styles below
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Logo URL */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Logo URL
+                </label>
+                <input
+                  type="text"
+                  value={config.lookAndFeel.logo}
+                  onChange={(e) => handleInputChange('lookAndFeel.logo', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  placeholder="https://example.com/logo.svg"
+                />
+              </div>
+
+              {/* Logo Style */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Logo Style (CSS)
+                </label>
+                <input
+                  type="text"
+                  value={config.lookAndFeel.logoStyle}
+                  onChange={(e) => handleInputChange('lookAndFeel.logoStyle', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="height: 25px; margin-top: -6px;"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  CSS properties for logo styling
+                </p>
+              </div>
+
+              {/* Header Color */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Header Color
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.headerColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.headerColor', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.headerColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.headerColor', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#2870ed"
+                  />
+                </div>
+              </div>
+
+              {/* Button Color */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Button Color
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.buttonColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.buttonColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#ff6130"
+                  />
+                </div>
+              </div>
+
+              {/* Button Style */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Button Style (CSS)
+                </label>
+                <input
+                  type="text"
+                  value={config.lookAndFeel.buttonStyle}
+                  onChange={(e) => handleInputChange('lookAndFeel.buttonStyle', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="border: 1px solid white;"
+                />
+              </div>
+
+              {/* Secondary Color 1 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Color 1
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.secondaryColor1}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor1', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.secondaryColor1}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor1', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#eb4c79"
+                  />
+                </div>
+              </div>
+
+              {/* Secondary Color 2 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Color 2
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.secondaryColor2}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor2', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.secondaryColor2}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor2', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#02a3a4"
+                  />
+                </div>
+              </div>
+
+              {/* Secondary Color 3 */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Color 3
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.secondaryColor3}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor3', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.secondaryColor3}
+                    onChange={(e) => handleInputChange('lookAndFeel.secondaryColor3', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#711c7a"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Pattern Configuration */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4">Pattern Configuration</h2>
@@ -232,6 +456,28 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Variables: Tag1, Tag2, Tag3, Tag4
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tree Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Tree Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Decision Tree Hierarchy
+                </label>
+                <input
+                  type="text"
+                  value={config.treeStructure || 'Product → Strategy → Targeting Type → Audience → Topic → Messages'}
+                  onChange={(e) => handleInputChange('treeStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="Product → Strategy → Targeting Type → Audience → Topic → Messages"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the hierarchy levels for the tree view using → arrows to separate levels
                 </p>
               </div>
             </div>

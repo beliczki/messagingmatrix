@@ -411,7 +411,7 @@ const PublicPreviewView = ({ previewId }) => {
             <p>No assets in this preview</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
             {previewAssets.map(asset => {
               const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
               const isVideo = asset.extension === 'mp4';
@@ -420,7 +420,7 @@ const PublicPreviewView = ({ previewId }) => {
               return (
                 <div
                   key={asset.id}
-                  className="group cursor-pointer"
+                  className="group cursor-pointer mb-4 break-inside-avoid"
                   onClick={() => setSelectedAsset(asset)}
                 >
                   <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
@@ -439,11 +439,11 @@ const PublicPreviewView = ({ previewId }) => {
                         preload="metadata"
                       />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 pointer-events-none">
                       <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
                         {asset.product || asset.filename}
                       </h3>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
                           {asset.extension}
                         </span>

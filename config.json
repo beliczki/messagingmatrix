@@ -22,14 +22,15 @@
     }
   },
   "lookAndFeel": {
-      "logo": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg",
-      "headerColor": "#2870ed",
-      "logoStyle": "height: 25px; margin-top: -6px;",
-      "buttonColor": "#ff6130",
-      "buttonStyle": "border: 1px solid white;",
-      "secondaryColor1": "#eb4c79",
-      "secondaryColor2": "#02a3a4",
-      "secondaryColor3": "#711c7a"
+    "logo": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg",
+    "headerColor": "#2870ed",
+    "logoStyle": "height: 25px; margin-top: -6px;",
+    "buttonColor": "#ff6130",
+    "buttonStyle": "border-radius: 7px; filter: srop-shadow(0px 0px 5px rgba(0,0,0,0.6));",
+    "secondaryColor1": "#eb4c79",
+    "secondaryColor2": "#02a3a4",
+    "secondaryColor3": "#711c7a"
   },
- "lastUpdated": "2025-10-11T22:19:54.857Z"
+  "lastUpdated": "2025-10-15T00:28:16.929Z",
+  "treeStructure": " Audiences.Product →Audiences.Strategy → Audiences.Targeting_type → Audience.Name → Topic.Name → Messages.Number → Messages.Variant"
 }
