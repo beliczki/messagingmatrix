@@ -78,14 +78,26 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   // Handle keyboard events for spacebar
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' && !spacePressed && viewMode === 'matrix') {
+      // Allow space in input fields, textareas, and contenteditable elements
+      const target = e.target;
+      const isInputField = target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.isContentEditable;
+
+      if (e.code === 'Space' && !spacePressed && viewMode === 'matrix' && !isInputField) {
         e.preventDefault();
         setSpacePressed(true);
       }
     };
 
     const handleKeyUp = (e) => {
-      if (e.code === 'Space') {
+      // Allow space in input fields, textareas, and contenteditable elements
+      const target = e.target;
+      const isInputField = target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.isContentEditable;
+
+      if (e.code === 'Space' && !isInputField) {
         e.preventDefault();
         setSpacePressed(false);
         setIsPanning(false);

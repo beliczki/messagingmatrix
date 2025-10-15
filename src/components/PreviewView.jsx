@@ -13,7 +13,9 @@ import {
   ChevronRight,
   ArrowLeft,
   ArrowRight,
-  Info
+  Info,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -43,6 +45,7 @@ const PublicPreviewView = ({ previewId }) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [rectangleStart, setRectangleStart] = useState(null);
   const [mouseDownTime, setMouseDownTime] = useState(null);
+  const [showOnlyCommented, setShowOnlyCommented] = useState(false);
 
   // Load configuration
   useEffect(() => {
@@ -253,10 +256,12 @@ const PublicPreviewView = ({ previewId }) => {
       }
       commentWithAsset += commentText;
 
-      await addComment(preview.id, commentAuthor, commentWithAsset);
+      await addComment(previewId, commentAuthor, commentWithAsset);
 
-      // Clear everything after posting
-      setCommentAuthor('');
+      // Clear everything after posting (keep author if user is logged in)
+      if (!currentUser || !currentUser.email) {
+        setCommentAuthor('');
+      }
       setCommentText('');
       setReferencePoint(null);
       setUserClickedRef(null);
@@ -344,6 +349,14 @@ const PublicPreviewView = ({ previewId }) => {
 
   const baseColor = preview.baseColor || '#2870ed';
 
+  // Filter assets based on showOnlyCommented checkbox
+  const displayedAssets = showOnlyCommented
+    ? previewAssets.filter(asset => {
+        const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
+        return assetComments.length > 0;
+      })
+    : previewAssets;
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: baseColor }}>
       {/* Header */}
@@ -390,14 +403,24 @@ const PublicPreviewView = ({ previewId }) => {
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleDownloadAll}
-              disabled={downloading || previewAssets.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors ml-4 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <DownloadCloud size={16} />
-              {downloading ? 'Downloading...' : `Download All (${previewAssets.length})`}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowOnlyCommented(!showOnlyCommented)}
+                className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={showOnlyCommented ? 'Show all assets' : 'Show only assets with comments'}
+              >
+                {showOnlyCommented ? <CheckSquare size={16} /> : <Square size={16} />}
+                Commented
+              </button>
+              <button
+                onClick={handleDownloadAll}
+                disabled={downloading || previewAssets.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <DownloadCloud size={16} />
+                {downloading ? 'Downloading...' : `Download All (${previewAssets.length})`}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -405,14 +428,14 @@ const PublicPreviewView = ({ previewId }) => {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Assets Gallery */}
-        {previewAssets.length === 0 ? (
+        {displayedAssets.length === 0 ? (
           <div className="text-center py-12 text-gray-500 bg-white rounded-lg">
             <ImageIcon size={48} className="mx-auto mb-4 text-gray-300" />
-            <p>No assets in this preview</p>
+            <p>{showOnlyCommented ? 'No assets with comments' : 'No assets in this preview'}</p>
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
-            {previewAssets.map(asset => {
+            {displayedAssets.map(asset => {
               const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
               const isVideo = asset.extension === 'mp4';
               const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];

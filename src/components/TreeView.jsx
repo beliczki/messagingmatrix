@@ -129,14 +129,26 @@ const TreeView = ({
   // Handle keyboard events for spacebar
   React.useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' && !spacePressed) {
+      // Allow space in input fields, textareas, and contenteditable elements
+      const target = e.target;
+      const isInputField = target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.isContentEditable;
+
+      if (e.code === 'Space' && !spacePressed && !isInputField) {
         e.preventDefault();
         setSpacePressed(true);
       }
     };
 
     const handleKeyUp = (e) => {
-      if (e.code === 'Space') {
+      // Allow space in input fields, textareas, and contenteditable elements
+      const target = e.target;
+      const isInputField = target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.isContentEditable;
+
+      if (e.code === 'Space' && !isInputField) {
         e.preventDefault();
         setSpacePressed(false);
         setIsPanning(false);
@@ -258,8 +270,8 @@ const TreeView = ({
       e.preventDefault();
       setIsPanning(true);
       setPanStart({
-        x: e.clientX - pan.x * zoom,
-        y: e.clientY - pan.y * zoom
+        x: e.clientX - pan.x,
+        y: e.clientY - pan.y
       });
     }
   };
@@ -267,8 +279,8 @@ const TreeView = ({
   // Handle pan move
   const handlePanMove = (e) => {
     if (isPanning) {
-      const deltaX = (e.clientX - panStart.x) / zoom;
-      const deltaY = (e.clientY - panStart.y) / zoom;
+      const deltaX = e.clientX - panStart.x;
+      const deltaY = e.clientY - panStart.y;
       setPan({
         x: deltaX,
         y: deltaY
@@ -768,7 +780,7 @@ const TreeView = ({
         }}
       >
         {/* Tree structure input overlay */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '50%' }}>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '70%' }}>
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Tree structure:
           </label>
@@ -810,10 +822,19 @@ const TreeView = ({
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
             {/* Root node - 3x bigger and blue */}
-            <g>
+            <g
+              onMouseDown={(e) => handleMouseDown(e, '__root__', { type: 'root' }, startX, startY)}
+              className="transition-opacity hover:opacity-80"
+            >
               <rect
-                x={startX - 360}
-                y={startY - 100}
+                x={(() => {
+                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                  return pos.x - 360;
+                })()}
+                y={(() => {
+                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                  return pos.y - 100;
+                })()}
                 width={720}
                 height={200}
                 rx={24}
@@ -821,10 +842,16 @@ const TreeView = ({
                 stroke="none"
               />
               <text
-                x={startX}
-                y={startY + 15}
+                x={(() => {
+                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                  return pos.x;
+                })()}
+                y={(() => {
+                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                  return pos.y + 15;
+                })()}
                 textAnchor="middle"
-                className="fill-white select-none"
+                className="fill-white select-none pointer-events-none"
                 style={{ fontSize: '48px', fontWeight: 'bold' }}
               >
                 Decision tree
@@ -832,7 +859,13 @@ const TreeView = ({
             </g>
 
             {/* Recursively render tree levels */}
-            {renderTreeLevel(treeData, 0, startX, startY, treeStartX)}
+            {renderTreeLevel(treeData, 0, (() => {
+              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+              return pos.x;
+            })(), (() => {
+              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+              return pos.y;
+            })(), treeStartX)}
           </g>
         </svg>
       </div>
