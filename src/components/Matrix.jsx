@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, Menu } from 'lucide-react';
+import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch } from 'lucide-react';
 import { useMatrix } from '../hooks/useMatrix';
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields } from '../utils/patternEvaluator';
@@ -10,8 +10,9 @@ import StateManagementDialog from './StateManagementDialog';
 import MessageEditorDialog from './MessageEditorDialog';
 import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
+import PageHeader, { getButtonStyle } from './PageHeader';
 
-const Matrix = ({ onMenuToggle, currentModuleName }) => {
+const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const claudeChatRef = useRef(null);
   const {
     audiences,
@@ -60,6 +61,77 @@ const Matrix = ({ onMenuToggle, currentModuleName }) => {
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [viewMode, setViewMode] = useState('matrix'); // 'matrix' or 'tree'
   const [displayMode, setDisplayMode] = useState('informative'); // 'informative' or 'minimal'
+
+  // Tree view controls state
+  const [treeZoom, setTreeZoom] = useState(1);
+  const [treeConnectorType, setTreeConnectorType] = useState('curved');
+  const [treeStructure, setTreeStructure] = useState('Product → Strategy → Targeting Type → Audience → Topic → Messages');
+
+  // Matrix view controls state
+  const [matrixZoom, setMatrixZoom] = useState(1);
+  const [matrixPan, setMatrixPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [spacePressed, setSpacePressed] = useState(false);
+  const matrixContainerRef = useRef(null);
+
+  // Handle keyboard events for spacebar
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !spacePressed && viewMode === 'matrix') {
+        e.preventDefault();
+        setSpacePressed(true);
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setSpacePressed(false);
+        setIsPanning(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [spacePressed, viewMode]);
+
+  // Load tree structure from settings on mount
+  useEffect(() => {
+    const loadTreeStructure = async () => {
+      try {
+        await settings.ensureInitialized();
+        const config = settings.getAll();
+        if (config.treeStructure) {
+          setTreeStructure(config.treeStructure);
+        }
+      } catch (error) {
+        console.error('Error loading tree structure:', error);
+      }
+    };
+    loadTreeStructure();
+  }, []);
+
+  // Save tree structure to settings
+  const saveTreeStructure = async (newStructure) => {
+    try {
+      await settings.ensureInitialized();
+      const config = settings.getAll();
+      await settings.save({
+        ...config,
+        treeStructure: newStructure
+      });
+      setTreeStructure(newStructure);
+    } catch (error) {
+      console.error('Error saving tree structure:', error);
+      alert('Failed to save tree structure');
+    }
+  };
 
   // Handle generated content from Claude
   useEffect(() => {
@@ -310,6 +382,45 @@ const Matrix = ({ onMenuToggle, currentModuleName }) => {
     });
   };
 
+  // Handle zoom with mouse wheel (only with Space)
+  const handleMatrixWheel = (e) => {
+    if (spacePressed) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.min(Math.max(0.1, matrixZoom * delta), 3);
+      setMatrixZoom(newZoom);
+    }
+  };
+
+  // Handle pan start
+  const handleMatrixPanStart = (e) => {
+    if (spacePressed) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({
+        x: e.clientX - matrixPan.x,
+        y: e.clientY - matrixPan.y
+      });
+    }
+  };
+
+  // Handle pan move
+  const handleMatrixPanMove = (e) => {
+    if (isPanning && spacePressed) {
+      const deltaX = e.clientX - panStart.x;
+      const deltaY = e.clientY - panStart.y;
+      setMatrixPan({
+        x: deltaX,
+        y: deltaY
+      });
+    }
+  };
+
+  // Handle pan end
+  const handleMatrixPanEnd = () => {
+    setIsPanning(false);
+  };
+
   // Handle drag
   const onDragStart = (e, msg) => {
     setDraggedMsg(msg);
@@ -403,90 +514,188 @@ const Matrix = ({ onMenuToggle, currentModuleName }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Messaging Matrix'} lookAndFeel={lookAndFeel}>
+        {/* Matrix Zoom Controls - Only show in matrix view */}
+        {viewMode === 'matrix' && (
+          <div className="flex items-center gap-1 rounded p-0.5"
+               style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
             <button
-              onClick={onMenuToggle}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-              title="Open Menu"
+              onClick={() => setMatrixZoom(prev => Math.max(prev * 0.8, 0.1))}
+              className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
+              title="Zoom Out"
             >
-              <Menu size={24} className="text-gray-700" />
+              −
             </button>
-            <h1 className="text-2xl font-bold text-gray-800">{currentModuleName || 'Messaging Matrix'}</h1>
+            <span className="text-white text-xs font-mono min-w-[60px] text-center">
+              {Math.round(matrixZoom * 100)}%
+            </span>
+            <button
+              onClick={() => setMatrixZoom(prev => Math.min(prev * 1.2, 3))}
+              className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
+              title="Zoom In"
+            >
+              +
+            </button>
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            {/* Display Mode Toggle */}
-            <div className={`flex items-center bg-gray-100 rounded p-1 gap-1 transition-opacity ${viewMode === 'tree' ? 'opacity-20' : 'opacity-100'}`}>
+        {/* Display Mode Toggle - Only show in matrix view */}
+        {viewMode === 'matrix' && (
+          <div className="flex items-center rounded p-0.5 gap-0.5"
+               style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
+            <button
+              onClick={() => setDisplayMode('informative')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+                displayMode === 'informative'
+                  ? 'bg-white shadow-sm'
+                  : 'text-white hover:bg-white hover:bg-opacity-20'
+              }`}
+              style={displayMode === 'informative' ? {
+                backgroundColor: 'white',
+                color: lookAndFeel?.headerColor || '#2870ed'
+              } : {}}
+            >
+              <Eye size={20} />
+              <span className="text-sm font-medium">Informative</span>
+            </button>
+            <button
+              onClick={() => setDisplayMode('minimal')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+                displayMode === 'minimal'
+                  ? 'bg-white shadow-sm'
+                  : 'text-white hover:bg-white hover:bg-opacity-20'
+              }`}
+              style={displayMode === 'minimal' ? {
+                backgroundColor: 'white',
+                color: lookAndFeel?.headerColor || '#2870ed'
+              } : {}}
+            >
+              <Eye size={14} />
+              <span className="text-sm font-medium">Minimal</span>
+            </button>
+          </div>
+        )}
+
+        {/* Tree View Controls - Only show in tree view */}
+        {viewMode === 'tree' && (
+          <>
+            {/* Hint text */}
+            <span className="text-white text-xs opacity-80">
+              Press space bar to zoom and pan
+            </span>
+
+            {/* Zoom controls */}
+            <div className="flex items-center gap-1 rounded p-0.5"
+                 style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
               <button
-                onClick={() => setDisplayMode('informative')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors ${
-                  displayMode === 'informative'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                onClick={() => setTreeZoom(prev => Math.max(prev * 0.8, 0.1))}
+                className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
+                title="Zoom Out"
               >
-                <Eye size={20} />
-                Informative
+                −
               </button>
+              <span className="text-white text-xs font-mono min-w-[60px] text-center">
+                {Math.round(treeZoom * 100)}%
+              </span>
               <button
-                onClick={() => setDisplayMode('minimal')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors ${
-                  displayMode === 'minimal'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                onClick={() => setTreeZoom(prev => Math.min(prev * 1.2, 3))}
+                className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
+                title="Zoom In"
               >
-                <Eye size={14} />
-                Minimal
+                +
               </button>
             </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-gray-100 rounded p-1 gap-1">
+            {/* Connector type toggle */}
+            <div className="flex items-center rounded p-0.5 gap-0.5"
+                 style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
               <button
-                onClick={() => setViewMode('matrix')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors ${
-                  viewMode === 'matrix'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                onClick={() => setTreeConnectorType('elbow')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+                  treeConnectorType === 'elbow'
+                    ? 'bg-white shadow-sm'
+                    : 'text-white hover:bg-white hover:bg-opacity-20'
                 }`}
+                style={treeConnectorType === 'elbow' ? {
+                  backgroundColor: 'white',
+                  color: lookAndFeel?.headerColor || '#2870ed'
+                } : {}}
+                title="Elbow Connectors"
               >
-                <Table size={16} />
-                Matrix
+                <span className="text-sm font-medium">⌐⌐</span>
               </button>
               <button
-                onClick={() => setViewMode('tree')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors ${
-                  viewMode === 'tree'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                onClick={() => setTreeConnectorType('curved')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+                  treeConnectorType === 'curved'
+                    ? 'bg-white shadow-sm'
+                    : 'text-white hover:bg-white hover:bg-opacity-20'
                 }`}
+                style={treeConnectorType === 'curved' ? {
+                  backgroundColor: 'white',
+                  color: lookAndFeel?.headerColor || '#2870ed'
+                } : {}}
+                title="Curved Connectors"
               >
-                <GitBranch size={16} />
-                Tree
+                <span className="text-sm font-medium">~</span>
               </button>
             </div>
+          </>
+        )}
 
-            <button
-              onClick={() => setShowKeywordEditor(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
-            >
-              <Edit2 size={16} />
-              Keywords
-            </button>
-
-            <button
-              onClick={() => setShowStateDialog(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-            >
-              <AlertCircle size={16} />
-              State
-            </button>
-          </div>
+        {/* View Mode Toggle */}
+        <div className="flex items-center rounded p-0.5 gap-0.5"
+             style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
+          <button
+            onClick={() => setViewMode('matrix')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+              viewMode === 'matrix'
+                ? 'bg-white shadow-sm'
+                : 'text-white hover:bg-white hover:bg-opacity-20'
+            }`}
+            style={viewMode === 'matrix' ? {
+              backgroundColor: 'white',
+              color: lookAndFeel?.headerColor || '#2870ed'
+            } : {}}
+          >
+            <Table size={16} />
+            <span className="text-sm font-medium">Matrix</span>
+          </button>
+          <button
+            onClick={() => setViewMode('tree')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+              viewMode === 'tree'
+                ? 'bg-white shadow-sm'
+                : 'text-white hover:bg-white hover:bg-opacity-20'
+            }`}
+            style={viewMode === 'tree' ? {
+              backgroundColor: 'white',
+              color: lookAndFeel?.headerColor || '#2870ed'
+            } : {}}
+          >
+            <GitBranch size={16} />
+            <span className="text-sm font-medium">Tree</span>
+          </button>
         </div>
-      </div>
+
+        <button
+          onClick={() => setShowKeywordEditor(true)}
+          className="flex items-center gap-2 px-3 py-2 text-white rounded hover:opacity-90 transition-opacity"
+          style={getButtonStyle(lookAndFeel)}
+        >
+          <Edit2 size={16} />
+          Keywords
+        </button>
+
+        <button
+          onClick={() => setShowStateDialog(true)}
+          className="flex items-center gap-2 px-3 py-2 text-white rounded hover:opacity-90 transition-opacity"
+          style={getButtonStyle(lookAndFeel)}
+        >
+          <AlertCircle size={16} />
+          State
+        </button>
+      </PageHeader>
 
       {/* Matrix / Tree View */}
       <div className="p-4">
@@ -500,11 +709,37 @@ const Matrix = ({ onMenuToggle, currentModuleName }) => {
             topics={filteredTopics}
             messages={messages}
             getMessages={getMessages}
+            zoom={treeZoom}
+            setZoom={setTreeZoom}
+            connectorType={treeConnectorType}
+            setConnectorType={setTreeConnectorType}
+            treeStructure={treeStructure}
+            onTreeStructureChange={saveTreeStructure}
+            lookAndFeel={lookAndFeel}
           />
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-auto">
-            <table className="w-full border-collapse">
-              <thead>
+          <div
+            ref={matrixContainerRef}
+            className="bg-white rounded-lg shadow overflow-hidden"
+            style={{
+              height: 'calc(100vh - 97px - 57px)', // Same as TreeView: viewport - menu - pane header
+              position: 'relative',
+              cursor: spacePressed ? 'grab' : 'default'
+            }}
+            onWheel={handleMatrixWheel}
+            onMouseDown={handleMatrixPanStart}
+            onMouseMove={handleMatrixPanMove}
+            onMouseUp={handleMatrixPanEnd}
+            onMouseLeave={handleMatrixPanEnd}
+          >
+            <div style={{
+              transform: `translate(${matrixPan.x}px, ${matrixPan.y}px) scale(${matrixZoom})`,
+              transformOrigin: 'top left',
+              display: 'inline-block',
+              minWidth: '100%'
+            }}>
+              <table className="w-full border-collapse">
+                <thead>
                 <tr className="bg-gray-50">
                   <th className="border border-gray-300 p-2 bg-gray-100 min-w-[200px]">
                     <div className="flex gap-2 mb-2">
@@ -718,6 +953,7 @@ const Matrix = ({ onMenuToggle, currentModuleName }) => {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

@@ -1,80 +1,90 @@
 import React, { useState, useRef } from 'react';
+import { buildTree, parseTreeStructure } from '../utils/treeBuilder';
+import {
+  getLevelSpacing,
+  getNodeSizeScale,
+  getMinNodeSpacing,
+  calculateBranchWidth,
+  calculateDescendantsSpan,
+  calculateTreeWidth,
+  calculateTotalHeight
+} from '../utils/treeLayout';
 
 // Persistent state outside component to maintain zoom/pan when switching views
 let persistentTreeState = {
-  zoom: 1,
+  zoom: 0.5,
   pan: { x: 0, y: 0 },
   nodePositions: {},
-  connectorType: 'curved'
+  connectorType: 'curved',
+  initialized: false
 };
 
-const TreeView = ({ audiences, topics, messages, getMessages }) => {
+const TreeView = ({
+  audiences,
+  topics,
+  messages,
+  getMessages,
+  zoom: externalZoom,
+  setZoom: externalSetZoom,
+  connectorType: externalConnectorType,
+  setConnectorType: externalSetConnectorType,
+  treeStructure = 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
+  onTreeStructureChange,
+  lookAndFeel = {}
+}) => {
   const [nodePositions, setNodePositions] = useState(persistentTreeState.nodePositions);
   const [dragging, setDragging] = useState(null);
-  const [zoom, setZoom] = useState(persistentTreeState.zoom);
+
+  // Use external zoom/connector if provided, otherwise use internal state
+  const zoom = externalZoom !== undefined ? externalZoom : persistentTreeState.zoom;
+  const setZoom = externalSetZoom || (() => {});
+  const connectorType = externalConnectorType !== undefined ? externalConnectorType : persistentTreeState.connectorType;
+  const setConnectorType = externalSetConnectorType || (() => {});
+
   const [pan, setPan] = useState(persistentTreeState.pan);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [containerHeight, setContainerHeight] = useState(0);
-  const [connectorType, setConnectorType] = useState(persistentTreeState.connectorType);
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Build hierarchical tree structure from data
-  const buildTree = () => {
-    const tree = {
-      strategies: {}
-    };
+  // Build tree data using the imported utility
+  const treeData = buildTree(audiences, topics, getMessages, treeStructure);
 
-    // Group by strategy -> targeting_type -> audience -> topic -> messages
-    audiences.forEach(audience => {
-      const strategy = audience.strategy || 'Unknown Strategy';
-      const targetingType = audience.targeting_type || 'Unknown Type';
-      const audienceKey = audience.key;
+  // Track tree data changes to reset custom node positions
+  const [prevTreeKeys, setPrevTreeKeys] = React.useState(new Set());
 
-      // Initialize strategy branch
-      if (!tree.strategies[strategy]) {
-        tree.strategies[strategy] = {
-          name: strategy,
-          targetingTypes: {}
-        };
-      }
+  // Reset node positions when tree structure changes (messages added/removed)
+  React.useEffect(() => {
+    const currentTreeKeys = new Set();
 
-      // Initialize targeting type branch
-      if (!tree.strategies[strategy].targetingTypes[targetingType]) {
-        tree.strategies[strategy].targetingTypes[targetingType] = {
-          name: targetingType,
-          audiences: {}
-        };
-      }
-
-      // Initialize audience branch
-      if (!tree.strategies[strategy].targetingTypes[targetingType].audiences[audienceKey]) {
-        tree.strategies[strategy].targetingTypes[targetingType].audiences[audienceKey] = {
-          data: audience,
-          topics: {}
-        };
-      }
-
-      // Add topics and messages for this audience
-      topics.forEach(topic => {
-        const cellMessages = getMessages(topic.key, audienceKey);
-        if (cellMessages.length > 0) {
-          tree.strategies[strategy].targetingTypes[targetingType].audiences[audienceKey].topics[topic.key] = {
-            data: topic,
-            messages: cellMessages
-          };
+    // Recursively collect all node keys from the tree
+    const collectKeys = (nodes) => {
+      Object.keys(nodes).forEach(key => {
+        currentTreeKeys.add(key);
+        if (nodes[key].children) {
+          collectKeys(nodes[key].children);
         }
       });
-    });
+    };
 
-    return tree;
-  };
+    collectKeys(treeData);
 
-  const treeData = buildTree();
+    // Check if tree structure has changed (keys added or removed)
+    const keysAdded = Array.from(currentTreeKeys).some(key => !prevTreeKeys.has(key));
+    const keysRemoved = Array.from(prevTreeKeys).some(key => !currentTreeKeys.has(key));
+
+    if (keysAdded || keysRemoved) {
+      // Tree structure changed - clear custom positions to prevent overlap
+      setNodePositions({});
+      persistentTreeState.nodePositions = {};
+    }
+
+    setPrevTreeKeys(currentTreeKeys);
+  }, [messages, audiences, topics, treeStructure]);
 
   // Handle mouse down - start dragging
-  const handleMouseDown = (e, nodeType, nodeData, defaultX, defaultY) => {
+  const handleMouseDown = (e, nodeKey, nodeData, defaultX, defaultY) => {
     e.preventDefault();
     e.stopPropagation();
     const svg = svgRef.current;
@@ -82,10 +92,10 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     const startX = (e.clientX - rect.left - pan.x) / zoom;
     const startY = (e.clientY - rect.top - pan.y) / zoom;
 
-    const currentPos = getNodePosition(nodeType, nodeData, defaultX, defaultY);
+    const currentPos = getNodePosition(nodeKey, nodeData, defaultX, defaultY);
 
     setDragging({
-      type: nodeType,
+      nodeKey: nodeKey,
       data: nodeData,
       offsetX: startX - currentPos.x,
       offsetY: startY - currentPos.y
@@ -101,10 +111,9 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     const x = (e.clientX - rect.left - pan.x) / zoom - dragging.offsetX;
     const y = (e.clientY - rect.top - pan.y) / zoom - dragging.offsetY;
 
-    const nodeKey = `${dragging.type}-${dragging.data.id || dragging.data.key || dragging.data}`;
     setNodePositions(prev => ({
       ...prev,
-      [nodeKey]: { x, y }
+      [dragging.nodeKey]: { x, y }
     }));
   };
 
@@ -146,11 +155,11 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
   // Update container height when it resizes
   React.useEffect(() => {
     const updateHeight = () => {
-      // Calculate available height: viewport - menu (97px) - pane header (57px) - padding (48px)
+      // Calculate available height: viewport - menu (97px) - pane header (57px)
+      // Note: Controls are overlayed, so no need to subtract their height
       const menuHeight = 97;
       const paneHeaderHeight = 57;
-      const paddingHeight = 48; // 1rem top + 2rem bottom (p-4 = 16px * 3)
-      const availableHeight = window.innerHeight - menuHeight - paneHeaderHeight - paddingHeight;
+      const availableHeight = window.innerHeight - menuHeight - paneHeaderHeight;
       setContainerHeight(availableHeight);
     };
 
@@ -161,6 +170,41 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
       window.removeEventListener('resize', updateHeight);
     };
   }, []);
+
+  // Auto-fit tree to viewport on initial load
+  React.useEffect(() => {
+    if (!persistentTreeState.initialized && containerRef.current && svgRef.current && containerHeight > 0) {
+      const container = containerRef.current;
+      const svg = svgRef.current;
+
+      // Get dimensions
+      const containerWidth = container.clientWidth;
+      const svgWidth = svg.width.baseVal.value;
+      const parsedLevels = parseTreeStructure(treeStructure);
+      const levelCount = parsedLevels.length;
+      const svgHeight = calculateTotalHeight(levelCount, 40);
+
+      // Calculate zoom to fit: use 90% of container to leave some padding
+      const zoomToFitWidth = (containerWidth * 0.9) / svgWidth;
+      const zoomToFitHeight = (containerHeight * 0.9) / svgHeight;
+      const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1); // Don't zoom in beyond 1x
+
+      // Calculate pan to center the tree at the optimal zoom
+      const scaledWidth = svgWidth * optimalZoom;
+      const scaledHeight = svgHeight * optimalZoom;
+      const centerX = (containerWidth - scaledWidth) / 2;
+      const centerY = (containerHeight - scaledHeight) / 2;
+
+      // Update zoom and pan
+      setZoom(optimalZoom);
+      setPan({ x: centerX, y: centerY });
+
+      // Mark as initialized and persist
+      persistentTreeState.initialized = true;
+      persistentTreeState.zoom = optimalZoom;
+      persistentTreeState.pan = { x: centerX, y: centerY };
+    }
+  }, [containerHeight]);
 
   // Persist state changes
   React.useEffect(() => {
@@ -184,10 +228,27 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     if (spacePressed) {
       e.preventDefault();
 
+      const container = containerRef.current;
+      if (!container) return;
+
+      // Get container viewport dimensions
+      const containerRect = container.getBoundingClientRect();
+      const containerCenterX = containerRect.width / 2;
+      const containerCenterY = containerRect.height / 2;
+
+      // Calculate current center point in SVG coordinates (before zoom)
+      const svgCenterX = (containerCenterX - pan.x) / zoom;
+      const svgCenterY = (containerCenterY - pan.y) / zoom;
+
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.min(Math.max(0.1, zoom * delta), 3);
 
+      // Calculate new pan to keep the center point fixed
+      const newPanX = containerCenterX - svgCenterX * newZoom;
+      const newPanY = containerCenterY - svgCenterY * newZoom;
+
       setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
     }
   };
 
@@ -236,46 +297,87 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
   };
 
   // Get position for a node (custom or default)
-  const getNodePosition = (nodeType, nodeData, defaultX, defaultY) => {
-    const nodeKey = `${nodeType}-${nodeData.id || nodeData.key || nodeData}`;
-    const customPos = nodePositions[nodeKey];
-    return customPos || { x: defaultX, y: defaultY };
+  const getNodePosition = (nodeKey, nodeData, defaultX, defaultY) => {
+    // Only return custom position if it exists for this specific node
+    if (nodePositions.hasOwnProperty(nodeKey)) {
+      return nodePositions[nodeKey];
+    }
+    return { x: defaultX, y: defaultY };
   };
 
   // Helper to render decision node
-  const DecisionNode = ({ label, value, x, y, nodeType, nodeData, color = '#6366f1', bgColor = '#e0e7ff' }) => {
-    const pos = getNodePosition(nodeType, nodeData, x, y);
+  const DecisionNode = ({ label, value, x, y, nodeKey, nodeData, color = '#6366f1', bgColor = '#e0e7ff', node, levelIndex, isRoot, totalLevels }) => {
+    const pos = getNodePosition(nodeKey, nodeData, x, y);
+
+    // Calculate size based on level - use getNodeSizeScale for consistency with connector calculations
+    let sizeScale;
+    let heightMultiplier = 1; // For making second-to-last level taller
+    let valueTextSize = 14; // Base text size for value
+
+    if (isRoot) {
+      sizeScale = 3;
+    } else {
+      // Use getNodeSizeScale to ensure consistency with connector attachment calculations
+      sizeScale = getNodeSizeScale(levelIndex, totalLevels);
+
+      // Make second-to-last level (parents of leaves) taller with bigger text
+      // Since getNodeSizeScale already returns 1.5 for this level, we only need a smaller additional multiplier
+      if (levelIndex === totalLevels - 2) {
+        heightMultiplier = 1.67; // 1.5 * 1.67 = 2.5x total height
+        valueTextSize = 32; // Much bigger text for the number
+      }
+    }
+
+    const width = 140 * sizeScale;
+    const height = 40 * sizeScale * heightMultiplier;
+    const borderRadius = 5 * sizeScale;
+
+    // Use status-based coloring if node has children (for Message.Number nodes)
+    let nodeColor = color;
+    let nodeBgColor = bgColor;
+
+    if (node && node.children && Object.keys(node.children).length > 0 && node.field === 'Number') {
+      // This is a Message.Number node - color by highest priority child status
+      const childStatus = getChildrenStatus(node);
+      const statusColor = getStatusColor(childStatus);
+      nodeColor = statusColor;
+      nodeBgColor = statusColor + '20'; // Add transparency
+    }
+
+    // Hide label if it's "Name" or "Number"
+    const showLabel = label !== 'Name' && label !== 'Number';
 
     return (
       <g
-        onMouseDown={(e) => handleMouseDown(e, nodeType, nodeData, x, y)}
+        onMouseDown={(e) => handleMouseDown(e, nodeKey, nodeData, x, y)}
         className="transition-opacity hover:opacity-80"
       >
         <rect
-          x={pos.x - 70}
-          y={pos.y - 20}
-          width={140}
-          height={40}
-          rx={5}
-          fill={bgColor}
-          stroke={color}
-          strokeWidth={2}
+          x={pos.x - width/2}
+          y={pos.y - height/2}
+          width={width}
+          height={height}
+          rx={borderRadius}
+          fill={nodeColor}
+          stroke="none"
         />
+        {showLabel && (
+          <text
+            x={pos.x}
+            y={pos.y - (6 * sizeScale)}
+            textAnchor="middle"
+            className="text-xs font-semibold pointer-events-none select-none fill-white"
+            style={{ fontSize: `${12 * sizeScale}px` }}
+          >
+            {label}
+          </text>
+        )}
         <text
           x={pos.x}
-          y={pos.y - 5}
+          y={pos.y + (showLabel ? (10 * sizeScale) : (valueTextSize * sizeScale * 0.35))}
           textAnchor="middle"
-          className="text-xs font-semibold pointer-events-none select-none"
-          fill={color}
-        >
-          {label}
-        </text>
-        <text
-          x={pos.x}
-          y={pos.y + 10}
-          textAnchor="middle"
-          className="text-sm font-bold pointer-events-none select-none"
-          fill={color}
+          className="text-sm font-bold pointer-events-none select-none fill-white"
+          style={{ fontSize: `${valueTextSize * sizeScale}px` }}
         >
           {value}
         </text>
@@ -283,59 +385,113 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     );
   };
 
-  // Helper to render message card (leaf node)
-  const MessageCard = ({ message, x, y }) => {
-    const pos = getNodePosition('message', message, x, y);
+  // Status priority helper - higher number = higher priority
+  const getStatusPriority = (status) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('error') || s.includes('failed')) return 5;  // ERROR - highest priority
+    if (s === 'in progress' || s === 'paused') return 4;  // In progress/paused
+    if (s === 'live' || s === 'running' || s === 'active') return 3;  // Active/green
+    if (s === 'stopped' || s === 'paused') return 2;  // Stopped/paused
+    if (s === 'planned' || s === 'draft') return 1;  // Planned - lowest priority
+    return 0;  // Unknown
+  };
 
-    const getStatusColor = (status) => {
-      const s = (status || '').toLowerCase();
-      if (s === 'live' || s === 'running' || s === 'active') return '#10b981';  // Green - Active
-      if (s === 'paused' || s === 'in progress') return '#f59e0b';  // Orange - In Progress
-      if (s === 'planned') return '#eab308';  // Yellow - Planned
-      if (s === 'draft' || s === 'inactive') return '#6b7280';  // Gray - Inactive
-      return '#6b7280';  // Default gray
+  // Helper to get status color
+  const getStatusColor = (status) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('error') || s.includes('failed')) return '#ef4444';  // Red - Error
+    if (s === 'in progress') return '#f59e0b';  // Orange - In Progress
+    if (s === 'live' || s === 'running' || s === 'active') return '#10b981';  // Green - Active
+    if (s === 'stopped') return '#9ca3af';  // Gray - Stopped
+    if (s === 'paused') return '#6b7280';  // Darker gray - Paused
+    if (s === 'planned' || s === 'draft') return '#eab308';  // Yellow - Planned
+    if (s === 'inactive') return '#6b7280';  // Gray - Inactive
+    return '#6b7280';  // Default gray
+  };
+
+  // Get highest priority status among children
+  const getChildrenStatus = (node) => {
+    if (!node.children || Object.keys(node.children).length === 0) {
+      // Leaf node - return its own status
+      return node.data?.status || 'unknown';
+    }
+
+    // Has children - find highest priority status
+    let highestPriority = 0;
+    let highestStatus = 'unknown';
+
+    const checkChildren = (children) => {
+      Object.values(children).forEach(child => {
+        if (child.data?.status) {
+          const priority = getStatusPriority(child.data.status);
+          if (priority > highestPriority) {
+            highestPriority = priority;
+            highestStatus = child.data.status;
+          }
+        }
+        if (child.children) {
+          checkChildren(child.children);
+        }
+      });
     };
 
+    checkChildren(node.children);
+    return highestStatus;
+  };
+
+  // Helper to render message card (leaf node)
+  const MessageCard = ({ message, x, y, variant, nodeKey }) => {
+    const pos = getNodePosition(nodeKey, message, x, y);
+
     const statusColor = getStatusColor(message.status);
+    const displayVariant = variant || message.variant;
+
+    // Smaller variant cards
+    const cardWidth = 60;
+    const cardHeight = 40;
+    const fontSize = 24;
 
     return (
       <g
-        onMouseDown={(e) => handleMouseDown(e, 'message', message, x, y)}
+        onMouseDown={(e) => handleMouseDown(e, nodeKey, message, x, y)}
         className="transition-opacity hover:opacity-80"
       >
         <rect
-          x={pos.x - 40}
-          y={pos.y - 25}
-          width={80}
-          height={50}
-          rx={6}
+          x={pos.x - cardWidth/2}
+          y={pos.y - cardHeight/2}
+          width={cardWidth}
+          height={cardHeight}
+          rx={8}
           fill={statusColor}
-          stroke={statusColor}
-          strokeWidth={2}
+          stroke="none"
         />
         <text
           x={pos.x}
-          y={pos.y - 5}
+          y={pos.y + fontSize / 3}
           textAnchor="middle"
-          className="text-lg font-bold fill-white pointer-events-none select-none"
+          className="font-bold fill-white pointer-events-none select-none"
+          style={{ fontSize: `${fontSize}px` }}
         >
-          {message.number}{message.variant}
-        </text>
-        <text
-          x={pos.x}
-          y={pos.y + 12}
-          textAnchor="middle"
-          className="text-xs fill-white pointer-events-none select-none"
-        >
-          {message.status || 'PLANNED'}
+          {displayVariant}
         </text>
       </g>
     );
   };
 
-  // Helper to draw connector
-  const Connector = ({ x1, y1, x2, y2, label }) => {
+  // Helper to draw connector with variable stroke width
+  const Connector = ({ x1, y1, x2, y2, label, levelIndex }) => {
     const midY = (y1 + y2) / 2;
+
+    // Calculate stroke width: 40px at level 0, scaling down to 1px at last level
+    const maxStroke = 40;
+    const minStroke = 1;
+    let strokeWidth;
+    if (levelCount > 1) {
+      const progress = levelIndex / (levelCount - 1);
+      strokeWidth = maxStroke - (maxStroke - minStroke) * progress;
+    } else {
+      strokeWidth = maxStroke;
+    }
 
     if (connectorType === 'curved') {
       // Curved connector using cubic bezier
@@ -344,7 +500,7 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
 
       return (
         <g className="pointer-events-none">
-          <path d={path} stroke="#94a3b8" strokeWidth={2} fill="none" />
+          <path d={path} stroke="#94a3b8" strokeWidth={strokeWidth} fill="none" />
           {/* Label */}
           {label && (
             <text
@@ -364,11 +520,11 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     return (
       <g className="pointer-events-none">
         {/* Vertical line down */}
-        <line x1={x1} y1={y1} x2={x1} y2={midY} stroke="#94a3b8" strokeWidth={2} />
+        <line x1={x1} y1={y1} x2={x1} y2={midY} stroke="#94a3b8" strokeWidth={strokeWidth} />
         {/* Horizontal line */}
-        <line x1={x1} y1={midY} x2={x2} y2={midY} stroke="#94a3b8" strokeWidth={2} />
+        <line x1={x1} y1={midY} x2={x2} y2={midY} stroke="#94a3b8" strokeWidth={strokeWidth} />
         {/* Vertical line to target */}
-        <line x1={x2} y1={midY} x2={x2} y2={y2} stroke="#94a3b8" strokeWidth={2} />
+        <line x1={x2} y1={midY} x2={x2} y2={y2} stroke="#94a3b8" strokeWidth={strokeWidth} />
         {/* Label */}
         {label && (
           <text
@@ -384,7 +540,8 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     );
   };
 
-  if (Object.keys(treeData.strategies).length === 0) {
+  // Check if tree is empty
+  if (Object.keys(treeData).length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500">
         No messages to display in tree view
@@ -392,154 +549,209 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
     );
   }
 
-  // Layout calculations - much larger spacing to prevent overlaps
-  const startY = 80;
-  const strategyY = 220;
-  const targetingY = 400;
-  const audienceY = 580;
-  const topicY = 760;
-  const messageY = 940;
+  // Parse tree structure to get level count
+  const parsedLevels = parseTreeStructure(treeStructure);
+  const levelCount = parsedLevels.length;
 
-  const messageSpacing = 100;
-  const minNodeSpacing = 150; // Minimum space between sibling nodes
+  // Layout calculations - dynamic spacing based on tree depth
+  const startY = 40; // Reduced from 80 to move first layer higher
+  const leafSpacing = 65; // Space between leaf nodes (messages)
 
-  // Calculate width of a branch recursively from bottom up
-  const calculateBranchWidth = (node, level) => {
-    if (level === 'message') {
-      return messageSpacing;
-    }
+  // Color palette for different levels using secondary colors
+  const secondaryColor1 = lookAndFeel.secondaryColor1 || '#eb4c79';
+  const secondaryColor2 = lookAndFeel.secondaryColor2 || '#02a3a4';
+  const secondaryColor3 = lookAndFeel.secondaryColor3 || '#711c7a';
 
-    if (level === 'topic') {
-      const messageCount = node.messages.length;
-      return Math.max(messageCount * messageSpacing, minNodeSpacing);
-    }
+  const levelColors = [
+    { color: secondaryColor1, bgColor: secondaryColor1 + '20' },
+    { color: secondaryColor2, bgColor: secondaryColor2 + '20' },
+    { color: secondaryColor3, bgColor: secondaryColor3 + '20' },
+    { color: secondaryColor1, bgColor: secondaryColor1 + '20' },
+    { color: secondaryColor2, bgColor: secondaryColor2 + '20' },
+    { color: secondaryColor3, bgColor: secondaryColor3 + '20' },
+  ];
 
-    if (level === 'audience') {
-      const topicsArr = Object.values(node.topics);
-      if (topicsArr.length === 0) return minNodeSpacing;
-
-      const totalWidth = topicsArr.reduce((sum, topic) => {
-        return sum + calculateBranchWidth(topic, 'topic');
-      }, 0);
-
-      return Math.max(totalWidth, minNodeSpacing);
-    }
-
-    if (level === 'targeting') {
-      const audiencesArr = Object.values(node.audiences);
-      if (audiencesArr.length === 0) return minNodeSpacing;
-
-      const totalWidth = audiencesArr.reduce((sum, audience) => {
-        return sum + calculateBranchWidth(audience, 'audience');
-      }, 0);
-
-      return Math.max(totalWidth, minNodeSpacing);
-    }
-
-    if (level === 'strategy') {
-      const targetingArr = Object.values(node.targetingTypes);
-      if (targetingArr.length === 0) return minNodeSpacing;
-
-      const totalWidth = targetingArr.reduce((sum, targeting) => {
-        return sum + calculateBranchWidth(targeting, 'targeting');
-      }, 0);
-
-      return Math.max(totalWidth, minNodeSpacing);
-    }
-
-    return minNodeSpacing;
-  };
-
-  // Calculate total SVG width
-  const calculateTreeWidth = () => {
-    let totalWidth = 0;
-    Object.values(treeData.strategies).forEach(strategy => {
-      totalWidth += calculateBranchWidth(strategy, 'strategy');
-    });
-    const margin = 400; // Left and right margins (200px each)
-    return Math.max(3000, totalWidth + margin);
-  };
-
-  const svgWidth = calculateTreeWidth();
-  // Use calculated available height, ensuring it's enough for content
-  const svgHeight = containerHeight > 0 ? containerHeight : 1200;
+  // Calculate dimensions using imported utilities
+  const svgWidth = calculateTreeWidth(treeData, levelCount, leafSpacing);
+  const totalHeight = calculateTotalHeight(levelCount, startY);
+  const svgHeight = containerHeight > 0 ? containerHeight : Math.max(1200, totalHeight);
 
   // Calculate total tree width to determine root X position
   const treeStartX = 200; // Left margin
   const treeEndX = svgWidth - 200; // Right margin
   const startX = (treeStartX + treeEndX) / 2; // Center of entire tree
 
-  let currentStrategyX = treeStartX;
+  // Recursive function to render tree nodes
+  const renderTreeLevel = (nodes, levelIndex, parentX, parentY, startXOffset) => {
+    const entries = Object.entries(nodes);
+    if (entries.length === 0) return null;
+
+    // Calculate cumulative Y position using variable spacing
+    let cumulativeY = startY;
+    for (let i = 0; i <= levelIndex; i++) {
+      cumulativeY += getLevelSpacing(i, levelCount);
+    }
+    const currentY = cumulativeY;
+    const colors = levelColors[levelIndex % levelColors.length];
+    const isLastLevel = levelIndex === levelCount - 1;
+
+    // First pass: calculate total width and positions for centering
+    let currentX = startXOffset;
+    const nodeInfo = [];
+
+    entries.forEach(([key, node], index) => {
+      const branchWidth = calculateBranchWidth(node, levelCount, leafSpacing);
+      const minX = currentX;
+      const maxX = currentX + branchWidth;
+
+      // Create consistent node key for position tracking
+      // IMPORTANT: Use the tree's unique key for ALL nodes to avoid collisions
+      // The tree key includes the full path and is guaranteed unique
+      const nodeKey = key;
+      const nodeData = node.data || node.value;
+
+      // Calculate the actual span of descendants to center parent over them
+      const descendantsSpan = calculateDescendantsSpan(node, minX, levelCount, leafSpacing);
+
+      nodeInfo.push({
+        key,
+        node,
+        nodeKey,
+        nodeData,
+        minX,
+        maxX,
+        branchWidth,
+        descendantsSpan
+      });
+
+      currentX += branchWidth;
+    });
+
+    // Calculate center of all children
+    const totalMinX = nodeInfo[0]?.minX || startXOffset;
+    const totalMaxX = nodeInfo[nodeInfo.length - 1]?.maxX || startXOffset;
+    const childrenCenterX = (totalMinX + totalMaxX) / 2;
+
+    // Second pass: render connectors and nodes
+    const connectors = [];
+    const nodesElements = [];
+
+    nodeInfo.forEach(({ key, node, nodeKey, nodeData, minX, maxX, branchWidth, descendantsSpan }) => {
+      // Position node at center of its descendants' span for proper centering
+      // This ensures parent nodes are centered over all their descendant leaves
+      const defaultNodeX = (descendantsSpan.minX + descendantsSpan.maxX) / 2;
+      const nodePos = getNodePosition(nodeKey, nodeData, defaultNodeX, currentY);
+
+      // Render connector from parent - connectors rendered first for proper z-order
+      if (parentX !== undefined && parentY !== undefined) {
+        // Calculate connector attachment points based on node scaling
+        const parentScale = levelIndex > 0 ? getNodeSizeScale(levelIndex - 1, levelCount) : 3; // parent node scale
+        const currentScale = isLastLevel ? 0.5 : getNodeSizeScale(levelIndex, levelCount); // current node scale
+
+        // Check if parent is at second-to-last level (has heightMultiplier)
+        // Since getNodeSizeScale already returns 1.5 for second-to-last, we use 1.67 multiplier
+        const parentHeightMultiplier = (levelIndex - 1) === levelCount - 2 ? 1.67 : 1;
+        // Current node only gets heightMultiplier if it's at second-to-last level AND not last level
+        const currentHeightMultiplier = (levelIndex === levelCount - 2 && !isLastLevel) ? 1.67 : 1;
+
+        const parentHeight = levelIndex > 0 ? 40 * parentScale * parentHeightMultiplier : 200; // root is 200px tall
+        const currentHeight = isLastLevel ? 40 : 40 * currentScale * currentHeightMultiplier;
+
+        connectors.push(
+          <Connector
+            key={`connector-${key}`}
+            x1={parentX}
+            y1={parentY + (parentHeight / 2)}
+            x2={nodePos.x}
+            y2={nodePos.y - (currentHeight / 2)}
+            levelIndex={levelIndex}
+          />
+        );
+      }
+
+      // Render node (either DecisionNode or MessageCard for last level)
+      if (isLastLevel && node.data && node.data.type === 'message') {
+        // Render as message card (leaf node showing variant)
+        nodesElements.push(
+          <MessageCard
+            key={key}
+            message={node.data}
+            x={defaultNodeX}
+            y={currentY}
+            variant={node.value}
+            nodeKey={nodeKey}
+          />
+        );
+      } else {
+        // Render as decision node
+        nodesElements.push(
+          <DecisionNode
+            key={key}
+            label={node.label || node.field || `Level ${levelIndex + 1}`}
+            value={node.value || 'Unknown'}
+            x={defaultNodeX}
+            y={currentY}
+            nodeKey={nodeKey}
+            nodeData={nodeData}
+            color={colors.color}
+            bgColor={colors.bgColor}
+            node={node}
+            levelIndex={levelIndex}
+            isRoot={false}
+            totalLevels={levelCount}
+          />
+        );
+      }
+
+      // Recursively render children - pass the actual node position for connector alignment
+      if (node.children && Object.keys(node.children).length > 0) {
+        const childElements = renderTreeLevel(
+          node.children,
+          levelIndex + 1,
+          nodePos.x,
+          nodePos.y,
+          minX
+        );
+        if (childElements) {
+          nodesElements.push(
+            <g key={`children-${key}`}>
+              {childElements}
+            </g>
+          );
+        }
+      }
+    });
+
+    // Return connectors first, then nodes (for proper z-order)
+    return [...connectors, ...nodesElements];
+  };
+
+  const [tempTreeStructure, setTempTreeStructure] = React.useState(treeStructure);
+  const [hasChanges, setHasChanges] = React.useState(false);
+
+  // Update tempTreeStructure when treeStructure prop changes
+  React.useEffect(() => {
+    setTempTreeStructure(treeStructure);
+    setHasChanges(false);
+  }, [treeStructure]);
+
+  const handleInputChange = (e) => {
+    setTempTreeStructure(e.target.value);
+    setHasChanges(e.target.value !== treeStructure);
+  };
+
+  const handleSave = () => {
+    onTreeStructureChange(tempTreeStructure);
+    setHasChanges(false);
+  };
+
+  const handleCancel = () => {
+    setTempTreeStructure(treeStructure);
+    setHasChanges(false);
+  };
 
   return (
     <div className="w-full h-full bg-white rounded-lg shadow select-none flex flex-col overflow-hidden">
-      <div className="p-4 border-b bg-gray-50 text-sm text-gray-600 flex items-center gap-2 flex-shrink-0">
-        <span className="font-semibold">Decision Tree: Strategy → Targeting Type → Audience → Topic → Messages</span>
-
-        {/* Controls */}
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-gray-500">
-            {spacePressed ? '🖐️ Pan & Zoom Mode (Drag to Pan | Scroll to Zoom)' : 'Hold Space for Pan & Zoom Mode'}
-          </span>
-
-          {/* Zoom controls */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleZoomOut}
-              className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs font-bold"
-              title="Zoom Out"
-            >
-              −
-            </button>
-            <span className="text-xs font-mono min-w-[60px] text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              onClick={handleZoomIn}
-              className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs font-bold"
-              title="Zoom In"
-            >
-              +
-            </button>
-          </div>
-
-          {/* Connector type toggle - styled like matrix/tree toggle */}
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
-            <button
-              onClick={() => setConnectorType('elbow')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors text-xs ${
-                connectorType === 'elbow'
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="Elbow Connectors"
-            >
-              ⌐⌐
-            </button>
-            <button
-              onClick={() => setConnectorType('curved')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-colors text-xs ${
-                connectorType === 'curved'
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="Curved Connectors"
-            >
-              ~
-            </button>
-          </div>
-
-          {/* Reset button */}
-          <button
-            onClick={handleResetAll}
-            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs"
-            title="Reset View & Positions"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
       <div
         ref={containerRef}
         className="flex-1 bg-gray-100 overflow-hidden relative"
@@ -555,6 +767,36 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
           minHeight: 0
         }}
       >
+        {/* Tree structure input overlay */}
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '50%' }}>
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Tree structure:
+          </label>
+          <input
+            type="text"
+            value={tempTreeStructure}
+            onChange={handleInputChange}
+            className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+            placeholder="e.g., Product → Strategy → Targeting Type → Audience → Topic → Messages"
+          />
+          {hasChanges && (
+            <>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 shadow-sm"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+
         <svg
           ref={svgRef}
           width={svgWidth}
@@ -567,195 +809,30 @@ const TreeView = ({ audiences, topics, messages, getMessages }) => {
           }}
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Root node */}
-          <g>
-            <rect
-              x={startX - 120}
-              y={startY - 25}
-              width={240}
-              height={50}
-              rx={8}
-              fill="#7c3aed"
-              stroke="#6d28d9"
-              strokeWidth={3}
-            />
-            <text
-              x={startX}
-              y={startY + 5}
-              textAnchor="middle"
-              className="text-lg font-bold fill-white select-none"
-            >
-              Decision tree
-            </text>
-          </g>
+            {/* Root node - 3x bigger and blue */}
+            <g>
+              <rect
+                x={startX - 360}
+                y={startY - 100}
+                width={720}
+                height={200}
+                rx={24}
+                fill="#2563eb"
+                stroke="none"
+              />
+              <text
+                x={startX}
+                y={startY + 15}
+                textAnchor="middle"
+                className="fill-white select-none"
+                style={{ fontSize: '48px', fontWeight: 'bold' }}
+              >
+                Decision tree
+              </text>
+            </g>
 
-          {/* Render strategy branches */}
-          {Object.entries(treeData.strategies).map(([strategyName, strategyData], strategyIdx) => {
-            // Calculate this strategy's branch width
-            const strategyBranchWidth = calculateBranchWidth(strategyData, 'strategy');
-
-            const targetingTypes = Object.entries(strategyData.targetingTypes);
-            let currentTargetingX = currentStrategyX;
-
-            // Calculate min and max X positions of children to center parent
-            const strategyMinX = currentStrategyX;
-            const strategyMaxX = currentStrategyX + strategyBranchWidth;
-            const strategyX = (strategyMinX + strategyMaxX) / 2;
-            const strategyPos = getNodePosition('strategy', strategyName, strategyX, strategyY);
-
-            return (
-              <g key={`strategy-${strategyName}`}>
-                {/* Connector from root to strategy */}
-                <Connector x1={startX} y1={startY + 25} x2={strategyPos.x} y2={strategyPos.y - 20} />
-
-                {/* Strategy node */}
-                <DecisionNode
-                  label="Strategy"
-                  value={strategyName}
-                  x={strategyX}
-                  y={strategyY}
-                  nodeType="strategy"
-                  nodeData={strategyName}
-                  color="#dc2626"
-                  bgColor="#fee2e2"
-                />
-
-                {/* Render targeting type branches */}
-                {targetingTypes.map(([targetingName, targetingData], targetingIdx) => {
-                  const targetingBranchWidth = calculateBranchWidth(targetingData, 'targeting');
-
-                  const audiencesArr = Object.entries(targetingData.audiences);
-                  let currentAudienceX = currentTargetingX;
-
-                  // Calculate min and max X positions of children to center parent
-                  const targetingMinX = currentTargetingX;
-                  const targetingMaxX = currentTargetingX + targetingBranchWidth;
-                  const targetingX = (targetingMinX + targetingMaxX) / 2;
-                  const targetingPos = getNodePosition('targeting', targetingName, targetingX, targetingY);
-
-                  const targetingElement = (
-                    <g key={`targeting-${targetingName}`}>
-                      {/* Connector from strategy to targeting */}
-                      <Connector x1={strategyPos.x} y1={strategyPos.y + 20} x2={targetingPos.x} y2={targetingPos.y - 20} />
-
-                      {/* Targeting type node */}
-                      <DecisionNode
-                        label="Targeting Type"
-                        value={targetingName}
-                        x={targetingX}
-                        y={targetingY}
-                        nodeType="targeting"
-                        nodeData={targetingName}
-                        color="#ea580c"
-                        bgColor="#ffedd5"
-                      />
-
-                      {/* Render audience branches */}
-                      {audiencesArr.map(([audienceKey, audienceData], audienceIdx) => {
-                        const audienceBranchWidth = calculateBranchWidth(audienceData, 'audience');
-
-                        const topicsArr = Object.entries(audienceData.topics);
-                        let currentTopicX = currentAudienceX;
-
-                        // Calculate min and max X positions of children to center parent
-                        const audienceMinX = currentAudienceX;
-                        const audienceMaxX = currentAudienceX + audienceBranchWidth;
-                        const audienceX = (audienceMinX + audienceMaxX) / 2;
-                        const audiencePos = getNodePosition('audience', audienceData.data, audienceX, audienceY);
-
-                        const audienceElement = (
-                          <g key={`audience-${audienceKey}`}>
-                            {/* Connector from targeting to audience */}
-                            <Connector x1={targetingPos.x} y1={targetingPos.y + 20} x2={audiencePos.x} y2={audiencePos.y - 20} />
-
-                            {/* Audience node */}
-                            <DecisionNode
-                              label="Audience"
-                              value={audienceData.data.name}
-                              x={audienceX}
-                              y={audienceY}
-                              nodeType="audience"
-                              nodeData={audienceData.data}
-                              color="#2563eb"
-                              bgColor="#dbeafe"
-                            />
-
-                            {/* Render topic branches */}
-                            {topicsArr.map(([topicKey, topicData], topicIdx) => {
-                              const topicBranchWidth = calculateBranchWidth(topicData, 'topic');
-
-                              const messagesArr = topicData.messages;
-                              let currentMessageX = currentTopicX;
-
-                              // Calculate min and max X positions of children to center parent
-                              const topicMinX = currentTopicX;
-                              const topicMaxX = currentTopicX + topicBranchWidth;
-                              const topicX = (topicMinX + topicMaxX) / 2;
-                              const topicPos = getNodePosition('topic', topicData.data, topicX, topicY);
-
-                              const topicElement = (
-                                <g key={`topic-${topicKey}`}>
-                                  {/* Connector from audience to topic */}
-                                  <Connector x1={audiencePos.x} y1={audiencePos.y + 20} x2={topicPos.x} y2={topicPos.y - 20} />
-
-                                  {/* Topic node */}
-                                  <DecisionNode
-                                    label="Topic"
-                                    value={topicData.data.name}
-                                    x={topicX}
-                                    y={topicY}
-                                    nodeType="topic"
-                                    nodeData={topicData.data}
-                                    color="#059669"
-                                    bgColor="#d1fae5"
-                                  />
-
-                                  {/* Render messages */}
-                                  {messagesArr.map((msg, msgIdx) => {
-                                    const msgX = currentMessageX + messageSpacing / 2;
-                                    const msgY = messageY;
-                                    const msgPos = getNodePosition('message', msg, msgX, msgY);
-
-                                    const msgElement = (
-                                      <g key={`msg-${msg.id}`}>
-                                        {/* Connector from topic to message */}
-                                        <Connector x1={topicPos.x} y1={topicPos.y + 20} x2={msgPos.x} y2={msgPos.y - 25} />
-
-                                        {/* Message card */}
-                                        <MessageCard message={msg} x={msgX} y={msgY} />
-                                      </g>
-                                    );
-
-                                    currentMessageX += messageSpacing;
-                                    return msgElement;
-                                  })}
-                                </g>
-                              );
-
-                              currentTopicX += topicBranchWidth;
-                              return topicElement;
-                            })}
-                          </g>
-                        );
-
-                        currentAudienceX += audienceBranchWidth;
-                        return audienceElement;
-                      })}
-                    </g>
-                  );
-
-                  currentTargetingX += targetingBranchWidth;
-                  return targetingElement;
-                })}
-
-                {/* Update X position for next strategy */}
-                {(() => {
-                  currentStrategyX += strategyBranchWidth;
-                  return null;
-                })()}
-              </g>
-            );
-          })}
+            {/* Recursively render tree levels */}
+            {renderTreeLevel(treeData, 0, startX, startY, treeStartX)}
           </g>
         </svg>
       </div>
