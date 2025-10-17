@@ -1,0 +1,40 @@
+[
+  {
+    "title": "Prepare social card assets for HK gamertech",
+    "description": "Create social card images and copy for gamertech creatives (MC 171) in sizes 1200x628 and 1080x1080 from September's HK DCO",
+    "priority": "High",
+    "dueDate": null,
+    "source": "WPP - Erste DCO és kreatív operatív",
+    "from": "Anna Marjan <anna.marjan@wppmedia.com>",
+    "status": "pending",
+    "emailUid": 2,
+    "id": "task-1760565965086-0",
+    "createdAt": "2025-10-15T22:06:05.086Z",
+    "bucket": "production"
+  },
+  {
+    "title": "Create real estate social cards for Vállalkozói számla",
+    "description": "Prepare images and copy for real estate social cards campaign in sizes 1200x628 and 1080x1080, including variants for panel, downtown, and new construction apartments",
+    "priority": "Medium",
+    "dueDate": null,
+    "source": "WPP - Erste DCO és kreatív operatív",
+    "from": "Anna Marjan <anna.marjan@wppmedia.com>",
+    "status": "pending",
+    "emailUid": null,
+    "id": "task-1760565965086-1",
+    "createdAt": "2025-10-15T22:06:05.086Z",
+    "bucket": "production"
+  },
+  {
+    "title": "Fix badge overlap issue in HK gamertech creative",
+    "description": "Review and fix THM badge overlap issue in 300x600 format of new HK gamertech remarketing creative (MC173)",
+    "priority": "High",
+    "dueDate": null,
+    "source": "WPP - Erste DCO és kreatív operatív",
+    "from": "Anna Marjan <anna.marjan@wppmedia.com>",
+    "status": "pending",
+    "emailUid": null,
+    "id": "task-1760565965086-2",
+    "createdAt": "2025-10-15T22:06:05.086Z"
+  }
+]

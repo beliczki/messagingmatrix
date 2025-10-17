@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run restart)",
+      "Bash(pm2 list)",
+      "Bash(pm2 delete messagingmatrix-frontend)",
+      "Bash(curl -s http://localhost:3003/api/config)",
+      "Bash(pm2 restart:*)",
+      "Bash(pm2 logs:*)",
+      "Bash(nslookup:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\restart-servers.ps1\")",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev:*)",
+      "Bash(Start-Sleep -Seconds 2)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\kill-servers.ps1\")",
+      "Bash(pm2 delete:*)",
+      "Bash(pm2 start:*)",
+      "Read(//c/**)",
+      "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\src\\templates\\html\" /B)",
+      "Bash(move:*)",
+      "Bash(del:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\src\" /B)",
+      "Bash(if not exist \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\src\\assets\" mkdir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\src\\assets\")",
+      "Bash(npm install:*)",
+      "Bash(timeout:*)",
+      "Bash(pm2 status:*)",
+      "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\" /B /AD)",
+      "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\working matrix and tree zoom\\src\\components\" /B)",
+      "Bash(git log:*)",
+      "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\public\\share\" /B)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
