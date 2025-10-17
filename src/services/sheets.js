@@ -107,7 +107,6 @@ class SheetsService {
     // Try localStorage first
     const stored = localStorage.getItem(`${this.storageKey}_${sheetName}`);
     if (stored) {
-      console.log(`Loaded ${sheetName} from localStorage`);
       return JSON.parse(stored);
     }
 
@@ -213,7 +212,7 @@ class SheetsService {
   }
 
   // Save all data
-  async saveAll(audiences, topics, messages) {
+  async saveAll(audiences, topics, messages, feedData = null, feedFields = null) {
     const audienceRows = [
       ['ID', 'Name', 'Order', 'Status', 'Product', 'Strategy', 'Buying_platform', 'Data_source', 'Targeting_type', 'Device', 'Tag', 'Key', 'Comment', 'Campaign_name', 'Campaign_ID', 'Lineitem_name', 'Lineitem_ID'],
       ...audiences.map(a => [
@@ -256,51 +255,74 @@ class SheetsService {
     ];
 
     const messageRows = [
-      ['ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'CTA', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
+      ['ID', 'POMS_ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Disclaimer', 'Headline_style', 'Copy1_style', 'Copy2_style', 'Disclaimer_style', 'CSS', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'CTA', 'CTA_style', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
       ...messages
         .filter(m => m.status !== 'deleted')
         .map(m => [
           m.id || '',           // A: Numeric ID
-          m.name || '',         // B: Name (compound key like "aud1!top1!m1a!v1")
-          m.number || 1,        // C: Number
-          m.variant || 'a',     // D: Variant
-          m.audience,           // E: Audience_Key
-          m.topic,              // F: Topic_Key
-          m.version || 1,       // G: Version
-          m.pmmid || '',        // H: PMMID
-          m.status || '',       // I: Status
-          m.start_date || '',   // J: Start_date
-          m.end_date || '',     // K: End_date
-          m.template || '',     // L: Template
-          m.template_variant_classes || '', // M: Template_variant_classes
-          m.headline || '',     // N: Headline
-          m.copy1 || '',        // O: Copy1
-          m.copy2 || '',        // P: Copy2
-          m.image1 || '',       // Q: Image1
-          m.image2 || '',       // R: Image2
-          m.image3 || '',       // S: Image3
-          m.image4 || '',       // T: Image4
-          m.image5 || '',       // U: Image5
-          m.image6 || '',       // V: Image6
-          m.flash || '',        // W: Flash
-          m.cta || '',          // X: CTA
-          m.landingUrl || '',   // Y: Landing_URL
-          m.comment || '',      // Z: Comment
-          m.utm_campaign || '', // AA: UTM_Campaign
-          m.utm_source || '',   // AB: UTM_Source
-          m.utm_medium || '',   // AC: UTM_Medium
-          m.utm_content || '',  // AD: UTM_Content
-          m.utm_term || '',     // AE: UTM_Term
-          m.utm_cd26 || '',     // AF: UTM_CD26
-          m.final_trafficked_url || '' // AG: Final_Trafficked_URL
+          m.poms_id || '',      // B: POMS_ID
+          m.name || '',         // C: Name (compound key like "aud1!top1!m1a!v1")
+          m.number || 1,        // D: Number
+          m.variant || 'a',     // E: Variant
+          m.audience,           // F: Audience_Key
+          m.topic,              // G: Topic_Key
+          m.version || 1,       // H: Version
+          m.pmmid || '',        // I: PMMID
+          m.status || '',       // J: Status
+          m.start_date || '',   // K: Start_date
+          m.end_date || '',     // L: End_date
+          m.template || '',     // M: Template
+          m.template_variant_classes || '', // N: Template_variant_classes
+          m.headline || '',     // O: Headline
+          m.copy1 || '',        // P: Copy1
+          m.copy2 || '',        // Q: Copy2
+          m.disclaimer || '',   // R: Disclaimer
+          m.headline_style || '', // S: Headline_style
+          m.copy1_style || '',  // T: Copy1_style
+          m.copy2_style || '',  // U: Copy2_style
+          m.disclaimer_style || '', // V: Disclaimer_style
+          m.css || '',          // W: CSS
+          m.image1 || '',       // X: Image1
+          m.image2 || '',       // Y: Image2
+          m.image3 || '',       // Z: Image3
+          m.image4 || '',       // AA: Image4
+          m.image5 || '',       // AB: Image5
+          m.image6 || '',       // AC: Image6
+          m.flash || '',        // AD: Flash
+          m.cta || '',          // AE: CTA
+          m.cta_style || '',    // AF: CTA_style
+          m.landingUrl || '',   // AG: Landing_URL
+          m.comment || '',      // AH: Comment
+          m.utm_campaign || '', // AI: UTM_Campaign
+          m.utm_source || '',   // AJ: UTM_Source
+          m.utm_medium || '',   // AK: UTM_Medium
+          m.utm_content || '',  // AL: UTM_Content
+          m.utm_term || '',     // AM: UTM_Term
+          m.utm_cd26 || '',     // AN: UTM_CD26
+          m.final_trafficked_url || '' // AO: Final_Trafficked_URL
         ])
     ];
 
-    await Promise.all([
+    const promises = [
       this.write('Audiences', audienceRows),
       this.write('Topics', topicRows),
       this.write('Messages', messageRows)
-    ]);
+    ];
+
+    // Include feed if provided
+    if (feedData && feedFields && feedData.length > 0) {
+      const feedRows = [
+        // Header row from feedFields
+        feedFields.map(f => f.header),
+        // Data rows
+        ...feedData.map(row =>
+          feedFields.map(field => row[field.header] || '')
+        )
+      ];
+      promises.push(this.write('Feed', feedRows));
+    }
+
+    await Promise.all(promises);
   }
 
   // Helper function to create a column map from header row
@@ -377,8 +399,6 @@ class SheetsService {
   parseMessages(rows) {
     if (!rows || rows.length < 2) return [];
 
-    console.log('Parsing messages from sheet:', rows);
-
     const headerRow = rows[0];
     const columnMap = this.createColumnMap(headerRow);
 
@@ -393,6 +413,7 @@ class SheetsService {
       .map((row) => {
         const message = {
           id: parseInt(this.getValue(row, columnMap, 'ID')) || null,
+          poms_id: this.getValue(row, columnMap, 'POMS_ID'),
           name: this.getValue(row, columnMap, 'Name'),
           number: parseInt(this.getValue(row, columnMap, 'Number')) || 1,
           variant: this.getValue(row, columnMap, 'Variant') || 'a',
@@ -408,6 +429,12 @@ class SheetsService {
           headline: this.getValue(row, columnMap, 'Headline'),
           copy1: this.getValue(row, columnMap, 'Copy1'),
           copy2: this.getValue(row, columnMap, 'Copy2'),
+          disclaimer: this.getValue(row, columnMap, 'Disclaimer'),
+          headline_style: this.getValue(row, columnMap, 'Headline_style'),
+          copy1_style: this.getValue(row, columnMap, 'Copy1_style'),
+          copy2_style: this.getValue(row, columnMap, 'Copy2_style'),
+          disclaimer_style: this.getValue(row, columnMap, 'Disclaimer_style'),
+          css: this.getValue(row, columnMap, 'CSS'),
           image1: this.getValue(row, columnMap, 'Image1'),
           image2: this.getValue(row, columnMap, 'Image2'),
           image3: this.getValue(row, columnMap, 'Image3'),
@@ -416,6 +443,7 @@ class SheetsService {
           image6: this.getValue(row, columnMap, 'Image6'),
           flash: this.getValue(row, columnMap, 'Flash'),
           cta: this.getValue(row, columnMap, 'CTA'),
+          cta_style: this.getValue(row, columnMap, 'CTA_style'),
           landingUrl: this.getValue(row, columnMap, 'Landing_URL'),
           comment: this.getValue(row, columnMap, 'Comment'),
           // Trafficking fields
@@ -428,7 +456,6 @@ class SheetsService {
           final_trafficked_url: this.getValue(row, columnMap, 'Final_Trafficked_URL')
         };
 
-        console.log(`Parsed: ${message.name} (ID: ${message.id}) -> Topic:"${message.topic}" Audience:"${message.audience}" Headline:"${message.headline}"`);
         return message;
       });
   }
@@ -461,7 +488,6 @@ class SheetsService {
       }
     });
 
-    console.log('Parsed keywords:', keywords);
     return keywords;
   }
 

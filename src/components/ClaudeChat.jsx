@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } f
 import { MessageSquare, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react';
 import { callClaudeAPI } from '../api/claude-proxy';
 
-const ClaudeChat = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic }, ref) => {
+const ClaudeChat = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction }, ref) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +56,7 @@ const ClaudeChat = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMe
       setIsGenerating(true);
 
       // Get example messages from the matrix for style/pattern reference
-      const { messages: matrixMessages } = matrixState;
+      const { messages: matrixMessages = [] } = matrixState || {};
       const exampleMessages = matrixMessages
         .filter(m => m.status !== 'deleted' && (m.headline || m.copy1 || m.cta))
         .slice(0, 5) // Get up to 5 examples
@@ -278,7 +278,48 @@ Make sure the content is:
   };
 
   const buildContextPrompt = () => {
-    const { audiences, topics, messages: matrixMessages } = matrixState;
+    // Task Management Context
+    if (taskContext) {
+      const { tasks, emails } = taskContext;
+
+      const context = `Current Task Management State (JSON):
+
+${JSON.stringify({
+  tasks: tasks.slice(0, 20),
+  emails: emails.slice(0, 5)
+}, null, 2)}
+
+You are an AI assistant helping with task management for email-to-task conversion and workflow organization.
+
+## Your Capabilities:
+
+1. **Analyze Tasks**: Help prioritize, organize, and suggest improvements to existing tasks
+2. **Categorize Tasks**: Suggest which bucket (Backlog, Planning, In Production, Review, Dead) tasks should be in
+3. **Extract Actionable Items**: Help identify key action items from task descriptions
+4. **Set Priorities**: Suggest appropriate priority levels (High, Medium, Low) based on task urgency
+5. **Workflow Advice**: Provide guidance on task workflow and project management best practices
+
+## Task Buckets:
+- **Backlog**: All ideas and requests
+- **Planning**: Items being scoped/briefed
+- **In Production**: Active work
+- **Review**: Under review or approved
+- **Dead**: Discontinued tasks
+
+## Response Guidelines:
+- Focus on practical, actionable advice
+- When suggesting bucket changes, explain your reasoning
+- Help break down complex tasks into manageable steps
+- Identify dependencies between tasks
+- Suggest due dates when appropriate
+
+Ask about specific tasks, request workflow advice, or ask for help organizing your task list.`;
+
+      return context;
+    }
+
+    // Matrix Context (original)
+    const { audiences = [], topics = [], messages: matrixMessages = [] } = matrixState || {};
 
     const context = `Current Messaging Matrix State (JSON):
 
@@ -322,7 +363,7 @@ The user can then say "add Young Professionals and Students" or "add all" to app
 
 ## When User Says "Add" or "Remove":
 
-- Detect which items the user wants to add/remove
+- Detect which items the user want to add/remove
 - For "add all", add all pending suggestions
 - For "add [name]", add only the specified item
 - For "remove [name or key]", find and mark the item for removal
@@ -411,9 +452,9 @@ The user can then say "add Young Professionals and Students" or "add all" to app
           setMessages(prev => [...prev, confirmationMessage]);
           setPendingSuggestions(null); // Clear pending suggestions
         }
-      } else if (isRemoveCommand) {
+      } else if (isRemoveCommand && matrixState) {
         // Handle remove command
-        const { audiences, topics } = matrixState;
+        const { audiences = [], topics = [] } = matrixState;
         let removed = [];
 
         // Try to find audience or topic by name or key
@@ -601,25 +642,50 @@ The user can then say "add Young Professionals and Students" or "add all" to app
         {messages.length === 0 && (
           <div className="text-center text-gray-500 mt-8">
             <MessageSquare size={48} className="mx-auto mb-4 text-gray-300" />
-            <p className="text-sm font-medium">
-              Ask Claude to help improve your messaging matrix content.
-            </p>
-            <p className="text-xs text-gray-400 mt-2">
-              Claude can see your current audiences, topics, and messages.
-            </p>
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-left">
-              <p className="text-xs font-semibold text-blue-800 mb-2">✨ Claude can suggest changes to your matrix!</p>
-              <div className="text-xs text-blue-700 space-y-1">
-                <p><strong>1. Ask for suggestions:</strong> "Suggest 3 audiences for tech products"</p>
-                <p><strong>2. Review suggestions</strong> from Claude</p>
-                <p><strong>3. Apply selectively:</strong></p>
-                <ul className="list-disc list-inside ml-2">
-                  <li>"add all" - Add everything</li>
-                  <li>"add Young Professionals" - Add specific item</li>
-                  <li>"remove Students" - Remove by name or key</li>
-                </ul>
-              </div>
-            </div>
+            {taskContext ? (
+              <>
+                <p className="text-sm font-medium">
+                  Ask Claude to help manage and organize your tasks.
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Claude can see your current tasks and help with workflow management.
+                </p>
+                <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded text-left">
+                  <p className="text-xs font-semibold text-purple-800 mb-2">✨ Claude can help you:</p>
+                  <div className="text-xs text-purple-700 space-y-1">
+                    <ul className="list-disc list-inside">
+                      <li>"Analyze my tasks and suggest priorities"</li>
+                      <li>"Which tasks should I move to Planning?"</li>
+                      <li>"Help me organize tasks by urgency"</li>
+                      <li>"What should I work on first?"</li>
+                      <li>"Break down this task into steps"</li>
+                    </ul>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium">
+                  Ask Claude to help improve your messaging matrix content.
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Claude can see your current audiences, topics, and messages.
+                </p>
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-left">
+                  <p className="text-xs font-semibold text-blue-800 mb-2">✨ Claude can suggest changes to your matrix!</p>
+                  <div className="text-xs text-blue-700 space-y-1">
+                    <p><strong>1. Ask for suggestions:</strong> "Suggest 3 audiences for tech products"</p>
+                    <p><strong>2. Review suggestions</strong> from Claude</p>
+                    <p><strong>3. Apply selectively:</strong></p>
+                    <ul className="list-disc list-inside ml-2">
+                      <li>"add all" - Add everything</li>
+                      <li>"add Young Professionals" - Add specific item</li>
+                      <li>"remove Students" - Remove by name or key</li>
+                    </ul>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -677,7 +743,7 @@ The user can then say "add Young Professionals and Students" or "add all" to app
                   sendMessage();
                 }
               }}
-              placeholder="Ask Claude for suggestions..."
+              placeholder={taskContext ? "Ask Claude for task management help..." : "Ask Claude for suggestions..."}
               disabled={isLoading}
               className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
             />

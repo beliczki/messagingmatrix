@@ -490,3 +490,100 @@ console.log('Loaded Audiences from:', stored ? 'localStorage' : 'Sheets');
 - Analytics integration
 - Mobile responsive UI
 - Multi-language support
+
+## Production Deployment Notes
+
+### Current Production Environment
+- **URL**: https://messagingmatrix.ai
+- **Server**: Plesk-managed Node.js on port 3004
+- **Frontend**: Static build served from dist/ via nginx
+- **Backend**: Express server managed by PM2
+- **Database**: Google Sheets via Service Account
+- **SSL**: Let's Encrypt automatic certificate
+
+### Critical Deployment Lessons
+
+#### 1. Port Management
+- **Development**: Backend runs on port 3003, frontend on 5173
+- **Production**: Backend runs on port 3004 (changed from 3003 due to zombie process)
+- **Lesson**: Always have backup ports documented and ready
+
+#### 2. Service Account JSON Format
+- Must be minified (no pretty-printing)
+- `private_key` field must use `\n` escape sequences, not actual newlines
+- Validate JSON before deployment using online validators
+- Test file parsing in development environment first
+
+#### 3. Process Management with PM2
+- Use PM2 exclusively - don't mix with manual node commands
+- Always run `pm2 save` after changes
+- Configure `pm2 startup` for auto-restart on reboot
+- Monitor with `pm2 status` and `pm2 logs` regularly
+
+#### 4. Plesk-Specific Behaviors
+- "Restart App" means "restart after first request", not immediate
+- Disable/Enable Node.js may not kill zombie processes
+- SSH terminal may have library dependencies issues
+- Use Plesk File Manager as backup access method
+
+#### 5. Google Sheets Integration
+- Requires properly configured service account with Sheets API access
+- Spreadsheet must be shared with service account email
+- Token caching works well - no rate limit issues encountered
+- Falls back to localStorage gracefully when offline
+
+#### 6. Nginx Reverse Proxy
+- `/api` location block proxies to backend (127.0.0.1:PORT)
+- `try_files $uri $uri/ /index.html` enables SPA routing
+- `client_max_body_size 100M` for asset uploads
+- Configuration works perfectly once set up correctly
+
+### Security Best Practices
+- NEVER commit service-account.json to version control
+- NEVER commit .env files with real credentials
+- Use .env.example as template with placeholder values
+- Generate strong JWT_SECRET using crypto.randomBytes
+- Keep API keys in server environment variables only
+- Validate all config files before deployment
+
+### Deployment Checklist
+1. Pull latest code from GitHub
+2. Run `npm install` for dependencies
+3. Verify .env has all required variables
+4. Validate JSON config files (service-account.json, config.json)
+5. Run `npm run build` to create production frontend
+6. Check PM2 status before and after restart
+7. Test API endpoints with curl or browser DevTools
+8. Monitor PM2 logs for 5 minutes after deployment
+9. Test critical features (login, sheets sync, asset upload)
+10. Document deployed version/commit hash
+
+### Troubleshooting Quick Reference
+- **Backend won't start**: Check port availability, PM2 logs, .env file
+- **API 404 errors**: Verify nginx proxy config, check PM2 is running
+- **JSON parse errors**: Validate file format, check escape sequences
+- **Port conflicts**: Change PORT in .env, restart PM2
+- **Zombie processes**: Document PIDs, use netstat/lsof, have backup ports
+- **Sheet sync fails**: Check service account permissions, validate JSON format
+
+### Monitoring and Maintenance
+- Monitor PM2 logs daily: `pm2 logs --lines 100`
+- Check disk space regularly (logs can fill up)
+- Rotate logs with PM2 or system logrotate
+- Test backup and recovery procedures monthly
+- Keep deployment log with dates, versions, and issues
+- Update dependencies regularly with `npm audit`
+
+### What Works Well in Production
+- Google Sheets API integration (once properly configured)
+- PM2 process management (when used correctly)
+- React production build process
+- Nginx reverse proxy setup
+- Let's Encrypt SSL certificates
+- localStorage caching with Sheets sync fallback
+
+### Known Production Issues and Workarounds
+1. **Zombie process on port 3003**: Use port 3004 instead
+2. **Plesk restart behavior**: Make HTTP request after clicking restart
+3. **SSH terminal library errors**: Use Plesk File Manager as alternative
+4. **JSON formatting**: Always minify service account files

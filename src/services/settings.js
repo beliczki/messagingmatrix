@@ -153,6 +153,18 @@ class SettingsService {
   async setLookAndFeel(lookAndFeel) {
     await this.set('lookAndFeel', lookAndFeel);
   }
+
+  // Get status colors from look and feel settings
+  getStatusColors() {
+    const lookAndFeel = this.getLookAndFeel();
+    return lookAndFeel?.statusColors || {
+      ACTIVE: '#34a853',
+      INACTIVE: '#cccccc',
+      ERROR: '#ff0000',
+      INPROGRESS: '#ff6d01',
+      PLANNED: '#ffff00'
+    };
+  }
 }
 
 export default new SettingsService();

@@ -314,12 +314,12 @@ Create initial data files with default content:
 ```bash
 echo '{"lookAndFeel":{"logo":"https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg","headerColor":"#2870ed","logoStyle":"height: 25px; margin-top: -6px;","buttonColor":"#ff6130","buttonStyle":"border: 1px solid white;","secondaryColor1":"#eb4c79","secondaryColor2":"#02a3a4","secondaryColor3":"#711c7a"},"lastUpdated":"2025-01-15T00:00:00.000Z"}' > config.json
 
-echo '{"users":[{"id":"1","email":"beliczki.robert@gmail.com","password":"$2a$10$N8rF.lQqUZzHxPWKjx9kUeYgRXfhVqZ0XqE8QK5fJ5mH8Z2XqKQHG","role":"admin","name":"Robert Beliczki"}]}' > src/data/users.json
+echo '{"users":[{"id":"1","email":"admin@example.com","password":"REPLACE_WITH_BCRYPT_HASH","role":"admin","name":"Admin User"}]}' > src/data/users.json
 
 echo '{"rows":[]}' > src/data/matrix.json
 ```
 
-**Note**: The password hash above is for `temporary123`. Users should change this after first login.
+**Note**: Generate a secure password hash using bcrypt. NEVER commit actual passwords to documentation or version control.
 
 ### Step 3: Set Permissions
 
@@ -921,7 +921,7 @@ Your Messaging Matrix application is now live at:
 
 ### Quick Reference
 
-**Login**: `beliczki.robert@gmail.com` / `temporary123` (change this!)
+**Login**: Use the admin credentials you created during setup
 
 **PM2 Status**: `pm2 status`
 
@@ -949,6 +949,239 @@ Your Messaging Matrix application is now live at:
 - **Express Documentation**: https://expressjs.com/
 - **Vite Documentation**: https://vitejs.dev/
 - **Claude API**: https://docs.anthropic.com/
+
+---
+
+## Part 14: Deployment Lessons Learned
+
+### Critical Issues Encountered in Production
+
+#### Issue 1: Zombie Node.js Process on Port 3003
+**Problem**: After deployment, a Node.js process remained running on port 3003 even after disabling/enabling Node.js in Plesk. The "Restart App" function in Plesk didn't actually kill the process.
+
+**Root Cause**: The process was running outside of Plesk's control, possibly from a previous manual PM2 start or npm command.
+
+**Attempted Solutions** (that didn't work):
+- Disable/Enable Node.js in Plesk
+- Click "Restart App" button
+- SSH terminal access (had library errors: `libtinfo.so.6` missing)
+- No pm2 available to list and kill processes
+
+**Final Solution**: Changed PORT from 3003 to 3004 in production .env file to work around the zombie process.
+
+**Lesson**: Always ensure you have:
+- Working SSH terminal access for emergencies
+- Process management tools (PM2) properly configured
+- A way to list and kill processes (netstat, lsof, kill commands)
+- Document all running processes and their management method
+
+**Prevention**:
+- Use PM2 exclusively for process management
+- Never manually start Node.js processes in production
+- Always use `pm2 stop` before changing configurations
+- Keep a process checklist: what's running, how it was started, how to stop it
+
+#### Issue 2: service-account.json JSON Parsing Error
+**Problem**: Server failed to start with error: "Bad control character in string literal in JSON at position 175"
+
+**Root Cause**: The service-account.json file had improperly formatted newlines in the `private_key` field - actual newline characters instead of `\n` escape sequences.
+
+**Solution**: Recreated file as minified JSON with proper escape sequences:
+- Use `\n` instead of actual newlines in the private_key field
+- Remove all extra whitespace
+- Ensure valid JSON format (use JSON validator)
+
+**Lesson**:
+- Always validate JSON files before deployment
+- Service account keys should be minified (no pretty-printing)
+- Use online JSON validators before uploading
+- Test file parsing in development first
+
+#### Issue 3: Google Sheets API 404 Errors
+**Problem**: Production site showed 404 errors for `/api/sheets/*` endpoints while config endpoint worked.
+
+**Root Cause**: The production server was running an old version of server.js that didn't have the Google Sheets API proxy endpoints yet.
+
+**Solution**:
+1. Pulled latest code from GitHub
+2. Installed `jose` dependency for JWT signing
+3. Uploaded properly formatted service-account.json
+4. Restarted server (eventually on new port due to zombie process)
+
+**Lesson**:
+- Always verify which commit/version is running in production
+- Check that all dependencies are installed (`npm install`)
+- Test API endpoints immediately after deployment
+- Keep deployment checklist with version verification step
+
+#### Issue 4: Plesk "Lazy Loading" Confusion
+**Problem**: User clicked "Restart App" in Plesk, but nothing seemed to happen. Logs showed: "Application will be restarted after the first request"
+
+**Root Cause**: This is Plesk's default behavior - it doesn't restart immediately, but on the next HTTP request to trigger the application.
+
+**Solution**: After clicking "Restart App", make a request to the application URL to trigger the actual restart.
+
+**Lesson**:
+- Understand your hosting platform's restart behavior
+- For Plesk: "Restart after first request" is normal
+- Always test with a real HTTP request after restart
+- PM2 process management is more predictable than Plesk's Node.js interface
+
+### Best Practices Learned
+
+#### 1. Port Management
+- **Document all ports in use**: Create a ports.txt file listing what runs on which port
+- **Use environment variables**: Never hardcode ports
+- **Have backup ports ready**: If port conflicts occur, quickly switch to alternate
+- **Test port availability**: Use `netstat -tuln | grep PORT` before starting services
+
+#### 2. Process Management
+- **Use PM2 exclusively**: Don't mix PM2 with manual node commands
+- **Save PM2 list**: Always run `pm2 save` after changes
+- **Set up auto-restart**: Configure `pm2 startup` immediately
+- **Monitor PM2 status**: Regularly check `pm2 status` and `pm2 logs`
+- **Document all processes**: Keep a list of what PM2 is managing
+
+#### 3. Deployment Checklist
+Create and follow this checklist for every deployment:
+
+```markdown
+## Pre-Deployment
+- [ ] Test locally with production environment variables
+- [ ] Verify all dependencies in package.json
+- [ ] Commit and push all changes to GitHub
+- [ ] Document current production version/commit hash
+- [ ] Backup production data and config files
+
+## Deployment Steps
+- [ ] Pull latest code via Plesk Git or manual git pull
+- [ ] Run `npm install` to update dependencies
+- [ ] Verify .env file has all required variables
+- [ ] Upload any new config files (service-account.json, etc.)
+- [ ] Run `npm run build` to create production frontend
+- [ ] Check PM2 status: `pm2 status`
+- [ ] Restart backend: `pm2 restart messagingmatrix-api`
+- [ ] Verify PM2 logs for errors: `pm2 logs --lines 50`
+
+## Post-Deployment Verification
+- [ ] Test frontend loads: Visit https://messagingmatrix.ai
+- [ ] Check browser console for errors (F12)
+- [ ] Test API endpoints in Network tab (200 OK responses)
+- [ ] Test login functionality
+- [ ] Test key features (upload, share, comments)
+- [ ] Monitor PM2 logs for 5 minutes: `pm2 logs`
+- [ ] Document deployed version/commit hash
+```
+
+#### 4. File Format Validation
+- **JSON files**: Always use JSON validators before deployment
+- **Service accounts**: Keep keys minified, validate escape sequences
+- **.env files**: Use tools to check for syntax errors
+- **Test parsing**: Write a quick script to test file loading before deployment
+
+#### 5. Emergency Access
+Always ensure you have:
+- **Working SSH access** with functioning terminal
+- **Alternative access methods** (FTP, Plesk File Manager)
+- **Process kill capabilities** (htop, kill, pm2 commands)
+- **Backup ports** documented and ready to use
+- **Emergency contacts** for hosting support
+
+#### 6. Monitoring Setup
+- **Set up logging**: Ensure PM2 logs are being written
+- **Monitor disk space**: Logs can fill up disk quickly
+- **Regular log rotation**: Configure logrotate or PM2 log rotation
+- **Error alerting**: Set up notifications for PM2 process failures
+- **Uptime monitoring**: Use external service to ping your site
+
+### Quick Recovery Procedures
+
+#### If Backend Won't Start
+```bash
+# 1. Check what's on the port
+netstat -tuln | grep 3003
+
+# 2. Find the process
+lsof -i :3003
+
+# 3. Kill it if necessary
+kill -9 <PID>
+
+# 4. Or use alternate port
+# Edit .env: PORT=3004
+
+# 5. Start fresh with PM2
+pm2 delete messagingmatrix-api
+pm2 start ecosystem.config.js --env production
+pm2 save
+```
+
+#### If JSON Parsing Fails
+```bash
+# 1. Validate JSON file
+cat service-account.json | python -m json.tool
+
+# 2. If invalid, recreate from backup
+# 3. Ensure no actual newlines in private_key
+# 4. Use \n escape sequences only
+```
+
+#### If Wrong Code Version is Running
+```bash
+# 1. Check current commit
+git log -1 --oneline
+
+# 2. Pull latest
+git pull origin main
+
+# 3. Reinstall dependencies
+npm install
+
+# 4. Rebuild
+npm run build
+
+# 5. Restart backend
+pm2 restart messagingmatrix-api
+```
+
+### Documentation Requirements
+
+Keep these documents updated:
+1. **CURRENT_VERSION.md**: Track deployed versions and commit hashes
+2. **PORTS.md**: List all ports in use and what runs on them
+3. **PROCESSES.md**: Document all background processes and how they're managed
+4. **ENV_VARIABLES.md**: List all required environment variables (not values!)
+5. **DEPLOYMENT_LOG.md**: Record each deployment with date, version, issues encountered
+
+### Testing Strategy
+
+Before deploying to production:
+1. **Local Production Mode**: Run `NODE_ENV=production npm run build && npm run server`
+2. **Test with Production Config**: Use production .env values locally (with test API keys)
+3. **Verify All Endpoints**: Use Postman/curl to test every API endpoint
+4. **Check File Parsing**: Ensure all config files load correctly
+5. **Monitor Resource Usage**: Check memory/CPU usage under load
+6. **Test Error Scenarios**: Kill processes, simulate failures, verify recovery
+
+### What We Got Right
+
+Despite the challenges, several things worked perfectly:
+- **Google Sheets Integration**: Once the service account was properly formatted, it worked flawlessly
+- **PM2 Process Management**: When used correctly, provided stable process management
+- **React Build Process**: `npm run build` consistently created working production bundles
+- **Nginx Proxy Setup**: Reverse proxy configuration worked perfectly on first try
+- **SSL/HTTPS**: Let's Encrypt certificate setup was smooth and automatic
+
+### Final Recommendations
+
+1. **Never skip testing in production-like environment first**
+2. **Always have multiple ways to access your server**
+3. **Document everything as you deploy**
+4. **Keep a troubleshooting journal**
+5. **Test your backup and recovery procedures before you need them**
+6. **Use version control for configuration files (without sensitive data)**
+7. **Set up monitoring and alerting from day one**
+8. **Have a rollback plan ready**
 
 ---
 

@@ -1,101 +1,177 @@
 {
     "default_size": "300x250",
     "placeholders": {
-
-        "advert_name": {
-            "type": "text",
+        "advert_id": {
+            "type": "var",
 	        "default": "",
-            "binding": "Name"
+            "binding-messagingmatrix": "POMS_ID"
+        },
+        "advert_mc": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "Number"
+        },
+        "advert_variant": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "Variant"
+        },
+        "advert_name": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": ""
         },
         "click_url": {
             "type": "url",
 	        "default": "",
-            "binding": "Final_Trafficked_URL"
+            "binding-messagingmatrix": "Final_Trafficked_URL"
         },
         "template_variant_class": {
             "type": "tag",
+            "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker",
             "default": "",
-            "binding": "Template_variant_classes"
+            "binding-messagingmatrix": "Template_variant_classes"
         },
+
+
+
+
+      
         "headline_text_1": {
             "type": "text",
             "default": " ",
-            "binding": "Headline"
+            "binding-messagingmatrix": "Headline"
         },
         "copy_text_1": {
             "type": "text",
 	        "default": "",
-            "binding": "Copy1"
+            "binding-messagingmatrix": "Copy1"
         },
         "copy_text_2": {
             "type": "text",
 	        "default": "",
-            "binding": "Copy2"
+            "binding-messagingmatrix": "Copy2"
         },
         "disclaimer_text_1": {
             "type": "text",
 	        "default": "",
-            "binding": "Disclaimer"
+            "binding-messagingmatrix": "Disclaimer"
         },
         "cta_text_1": {
             "type": "text",
 	        "default": "Érdekel",
-            "binding": "CTA"
+            "binding-messagingmatrix": "CTA"
         },
+        "sticker_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding-messagingmatrix": "Flash"
+        },
+
+
+      
         "background_video_1": {
             "type": "video",
 	        "default": "",
-            "binding": ""
+            "binding-messagingmatrix": "Video1",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/videos/",
+            "path-google": "DRM_Asset:Erste/"
         },
         "background_image_1": {
             "type": "image",
 	        "default": "",
-            "binding": "Image1"
+            "binding-messagingmatrix": "Image1",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
         },
         "background_image_2": {
             "type": "image",
 	        "default": "",
-            "binding": "Image2"
+            "binding-messagingmatrix": "Image2",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
         },
         "background_image_3": {
             "type": "image",
 	        "default": "",
-            "binding": "Image3"
+            "binding-messagingmatrix": "Image3",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
         },
         "background_image_4": {
             "type": "image",
 	        "default": "",
-            "binding": "Image4"
+            "binding-messagingmatrix": "Image4",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
         },
         "brand_image_1": {
             "type": "image",
 	        "default": "",
-            "binding": "Image5"
+            "binding-messagingmatrix": "Image5",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/brand",
+            "path-google": "DRM_Asset:Erste/"
         },
         "sticker_image_1": {
             "type": "image",
 	        "default": "",
-            "binding": "Image6"
+            "binding-messagingmatrix": "Image6",
+            "path-messagingmatrix": "/assets/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/sticker/",
+            "path-google": "DRM_Asset:Erste/"
         },
+
+
+
+
+      
         "headline_style_1": {
             "type": "style",
 	        "default": "",
-            "binding": ""
+            "binding-messagingmatrix": "Headline_style"
         },
         "copy_style_1": {
             "type": "style",
 	        "default": "",
-            "binding": ""
+            "binding-messagingmatrix": "Copy1_style"
         },
         "copy_style_2": {
             "type": "style",
 	        "default": "",
-            "binding": ""
+            "binding-messagingmatrix": "Copy2_style"
         },
         "disclaimer_style_1": {
             "type": "style",
 	        "default": "",
-            "binding": ""
+            "binding-messagingmatrix": "Disclaimer_style"
+        },
+        "sticker_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Flash_style"
+        },
+        "cta_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "CTA_style"
+        },
+        "css_styles": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "CSS"
         }
     }
 }

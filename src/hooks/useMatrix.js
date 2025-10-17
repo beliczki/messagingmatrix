@@ -41,16 +41,6 @@ export const useMatrix = () => {
 
       const data = await sheets.loadAll();
 
-      console.log('Loaded data:', {
-        audiences: data.audiences,
-        topics: data.topics,
-        messages: data.messages
-      });
-
-      console.log('Audience keys:', data.audiences.map(a => a.key));
-      console.log('Topic keys:', data.topics.map(t => t.key));
-      console.log('Message mappings:', data.messages.map(m => `${m.topic}-${m.audience}: ${m.headline || m.content}`));
-
       setAudiences(data.audiences);
       setTopics(data.topics);
       setMessages(data.messages);
@@ -65,7 +55,7 @@ export const useMatrix = () => {
   }, []);
 
   // Save data to sheets
-  const save = useCallback(async () => {
+  const save = useCallback(async (feedData = null, feedFields = null) => {
     setIsSaving(true);
     setError(null);
 
@@ -100,7 +90,7 @@ export const useMatrix = () => {
           }
         });
 
-      await sheets.saveAll(audiences, topics, completeMessages);
+      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);

@@ -12,6 +12,15 @@ export function evaluatePattern(pattern, context) {
 
   let result = pattern;
 
+  // First check if the entire pattern is a conditional expression
+  // Format: {{variable}}=value?true_result:false_result
+  const conditionalMatch = pattern.match(/^\{\{([^}]+)\}\}=([^?]+)\?([^:]*):(.*)$/);
+  if (conditionalMatch) {
+    const [, varExpression, compareValue, trueResult, falseResult] = conditionalMatch;
+    const varValue = evaluateExpression(varExpression.trim(), context);
+    return varValue === compareValue.trim() ? trueResult : falseResult;
+  }
+
   // Replace all {{placeholder}} patterns
   const regex = /\{\{([^}]+)\}\}/g;
   result = result.replace(regex, (match, expression) => {
@@ -85,7 +94,24 @@ function evaluateExpression(expression, context) {
     const [, objectName, field] = objectAccessMatch;
     const obj = context[objectName];
     if (obj && typeof obj === 'object') {
-      return String(obj[field] || '');
+      // Try exact match first
+      if (obj[field] !== undefined) {
+        return String(obj[field] || '');
+      }
+
+      // Try lowercase version
+      const fieldLower = field.toLowerCase();
+      if (obj[fieldLower] !== undefined) {
+        return String(obj[fieldLower] || '');
+      }
+
+      // Try snake_case version (PascalCase to snake_case)
+      const fieldSnake = field.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+      if (obj[fieldSnake] !== undefined) {
+        return String(obj[fieldSnake] || '');
+      }
+
+      return '';
     }
   }
 

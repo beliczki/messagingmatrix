@@ -35,7 +35,7 @@ const TemplatePreview = ({
       // Use dynamic mapping from template.json
       Object.keys(templateConfig.placeholders).forEach(placeholderName => {
         const config = templateConfig.placeholders[placeholderName];
-        const binding = config.binding;
+        const binding = config['binding-messagingmatrix'];
         let value = config.default || '';
 
         if (binding) {

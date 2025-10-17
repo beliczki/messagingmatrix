@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users as UsersIcon, Menu, Key, X, Check, AlertCircle } from 'lucide-react';
+import { Users as UsersIcon, Key, X, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import PageHeader from './PageHeader';
 
-const Users = ({ onMenuToggle, currentModuleName }) => {
+const Users = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const { getAllUsers, changePassword } = useAuth();
   const [users, setUsers] = useState([]);
   const [changingPasswordFor, setChangingPasswordFor] = useState(null);
@@ -73,20 +74,11 @@ const Users = ({ onMenuToggle, currentModuleName }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onMenuToggle}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-              title="Open Menu"
-            >
-              <Menu size={24} className="text-gray-700" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">{currentModuleName || 'Users'}</h1>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        onMenuToggle={onMenuToggle}
+        title={currentModuleName || 'Users'}
+        lookAndFeel={lookAndFeel}
+      />
 
       {/* Content */}
       <div className="p-8">

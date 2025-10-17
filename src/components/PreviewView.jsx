@@ -66,7 +66,7 @@ const PublicPreviewView = ({ previewId }) => {
   // Load all assets
   useEffect(() => {
     const loadAllAssets = async () => {
-      const assetModules = import.meta.glob('/src/assets/*.*', { eager: true, as: 'url' });
+      const assetModules = import.meta.glob('/src/creatives/*.*', { eager: true, as: 'url' });
       const assetList = Object.entries(assetModules).map(([path, url]) => {
         const filename = path.split('/').pop();
         return {
@@ -384,7 +384,7 @@ const PublicPreviewView = ({ previewId }) => {
               {/* Title and Info */}
               <div className="flex-1 min-w-0">
                 <h1 className="text-3xl font-bold text-white">
-                  <span className="text-white/80">Asset Preview: </span>
+                  <span className="text-white/80">Creative preview: </span>
                   {preview.title}
                 </h1>
                 <div className="flex items-center gap-4 mt-3 text-sm text-white/90">

@@ -24,6 +24,7 @@ const TreeView = ({
   topics,
   messages,
   getMessages,
+  statusFilters = [],
   zoom: externalZoom,
   setZoom: externalSetZoom,
   connectorType: externalConnectorType,
@@ -48,8 +49,23 @@ const TreeView = ({
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Build tree data using the imported utility
-  const treeData = buildTree(audiences, topics, getMessages, treeStructure);
+  // Wrap getMessages to apply status filtering
+  const getFilteredMessages = React.useCallback((topicKey, audienceKey) => {
+    const allMessages = getMessages(topicKey, audienceKey);
+
+    // Filter by status if any status filters are selected
+    if (statusFilters.length === 0) {
+      return allMessages;
+    }
+
+    return allMessages.filter(msg => {
+      const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+      return statusFilters.includes(msgStatus);
+    });
+  }, [getMessages, statusFilters]);
+
+  // Build tree data using the imported utility with filtered messages
+  const treeData = buildTree(audiences, topics, getFilteredMessages, treeStructure);
 
   // Track tree data changes to reset custom node positions
   const [prevTreeKeys, setPrevTreeKeys] = React.useState(new Set());
@@ -236,7 +252,7 @@ const TreeView = ({
   }, [connectorType]);
 
   // Handle zoom with mouse wheel (only with Space)
-  const handleWheel = (e) => {
+  const handleWheel = React.useCallback((e) => {
     if (spacePressed) {
       e.preventDefault();
 
@@ -262,7 +278,19 @@ const TreeView = ({
       setZoom(newZoom);
       setPan({ x: newPanX, y: newPanY });
     }
-  };
+  }, [spacePressed, zoom, pan]);
+
+  // Attach wheel listener manually with passive: false to allow preventDefault
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
 
   // Handle pan start
   const handlePanStart = (e) => {
@@ -774,13 +802,12 @@ const TreeView = ({
         onMouseDown={handlePanStart}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
         style={{
           minHeight: 0
         }}
       >
         {/* Tree structure input overlay */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '70%' }}>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '90%' }}>
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Tree structure:
           </label>

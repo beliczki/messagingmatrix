@@ -29,5 +29,24 @@
   ],
   "baseColor": "#eb4c79",
   "createdAt": "2025-10-13T11:28:35.414Z",
-  "comments": []
+  "comments": [
+    {
+      "id": "1760545880278",
+      "author": "beliczki.robert@gmail.com",
+      "text": "[ERSTE_BABAVARO_KEP_A.png] @(27%, 43%) ferf",
+      "timestamp": "2025-10-15T16:31:20.278Z"
+    },
+    {
+      "id": "1760546018951",
+      "author": "beliczki.robert@gmail.com",
+      "text": "[ERSTE_BABAVARO_KEP_A.png] hfdh",
+      "timestamp": "2025-10-15T16:33:38.951Z"
+    },
+    {
+      "id": "1760546185369",
+      "author": "beliczki.robert@gmail.com",
+      "text": "[ERSTE_BABAVARO_KEP_B.png] @rect(7%, 60%, 38%, 90%) fdssf",
+      "timestamp": "2025-10-15T16:36:25.369Z"
+    }
+  ]
 }

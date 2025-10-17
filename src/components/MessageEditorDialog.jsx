@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, AlertCircle, Loader, Trash2 } from 'lucide-react';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
@@ -37,6 +37,89 @@ const MessageEditorDialog = ({
     }
   }, [editingMessage, audiences]);
 
+  // Template management state
+  const [templates, setTemplates] = useState([]);
+  const [templateConfig, setTemplateConfig] = useState(null);
+  const [variantClassOptions, setVariantClassOptions] = useState([]);
+  const [availableDimensions, setAvailableDimensions] = useState([]);
+
+  // Load templates list
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const response = await fetch('/api/templates');
+        if (response.ok) {
+          const data = await response.json();
+          setTemplates(data);
+        }
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    };
+    loadTemplates();
+  }, []);
+
+  // Load template config when template changes
+  useEffect(() => {
+    const loadTemplateConfig = async () => {
+      if (!editingMessage?.template) {
+        setTemplateConfig(null);
+        setVariantClassOptions([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/templates/${editingMessage.template}/template.json`);
+        if (response.ok) {
+          const data = await response.json();
+          const config = JSON.parse(data.content);
+          setTemplateConfig(config);
+
+          // Find placeholder bound to Template_variant_classes
+          const variantPlaceholder = Object.values(config.placeholders || {}).find(
+            p => p['binding-messagingmatrix']?.replace(/_/g, ' ').toLowerCase() === 'template variant classes'
+          );
+
+          if (variantPlaceholder && variantPlaceholder.options) {
+            // Parse comma-separated options
+            const options = variantPlaceholder.options.split(',').map(o => o.trim()).filter(o => o);
+            setVariantClassOptions(options);
+          } else {
+            setVariantClassOptions([]);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading template config:', error);
+        setTemplateConfig(null);
+        setVariantClassOptions([]);
+      }
+    };
+
+    loadTemplateConfig();
+  }, [editingMessage?.template]);
+
+  // Load available dimensions when template changes
+  useEffect(() => {
+    if (!editingMessage?.template) {
+      setAvailableDimensions([]);
+      return;
+    }
+
+    // Find the template in the already-loaded templates array
+    const selectedTemplate = templates.find(t => t.name === editingMessage.template);
+
+    if (selectedTemplate && selectedTemplate.dimensions) {
+      setAvailableDimensions(selectedTemplate.dimensions);
+
+      // If current previewSize is not in the available dimensions, reset to first available or default
+      if (selectedTemplate.dimensions.length > 0 && !selectedTemplate.dimensions.includes(previewSize)) {
+        setPreviewSize(selectedTemplate.dimensions[0]);
+      }
+    } else {
+      setAvailableDimensions([]);
+    }
+  }, [editingMessage?.template, templates]);
+
   if (!editingMessage) return null;
 
   // Helper function to build full image URL
@@ -64,6 +147,9 @@ const MessageEditorDialog = ({
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/templates/html/main.css" />
     <link rel="stylesheet" href="/src/templates/html/${previewSize}.css" />
+    <style>
+      ${editingMessage.css || ''}
+    </style>
   </head>
   <body>
       <div class="click-url" id="clickLayer">
@@ -131,8 +217,14 @@ const MessageEditorDialog = ({
       .replace(/\{\{headline_text_1\}\}/g, editingMessage.headline || '')
       .replace(/\{\{copy_text_1\}\}/g, editingMessage.copy1 || '')
       .replace(/\{\{copy_text_2\}\}/g, editingMessage.copy2 || '')
+      .replace(/\{\{disclaimer_text_1\}\}/g, editingMessage.disclaimer || '')
       .replace(/\{\{cta_text_1\}\}/g, editingMessage.cta || '')
       .replace(/\{\{sticker_text_1\}\}/g, editingMessage.flash || '')
+      .replace(/\{\{headline_style_1\}\}/g, editingMessage.headline_style || '')
+      .replace(/\{\{copy_style_1\}\}/g, editingMessage.copy1_style || '')
+      .replace(/\{\{copy_style_2\}\}/g, editingMessage.copy2_style || '')
+      .replace(/\{\{disclaimer_style_1\}\}/g, editingMessage.disclaimer_style || '')
+      .replace(/\{\{cta_style_1\}\}/g, editingMessage.cta_style || '')
       .replace(/\{\{background_image_1\}\}/g, buildImageUrl('image1', editingMessage.image1))
       .replace(/\{\{background_image_2\}\}/g, buildImageUrl('image2', editingMessage.image2))
       .replace(/\{\{background_image_3\}\}/g, buildImageUrl('image3', editingMessage.image3))
@@ -155,21 +247,26 @@ const MessageEditorDialog = ({
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < allMessages.length - 1;
 
-  // Determine status color
+  // Determine status color from lookAndFeel config
   const status = (editingMessage.status || 'PLANNED').toUpperCase();
-  let badgeColor = 'bg-yellow-100'; // PLANNED (default)
-  let textColor = 'text-yellow-700';
+  const statusColors = settings.getStatusColors();
+  const statusColor = statusColors[status] || statusColors['PLANNED'] || '#ffff00';
 
-  if (status === 'ACTIVE') {
-    badgeColor = 'bg-green-100';
-    textColor = 'text-green-700';
-  } else if (status === 'INACTIVE') {
-    badgeColor = 'bg-gray-200';
-    textColor = 'text-gray-700';
-  } else if (status === 'INPROGRESS') {
-    badgeColor = 'bg-orange-100';
-    textColor = 'text-orange-700';
-  }
+  // Function to determine if text should be dark or light based on background color
+  const getTextColor = (hexColor) => {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    // Return dark text for light backgrounds, light text for dark backgrounds
+    return luminance > 0.6 ? '#000000' : '#ffffff';
+  };
+
+  const textColor = getTextColor(statusColor);
 
   // Find synced messages
   const syncedMessages = messages.filter(m =>
@@ -190,20 +287,6 @@ const MessageEditorDialog = ({
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-semibold">Edit Messaging Card</h2>
-            <div className={`flex items-center gap-2 ${badgeColor} px-3 py-1 rounded`}>
-              <span className={`font-bold ${textColor} text-lg`}>{editingMessage.number || ''}</span>
-              <span className={`text-sm font-semibold ${textColor}`}>{editingMessage.variant || ''}</span>
-            </div>
-            <select
-              value={previewSize}
-              onChange={(e) => setPreviewSize(e.target.value)}
-              className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="300x250">300x250</option>
-              <option value="300x600">300x600</option>
-              <option value="640x360">640x360</option>
-              <option value="970x250">970x250</option>
-            </select>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -220,6 +303,10 @@ const MessageEditorDialog = ({
             >
               <ChevronLeft size={20} />
             </button>
+            <div className="flex items-center gap-2 px-3 py-1 rounded" style={{ backgroundColor: statusColor }}>
+              <span className="font-bold text-lg" style={{ color: textColor }}>{editingMessage.number || ''}</span>
+              <span className="text-sm font-semibold" style={{ color: textColor }}>{editingMessage.variant || ''}</span>
+            </div>
             <button
               onClick={() => {
                 if (hasNext) {
@@ -234,6 +321,20 @@ const MessageEditorDialog = ({
             >
               <ChevronRight size={20} />
             </button>
+            <select
+              value={availableDimensions.length > 0 ? previewSize : 'N/A'}
+              onChange={(e) => setPreviewSize(e.target.value)}
+              disabled={!editingMessage.template || availableDimensions.length === 0}
+              className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed mr-2"
+            >
+              {availableDimensions.length > 0 ? (
+                availableDimensions.map(dim => (
+                  <option key={dim} value={dim}>{dim}</option>
+                ))
+              ) : (
+                <option value="N/A">N/A</option>
+              )}
+            </select>
             <button
               onClick={() => setEditingMessage(null)}
               className="p-1 hover:bg-gray-100 rounded"
@@ -265,6 +366,16 @@ const MessageEditorDialog = ({
               }`}
             >
               Content
+            </button>
+            <button
+              onClick={() => setActiveTab('styles')}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === 'styles'
+                  ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Styles
             </button>
             <button
               onClick={() => setActiveTab('trafficking')}
@@ -358,29 +469,64 @@ const MessageEditorDialog = ({
                         ? keywordValues
                         : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
 
+                      const currentStatus = (editingMessage.status || 'PLANNED').toUpperCase();
+                      const statusColors = settings.getStatusColors();
+                      const currentColor = statusColors[currentStatus] || statusColors['PLANNED'] || '#ffff00';
+
                       return (
                         <select
                           value={editingMessage.status || 'PLANNED'}
                           onChange={(e) => setEditingMessage({ ...editingMessage, status: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-semibold"
+                          style={{
+                            backgroundColor: currentColor,
+                            borderColor: currentColor,
+                            color: getTextColor(currentColor)
+                          }}
                         >
-                          {statusOptions.map((val) => (
-                            <option key={val} value={val}>{val}</option>
-                          ))}
+                          {statusOptions.map((val) => {
+                            const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
+                            return (
+                              <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
+                                {val}
+                              </option>
+                            );
+                          })}
                         </select>
                       );
                     })()}
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">PMMID (Auto-generated)</label>
-                  <input
-                    type="text"
-                    value={generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed font-mono text-sm"
-                  />
+                <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
+                    <input
+                      type="text"
+                      value={editingMessage.id || ''}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">POMS ID</label>
+                    <input
+                      type="text"
+                      value={editingMessage.poms_id || ''}
+                      onChange={(e) => setEditingMessage({ ...editingMessage, poms_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="POMS ID"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">PMMID (Auto-generated)</label>
+                    <input
+                      type="text"
+                      value={generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed font-mono text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -433,6 +579,7 @@ const MessageEditorDialog = ({
                         number: editingMessage.number,
                         variant: editingMessage.variant,
                         status: editingMessage.status,
+                        poms_id: editingMessage.poms_id,
                         start_date: editingMessage.start_date,
                         end_date: editingMessage.end_date
                       });
@@ -457,13 +604,19 @@ const MessageEditorDialog = ({
                     <div className="border border-gray-300 rounded bg-gray-50 p-4">
                       <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
                       <div className="flex justify-center">
-                        <iframe
-                          key={`${editingMessage.id}-${previewSize}`}
-                          srcDoc={generatePreviewHtml()}
-                          style={{ width: `${width}px`, height: `${height}px` }}
-                          className="border-0"
-                          title="Message Preview"
-                        />
+                        {editingMessage.template ? (
+                          <iframe
+                            key={`${editingMessage.id}-${previewSize}`}
+                            srcDoc={generatePreviewHtml()}
+                            style={{ width: `${width}px`, height: `${height}px` }}
+                            className="border-0"
+                            title="Message Preview"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
+                            Select a template to see preview
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -480,7 +633,7 @@ const MessageEditorDialog = ({
                               Content Sync Warning: {syncedMessages.length} other message{syncedMessages.length > 1 ? 's' : ''} will be updated
                             </p>
                             <p className="text-yellow-700 mb-2">
-                              Changes to Template, Template Variant Classes, Landing URL, Headline, Copy 1, Copy 2, Flash, CTA, and Image fields will be automatically applied to:
+                              Changes to Template, Template Variant Classes, Landing URL, Headline, Copy 1, Copy 2, Disclaimer, Flash, CTA, and Image fields will be automatically applied to:
                             </p>
                             <ul className="text-yellow-700 list-disc list-inside">
                               {syncedMessages.map(m => {
@@ -549,6 +702,17 @@ const MessageEditorDialog = ({
                       </div>
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Disclaimer</label>
+                      <textarea
+                        value={editingMessage.disclaimer || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, disclaimer: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Legal disclaimer text"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Flash</label>
@@ -596,23 +760,71 @@ const MessageEditorDialog = ({
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
-                      <input
-                        type="text"
+                      <select
                         value={editingMessage.template || ''}
                         onChange={(e) => setEditingMessage({ ...editingMessage, template: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      >
+                        <option value="">Select a template</option>
+                        {templates.map(t => (
+                          <option key={t.name} value={t.name}>{t.name}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Template Variant Classes</label>
-                      <input
-                        type="text"
-                        value={editingMessage.template_variant_classes || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, template_variant_classes: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="CSS classes for template variants"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Template Variant Classes
+                        {variantClassOptions.length > 0 && (
+                          <span className="text-xs text-gray-500 ml-1">({variantClassOptions.length} options)</span>
+                        )}
+                      </label>
+                      {variantClassOptions.length > 0 ? (
+                        <div className="border border-gray-300 rounded p-2 min-h-[42px]">
+                          <div className="flex flex-wrap gap-1">
+                            {variantClassOptions.map(option => {
+                              const selectedClasses = (editingMessage.template_variant_classes || '').split(/\s+/).filter(c => c);
+                              const isSelected = selectedClasses.includes(option);
+
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => {
+                                    let newClasses;
+                                    if (isSelected) {
+                                      // Remove the class
+                                      newClasses = selectedClasses.filter(c => c !== option);
+                                    } else {
+                                      // Add the class
+                                      newClasses = [...selectedClasses, option];
+                                    }
+                                    setEditingMessage({
+                                      ...editingMessage,
+                                      template_variant_classes: newClasses.join(' ')
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                                    isSelected
+                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                                  }`}
+                                >
+                                  {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={editingMessage.template_variant_classes || ''}
+                          onChange={(e) => setEditingMessage({ ...editingMessage, template_variant_classes: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Select a template with variant options or enter manually"
+                        />
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -700,12 +912,18 @@ const MessageEditorDialog = ({
                     <div className="w-[40%]">
                       <div className="border border-gray-300 rounded bg-gray-50 p-4">
                         <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
-                        <iframe
-                          key={`${editingMessage.id}-${previewSize}`}
-                          srcDoc={generatePreviewHtml()}
-                          className="w-full h-[600px] border-0"
-                          title="Message Preview"
-                        />
+                        {editingMessage.template ? (
+                          <iframe
+                            key={`${editingMessage.id}-${previewSize}`}
+                            srcDoc={generatePreviewHtml()}
+                            className="w-full h-[600px] border-0"
+                            title="Message Preview"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
+                            Select a template to see preview
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -753,6 +971,7 @@ const MessageEditorDialog = ({
                         headline: editingMessage.headline,
                         copy1: editingMessage.copy1,
                         copy2: editingMessage.copy2,
+                        disclaimer: editingMessage.disclaimer,
                         flash: editingMessage.flash,
                         cta: editingMessage.cta,
                         landingUrl: editingMessage.landingUrl,
@@ -765,6 +984,176 @@ const MessageEditorDialog = ({
                         image5: editingMessage.image5,
                         image6: editingMessage.image6,
                         comment: editingMessage.comment
+                      });
+                      setEditingMessage(null);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save & Close
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Styles Tab */}
+          {activeTab === 'styles' && (
+            <>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className={isWide ? 'space-y-6' : 'flex gap-6'}>
+                  {/* Preview - Top position for wide sizes */}
+                  {isWide && (
+                    <div className="border border-gray-300 rounded bg-gray-50 p-4">
+                      <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
+                      <div className="flex justify-center">
+                        {editingMessage.template ? (
+                          <iframe
+                            key={`${editingMessage.id}-${previewSize}-styles`}
+                            srcDoc={generatePreviewHtml()}
+                            style={{ width: `${width}px`, height: `${height}px` }}
+                            className="border-0"
+                            title="Message Preview"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
+                            Select a template to see preview
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Style Fields */}
+                  <div className={isWide ? 'w-full space-y-4' : 'w-[60%] space-y-4'}>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Headline Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.headline_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, headline_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., color: #333; font-size: 24px;"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 1 Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.copy1_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, copy1_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., color: #666; font-size: 14px;"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 2 Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.copy2_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, copy2_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., color: #666; font-size: 14px;"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Disclaimer Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.disclaimer_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, disclaimer_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., color: #999; font-size: 10px;"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">CTA Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.cta_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, cta_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., background: #007bff; color: white;"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Custom CSS</label>
+                      <textarea
+                        value={editingMessage.css || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, css: e.target.value })}
+                        rows={10}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="/* Enter custom CSS here */
+.headline_text_1 {
+  color: #333;
+  font-size: 24px;
+}
+
+.copy_text_1 {
+  color: #666;
+  line-height: 1.5;
+}"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right Column - Preview (40%) for narrow sizes */}
+                  {!isWide && (
+                    <div className="w-[40%]">
+                      <div className="border border-gray-300 rounded bg-gray-50 p-4 sticky top-6">
+                        <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
+                        {editingMessage.template ? (
+                          <iframe
+                            key={`${editingMessage.id}-${previewSize}-styles`}
+                            srcDoc={generatePreviewHtml()}
+                            className="w-full h-[600px] border-0"
+                            title="Message Preview"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
+                            Select a template to see preview
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Styles Tab Footer */}
+              <div className="border-t bg-white px-6 py-4 flex items-center justify-between shrink-0">
+                <button
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to delete this message?')) {
+                      deleteMessage(editingMessage.id);
+                      setEditingMessage(null);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
+                >
+                  <Trash2 size={16} />
+                  Delete Message
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditingMessage(null)}
+                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateMessage(editingMessage.id, {
+                        headline_style: editingMessage.headline_style,
+                        copy1_style: editingMessage.copy1_style,
+                        copy2_style: editingMessage.copy2_style,
+                        disclaimer_style: editingMessage.disclaimer_style,
+                        cta_style: editingMessage.cta_style,
+                        css: editingMessage.css
                       });
                       setEditingMessage(null);
                     }}

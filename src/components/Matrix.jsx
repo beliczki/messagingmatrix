@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon, Check, ChevronDown } from 'lucide-react';
 import { useMatrix } from '../hooks/useMatrix';
 import settings from '../services/settings';
-import { generatePMMID, generateTopicKey, generateTraffickingFields } from '../utils/patternEvaluator';
+import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import ClaudeChat from './ClaudeChat';
 import TreeView from './TreeView';
 import KeywordEditor from './KeywordEditor';
@@ -52,20 +52,26 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [showKeywordEditor, setShowKeywordEditor] = useState(false);
   const [topicFilter, setTopicFilter] = useState('');
   const [audienceFilter, setAudienceFilter] = useState('');
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [productFilter, setProductFilter] = useState(''); // Product filter: '', 'SZK', 'HK', 'VAL', 'SZA'
+  const [statusFilters, setStatusFilters] = useState([]); // Array of selected statuses to show
+  const [productFilters, setProductFilters] = useState([]); // Array of selected products to show
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [activeTab, setActiveTab] = useState('naming'); // 'naming' or 'content'
   const [previewSize, setPreviewSize] = useState('300x250');
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
-  const [viewMode, setViewMode] = useState('matrix'); // 'matrix' or 'tree'
+  const [viewMode, setViewMode] = useState('matrix'); // 'matrix', 'feed', or 'tree'
   const [displayMode, setDisplayMode] = useState('informative'); // 'informative' or 'minimal'
 
   // Tree view controls state
   const [treeZoom, setTreeZoom] = useState(1);
   const [treeConnectorType, setTreeConnectorType] = useState('curved');
   const [treeStructure, setTreeStructure] = useState('Product → Strategy → Targeting Type → Audience → Topic → Messages');
+
+  // Feed view controls state
+  const [feedStructure, setFeedStructure] = useState('PMMID, Name, Headline, Copy1, Audience, Topic, Status');
+  const [feedPatterns, setFeedPatterns] = useState({});
 
   // Matrix view controls state
   const [matrixZoom, setMatrixZoom] = useState(1);
@@ -74,6 +80,8 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [spacePressed, setSpacePressed] = useState(false);
   const matrixContainerRef = useRef(null);
+  const productDropdownRef = useRef(null);
+  const statusDropdownRef = useRef(null);
 
   // Handle keyboard events for spacebar
   useEffect(() => {
@@ -113,21 +121,83 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     };
   }, [spacePressed, viewMode]);
 
-  // Load tree structure from settings on mount
+  // Handle click outside to close dropdowns
   useEffect(() => {
-    const loadTreeStructure = async () => {
+    const handleClickOutside = (event) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+        setShowProductDropdown(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Load tree and feed structures from settings on mount
+  useEffect(() => {
+    const loadStructures = async () => {
       try {
         await settings.ensureInitialized();
         const config = settings.getAll();
         if (config.treeStructure) {
           setTreeStructure(config.treeStructure);
         }
+        if (config.feedStructure) {
+          setFeedStructure(config.feedStructure);
+        }
+        // Load feed patterns from patterns.feed
+        if (config.patterns?.feed) {
+          setFeedPatterns(config.patterns.feed);
+        }
       } catch (error) {
-        console.error('Error loading tree structure:', error);
+        console.error('Error loading structures:', error);
       }
     };
-    loadTreeStructure();
+    loadStructures();
   }, []);
+
+  // Sync feedPatterns with feedStructure - ensure all columns have patterns
+  useEffect(() => {
+    // Don't sync if patterns haven't loaded yet
+    if (!feedStructure || Object.keys(feedPatterns).length === 0) {
+      return;
+    }
+
+    const columns = feedStructure.split(',').map(col => col.trim());
+    const updatedPatterns = { ...feedPatterns };
+    let needsUpdate = false;
+
+    // Add missing patterns for new columns
+    columns.forEach(colName => {
+      if (!updatedPatterns[colName]) {
+        // Create default pattern using normalized field name
+        const normalizedFieldName = colName.toLowerCase().replace(/[:\-\s]/g, '_');
+        updatedPatterns[colName] = `{{${normalizedFieldName}}}`;
+        needsUpdate = true;
+      }
+    });
+
+    // Remove patterns for columns that no longer exist
+    Object.keys(updatedPatterns).forEach(key => {
+      if (!columns.includes(key)) {
+        delete updatedPatterns[key];
+        needsUpdate = true;
+      }
+    });
+
+    if (needsUpdate) {
+      setFeedPatterns(updatedPatterns);
+      // Save updated patterns asynchronously (don't await to avoid blocking)
+      saveFeedPatterns(updatedPatterns).catch(err => {
+        console.error('Failed to auto-save feed patterns:', err);
+      });
+    }
+  }, [feedStructure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save tree structure to settings
   const saveTreeStructure = async (newStructure) => {
@@ -143,6 +213,110 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       console.error('Error saving tree structure:', error);
       alert('Failed to save tree structure');
     }
+  };
+
+  // Save feed structure to settings
+  const saveFeedStructure = async (newStructure) => {
+    try {
+      await settings.ensureInitialized();
+      const config = settings.getAll();
+      await settings.save({
+        ...config,
+        feedStructure: newStructure
+      });
+      setFeedStructure(newStructure);
+    } catch (error) {
+      console.error('Error saving feed structure:', error);
+      alert('Failed to save feed structure');
+    }
+  };
+
+  // Save feed patterns to settings
+  const saveFeedPatterns = async (newPatterns) => {
+    try {
+      await settings.ensureInitialized();
+      const config = settings.getAll();
+      await settings.save({
+        ...config,
+        patterns: {
+          ...config.patterns,
+          feed: newPatterns
+        }
+      });
+      setFeedPatterns(newPatterns);
+    } catch (error) {
+      console.error('Error saving feed patterns:', error);
+      alert('Failed to save feed patterns');
+    }
+  };
+
+  // Generate feed data for state dialog and CSV export
+  const feedData = useMemo(() => {
+    if (!feedStructure || Object.keys(feedPatterns).length === 0) {
+      return [];
+    }
+
+    const columns = feedStructure.split(',').map(col => col.trim());
+
+    return messages.map((msg) => {
+      const status = (msg.status || 'PLANNED').toUpperCase();
+      const context = {
+        ...msg,
+        audiences,
+        topics,
+        Audience_Key: msg.audience,
+        Topic_Key: msg.topic,
+        Number: msg.number || '',
+        Variant: msg.variant || '',
+        Version: msg.version || '',
+        status: status
+      };
+
+      // Build feed row object
+      const feedRow = {};
+      columns.forEach(colName => {
+        const pattern = feedPatterns[colName] || `{{${colName.toLowerCase().replace(/[:\-\s]/g, '_')}}}`;
+        feedRow[colName] = evaluatePattern(pattern, context);
+      });
+
+      return feedRow;
+    });
+  }, [messages, audiences, topics, feedStructure, feedPatterns]);
+
+  // Download feed as CSV
+  const downloadFeedCSV = () => {
+    if (!feedData || feedData.length === 0) return;
+
+    const columns = feedStructure.split(',').map(col => col.trim());
+
+    // Create CSV header
+    const csvHeader = columns.join(',');
+
+    // Create CSV rows
+    const csvRows = feedData.map(row => {
+      return columns.map(col => {
+        const value = row[col] || '';
+        // Escape quotes and wrap in quotes if contains comma or quote
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',');
+    });
+
+    // Combine header and rows
+    const csv = [csvHeader, ...csvRows].join('\n');
+
+    // Create download link
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `feed_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Handle generated content from Claude
@@ -235,19 +409,29 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     }
   };
 
-  // Filter audiences and topics
+  // Get unique products from audiences and topics
+  const availableProducts = useMemo(() => {
+    const products = new Set();
+    audiences.forEach(aud => {
+      if (aud.product) products.add(aud.product);
+    });
+    topics.forEach(topic => {
+      if (topic.product) products.add(topic.product);
+    });
+    return Array.from(products).sort();
+  }, [audiences, topics]);
+
+  // Filter audiences and topics (status filter removed - now applied to messages)
   const filteredAudiences = audiences.filter(aud => {
     const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || ''), audienceFilter);
-    const matchesStatus = !activeOnly || (aud.status && aud.status.toUpperCase() === 'ACTIVE');
-    const matchesProduct = !productFilter || (aud.product && aud.product === productFilter);
-    return matchesText && matchesStatus && matchesProduct;
+    const matchesProduct = productFilters.length === 0 || (aud.product && productFilters.includes(aud.product));
+    return matchesText && matchesProduct;
   });
 
   const filteredTopics = topics.filter(topic => {
     const matchesText = matchesFilter(topic.name + ' ' + topic.key, topicFilter);
-    const matchesStatus = !activeOnly || (topic.status && topic.status.toUpperCase() === 'ACTIVE');
-    const matchesProduct = !productFilter || (topic.product && topic.product === productFilter);
-    return matchesText && matchesStatus && matchesProduct;
+    const matchesProduct = productFilters.length === 0 || (topic.product && productFilters.includes(topic.product));
+    return matchesText && matchesProduct;
   });
 
   // Save with progress tracking
@@ -340,6 +524,16 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       created: '',
       comment: ''
     });
+  };
+
+  // Handle add message with automatic PLANNED filter
+  const handleAddMessage = (topicKey, audKey) => {
+    // Ensure PLANNED status is in the filter so the new message is visible
+    if (!statusFilters.includes('PLANNED')) {
+      setStatusFilters([...statusFilters, 'PLANNED']);
+    }
+    // Add the message
+    addMessage(topicKey, audKey);
   };
 
   // Handle generate content with Claude
@@ -526,7 +720,92 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Messaging Matrix'} lookAndFeel={lookAndFeel}>
+      <PageHeader
+        onMenuToggle={onMenuToggle}
+        title={currentModuleName || 'Messaging Matrix'}
+        lookAndFeel={lookAndFeel}
+        titleFilters={
+          (
+            <div className="flex items-center gap-2">
+              {/* Product Filter Dropdown */}
+              <div className="relative" ref={productDropdownRef}>
+                <button
+                  onClick={() => setShowProductDropdown(!showProductDropdown)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                >
+                  <span>
+                    {productFilters.length === 0
+                      ? `Products(${availableProducts.length})`
+                      : `Products(${productFilters.length})`}
+                  </span>
+                  <ChevronDown size={16} />
+                </button>
+                {showProductDropdown && (
+                  <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
+                    {availableProducts.map((product) => (
+                      <button
+                        key={product}
+                        onClick={() => {
+                          if (productFilters.includes(product)) {
+                            setProductFilters(productFilters.filter(p => p !== product));
+                          } else {
+                            setProductFilters([...productFilters, product]);
+                          }
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
+                      >
+                        <Check size={16} className={productFilters.includes(product) ? 'text-blue-600' : 'text-transparent'} />
+                        <span className="text-gray-900">{product}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Filter Dropdown */}
+              <div className="relative" ref={statusDropdownRef}>
+                <button
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                >
+                  <span>
+                    {(() => {
+                      const availableStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED'];
+                      return statusFilters.length === 0
+                        ? `Status(${availableStatuses.length})`
+                        : `Status(${statusFilters.length})`;
+                    })()}
+                  </span>
+                  <ChevronDown size={16} />
+                </button>
+                {showStatusDropdown && (() => {
+                  const availableStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED'];
+                  return (
+                    <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
+                      {availableStatuses.map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => {
+                            if (statusFilters.includes(status)) {
+                              setStatusFilters(statusFilters.filter(s => s !== status));
+                            } else {
+                              setStatusFilters([...statusFilters, status]);
+                            }
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
+                        >
+                          <Check size={16} className={statusFilters.includes(status) ? 'text-blue-600' : 'text-transparent'} />
+                          <span className="text-gray-900">{status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )
+        }
+      >
         {/* Matrix Zoom Controls - Only show in matrix view */}
         {viewMode === 'matrix' && (
           <div className="flex items-center gap-1 rounded p-0.5"
@@ -538,7 +817,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             >
               −
             </button>
-            <span className="text-white text-xs font-mono min-w-[60px] text-center">
+            <span className="text-white text-xs font-mono min-w-[45px] text-center">
               {Math.round(matrixZoom * 100)}%
             </span>
             <button
@@ -606,7 +885,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               >
                 −
               </button>
-              <span className="text-white text-xs font-mono min-w-[60px] text-center">
+              <span className="text-white text-xs font-mono min-w-[45px] text-center">
                 {Math.round(treeZoom * 100)}%
               </span>
               <button
@@ -660,7 +939,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
              style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
           <button
             onClick={() => setViewMode('matrix')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+            className={`px-3 py-1.5 rounded transition-all ${
               viewMode === 'matrix'
                 ? 'bg-white shadow-sm'
                 : 'text-white hover:bg-white hover:bg-opacity-20'
@@ -669,13 +948,13 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               backgroundColor: 'white',
               color: lookAndFeel?.headerColor || '#2870ed'
             } : {}}
+            title="Matrix View"
           >
             <Table size={16} />
-            <span className="text-sm font-medium">Matrix</span>
           </button>
           <button
             onClick={() => setViewMode('tree')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
+            className={`px-3 py-1.5 rounded transition-all ${
               viewMode === 'tree'
                 ? 'bg-white shadow-sm'
                 : 'text-white hover:bg-white hover:bg-opacity-20'
@@ -684,20 +963,26 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               backgroundColor: 'white',
               color: lookAndFeel?.headerColor || '#2870ed'
             } : {}}
+            title="Tree View"
           >
             <GitBranch size={16} />
-            <span className="text-sm font-medium">Tree</span>
+          </button>
+          <button
+            onClick={() => setViewMode('feed')}
+            className={`px-3 py-1.5 rounded transition-all ${
+              viewMode === 'feed'
+                ? 'bg-white shadow-sm'
+                : 'text-white hover:bg-white hover:bg-opacity-20'
+            }`}
+            style={viewMode === 'feed' ? {
+              backgroundColor: 'white',
+              color: lookAndFeel?.headerColor || '#2870ed'
+            } : {}}
+            title="Feed View"
+          >
+            <List size={16} />
           </button>
         </div>
-
-        <button
-          onClick={() => setShowKeywordEditor(true)}
-          className="flex items-center gap-2 px-3 py-2 text-white rounded hover:opacity-90 transition-opacity"
-          style={getButtonStyle(lookAndFeel)}
-        >
-          <Edit2 size={16} />
-          Keywords
-        </button>
 
         <button
           onClick={() => setShowStateDialog(true)}
@@ -709,7 +994,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         </button>
       </PageHeader>
 
-      {/* Matrix / Tree View */}
+      {/* Matrix / Feed / Tree View */}
       <div className="p-4">
         {isLoading && audiences.length === 0 ? (
           <div className="flex items-center justify-center h-64">
@@ -721,6 +1006,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             topics={filteredTopics}
             messages={messages}
             getMessages={getMessages}
+            statusFilters={statusFilters}
             zoom={treeZoom}
             setZoom={setTreeZoom}
             connectorType={treeConnectorType}
@@ -729,6 +1015,86 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             onTreeStructureChange={saveTreeStructure}
             lookAndFeel={lookAndFeel}
           />
+        ) : viewMode === 'feed' ? (
+          <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 97px - 57px)' }}>
+            {/* Feed Table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-100 sticky top-0">
+                  <tr>
+                    {feedStructure.split(',').map((col, idx) => (
+                      <th key={idx} className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                        {col.trim()}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {messages.length === 0 ? (
+                    <tr>
+                      <td colSpan={feedStructure.split(',').length} className="text-center py-8 text-gray-500">
+                        No messages found. Add messages in Matrix view to see them here.
+                      </td>
+                    </tr>
+                  ) : (
+                    messages
+                      .filter(msg => {
+                        // Filter by status if any status filters are selected
+                        if (statusFilters.length === 0) return true;
+                        const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+                        return statusFilters.includes(msgStatus);
+                      })
+                      .map((msg) => {
+                        const audience = audiences.find(a => a.key === msg.audience);
+                        const topic = topics.find(t => t.key === msg.topic);
+                        const status = (msg.status || 'PLANNED').toUpperCase();
+                        const colors = getStatusColors(status);
+
+                        return (
+                        <tr
+                          key={msg.id}
+                          onClick={() => {
+                            setEditingMessage(msg);
+                            setActiveTab('naming');
+                          }}
+                          className={`${colors.bg} border-b border-gray-200 cursor-pointer hover:bg-opacity-80 transition-colors`}
+                        >
+                          {feedStructure.split(',').map((col, idx) => {
+                            const colName = col.trim();
+
+                            // Get pattern for this column - exact match only
+                            const pattern = feedPatterns[colName] || `{{${colName.toLowerCase().replace(/[:\-\s]/g, '_')}}}`;
+
+                            // Build context for pattern evaluation
+                            const context = {
+                              ...msg,
+                              audiences,
+                              topics,
+                              Audience_Key: msg.audience,
+                              Topic_Key: msg.topic,
+                              Number: msg.number || '',
+                              Variant: msg.variant || '',
+                              Version: msg.version || '',
+                              status: status
+                            };
+
+                            // Evaluate pattern to get cell value
+                            const cellValue = evaluatePattern(pattern, context);
+
+                            return (
+                              <td key={idx} className="border border-gray-300 px-4 py-2 text-sm text-gray-700">
+                                {cellValue}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
           <div
             ref={matrixContainerRef}
@@ -754,47 +1120,21 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                 <thead>
                 <tr className="bg-gray-50">
                   <th className="border border-gray-300 p-2 bg-gray-100 min-w-[200px]">
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={topicFilter}
-                        onChange={(e) => setTopicFilter(e.target.value)}
-                        placeholder="Filter Topics"
-                        className="w-24 px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                    <div className="flex flex-col gap-2">
                       <input
                         type="text"
                         value={audienceFilter}
                         onChange={(e) => setAudienceFilter(e.target.value)}
                         placeholder="Filter Audiences"
-                        className="w-24 px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={productFilter}
-                        onChange={(e) => setProductFilter(e.target.value)}
-                        className="w-24 px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">All Products</option>
-                        <option value="SZK">SZK</option>
-                        <option value="HK">HK</option>
-                        <option value="VAL">VAL</option>
-                        <option value="SZA">SZA</option>
-                      </select>
-                      <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all whitespace-nowrap ${
-                        activeOnly
-                          ? 'bg-green-50 border border-green-300 text-green-700 font-medium'
-                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={activeOnly}
-                          onChange={(e) => setActiveOnly(e.target.checked)}
-                          className="w-4 h-4 text-green-600 bg-white border-gray-300 rounded focus:ring-2 focus:ring-green-500 accent-green-600"
-                        />
-                        <span className="text-sm">ACTIVE</span>
-                      </label>
+                      <input
+                        type="text"
+                        value={topicFilter}
+                        onChange={(e) => setTopicFilter(e.target.value)}
+                        placeholder="Filter Topics"
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                     </div>
                   </th>
                   {filteredAudiences.map((aud) => {
@@ -875,7 +1215,16 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                       </td>
 
                     {filteredAudiences.map((aud) => {
-                      const cellMsgs = getMessages(topic.key, aud.key);
+                      const allCellMsgs = getMessages(topic.key, aud.key);
+
+                      // Filter messages by status if any status filters are selected
+                      const cellMsgs = statusFilters.length === 0
+                        ? allCellMsgs
+                        : allCellMsgs.filter(msg => {
+                            const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+                            return statusFilters.includes(msgStatus);
+                          });
+
                       const cellKey = `${topic.key}-${aud.key}`;
 
                       return (
@@ -887,21 +1236,13 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         >
                           <div className={`${displayMode === 'minimal' ? 'min-h-[40px]' : 'min-h-[100px]'} ${displayMode === 'minimal' ? 'flex flex-wrap gap-1' : 'space-y-2'}`}>
                             {cellMsgs.map((msg) => {
-                              // Determine status and color
+                              // Determine status and color from settings
                               const status = (msg.status || 'PLANNED').toUpperCase();
-                              let statusColor = 'bg-yellow-100 border-yellow-300'; // PLANNED (default)
-                              let statusText = 'PLANNED';
+                              const statusColorHex = lookAndFeel?.statusColors?.[status] || '#ffff00'; // Default to yellow if not found
 
-                              if (status === 'ACTIVE') {
-                                statusColor = 'bg-green-100 border-green-300';
-                                statusText = 'ACTIVE';
-                              } else if (status === 'INACTIVE') {
-                                statusColor = 'bg-gray-200 border-gray-400';
-                                statusText = 'INACTIVE';
-                              } else if (status === 'INPROGRESS') {
-                                statusColor = 'bg-orange-100 border-orange-300';
-                                statusText = 'INPROGRESS';
-                              }
+                              // Convert hex to lighter background color with opacity
+                              const bgColor = `${statusColorHex}33`; // Add 33 for ~20% opacity
+                              const borderColor = statusColorHex;
 
                               return (
                                 <div
@@ -913,13 +1254,43 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                                     setEditingMessage(msg);
                                     setActiveTab('naming');
                                   }}
-                                  className={`${statusColor} border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} cursor-move hover:shadow group`}
+                                  className={`border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} cursor-move hover:shadow group`}
+                                  style={{
+                                    backgroundColor: bgColor,
+                                    borderColor: borderColor
+                                  }}
                                 >
                                   <div className="flex items-start gap-2">
                                     <div className="flex-1">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <span className="font-bold text-blue-600">{msg.number || ''}</span>
-                                        <span className="text-xs font-semibold text-gray-500">{msg.variant || ''}</span>
+                                      <div className="flex items-center justify-between gap-1 mb-1">
+                                        <div className="flex items-center gap-1">
+                                          <span className="font-bold text-blue-600">{msg.number || ''}</span>
+                                          <span className="text-xs font-semibold text-gray-500">{msg.variant || ''}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingMessage(msg);
+                                              setActiveTab('naming');
+                                            }}
+                                            className="p-0.5 hover:bg-white/50 rounded transition-colors"
+                                            title="Edit naming"
+                                          >
+                                            <Edit2 size={12} className="text-gray-600" />
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingMessage(msg);
+                                              setActiveTab('content');
+                                            }}
+                                            className="p-0.5 hover:bg-white/50 rounded transition-colors"
+                                            title="Preview content"
+                                          >
+                                            <Eye size={12} className="text-gray-600" />
+                                          </button>
+                                        </div>
                                       </div>
                                       {displayMode === 'informative' && (
                                         <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
@@ -933,7 +1304,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                             })}
 
                             <button
-                              onClick={() => addMessage(topic.key, aud.key)}
+                              onClick={() => handleAddMessage(topic.key, aud.key)}
                               className={`${displayMode === 'minimal' ? 'w-auto px-2' : 'w-full'} border-2 border-dashed border-gray-300 rounded p-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50`}
                             >
                               {displayMode === 'minimal' ? '+' : '+ Add Message'}
@@ -978,10 +1349,13 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         audiences={audiences}
         topics={topics}
         messages={messages}
+        keywords={keywords}
         lastSync={lastSync}
         isSaving={isSaving}
         saveProgress={saveProgress}
         handleSaveWithProgress={handleSaveWithProgress}
+        feedData={feedData}
+        downloadFeedCSV={downloadFeedCSV}
       />
 
       {/* Message Edit Dialog with Tabs */}

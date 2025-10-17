@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { X, RefreshCw, Save, Loader, ExternalLink } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, RefreshCw, Save, Loader, ExternalLink, Download } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 
@@ -22,11 +22,15 @@ const StateManagementDialog = ({
   audiences,
   topics,
   messages,
+  keywords,
   lastSync,
   isSaving,
   saveProgress,
-  handleSaveWithProgress
+  handleSaveWithProgress,
+  feedData,
+  downloadFeedCSV
 }) => {
+  const [activeTab, setActiveTab] = useState('audiences');
   // Format last sync time
   const formatSync = (time) => {
     if (!time) return 'Never';
@@ -72,12 +76,26 @@ const StateManagementDialog = ({
 
   if (!showStateDialog) return null;
 
+  // Count keywords entries
+  const keywordsCount = Object.keys(keywords || {}).reduce((count, form) => {
+    return count + Object.keys(keywords[form] || {}).length;
+  }, 0);
+
+  const tabs = [
+    { id: 'audiences', label: 'Audiences', count: audiences.length },
+    { id: 'topics', label: 'Topics', count: topics.length },
+    { id: 'messages', label: 'Messages', count: completeMessages.length },
+    { id: 'feed', label: 'Feed', count: feedData?.length || 0 },
+    { id: 'keywords', label: 'Keywords', count: keywordsCount }
+  ];
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
-            <h2 className="text-xl font-semibold">Application State (JSON)</h2>
+            <h2 className="text-xl font-semibold">Application State</h2>
             <p className="text-sm text-gray-500 mt-1">Last sync: {formatSync(lastSync)}</p>
           </div>
           <button
@@ -88,22 +106,59 @@ const StateManagementDialog = ({
           </button>
         </div>
 
-        <div className="p-6">
-          <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
-            {JSON.stringify(
-              {
-                audiences: audiences,
-                topics: topics,
-                messages: completeMessages
-              },
-              null,
-              2
-            )}
-          </pre>
+        {/* Tabs */}
+        <div className="flex border-b bg-gray-50 px-6">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-between items-center">
-          <div>
+        {/* Tab Content */}
+        <div className="flex-1 overflow-auto p-6">
+          {activeTab === 'audiences' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(audiences, null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'topics' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(topics, null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'messages' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(completeMessages, null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'feed' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(feedData || [], null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'keywords' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(keywords, null, 2)}
+            </pre>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+          <div className="flex gap-2">
             {(() => {
               const spreadsheetId = settings.getSpreadsheetId();
               return spreadsheetId ? (
@@ -119,13 +174,22 @@ const StateManagementDialog = ({
                 </a>
               ) : null;
             })()}
+            {feedData && feedData.length > 0 && downloadFeedCSV && (
+              <button
+                onClick={downloadFeedCSV}
+                className="flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+              >
+                <Download size={16} />
+                <span>Download Feed CSV</span>
+              </button>
+            )}
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowStateDialog(false)}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
             >
-              Cancel
+              Close
             </button>
             <button
               onClick={() => {

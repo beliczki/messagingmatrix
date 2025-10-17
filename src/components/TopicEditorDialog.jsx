@@ -33,6 +33,16 @@ const TopicEditorDialog = ({
 
   if (!editingTopic) return null;
 
+  // Helper function to get text color based on background luminance
+  const getTextColor = (hexColor) => {
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6 ? '#000000' : '#ffffff';
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -98,16 +108,30 @@ const TopicEditorDialog = ({
                   ? keywordValues
                   : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
 
+                const statusColors = settings.getStatusColors();
+                const currentStatus = (editingTopic.status || '').toUpperCase();
+                const currentColor = currentStatus ? (statusColors[currentStatus] || statusColors['PLANNED'] || '#cccccc') : '#ffffff';
+
                 return (
                   <select
                     value={editingTopic.status || ''}
                     onChange={(e) => setEditingTopic({ ...editingTopic, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border-2 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent font-semibold"
+                    style={{
+                      backgroundColor: currentColor,
+                      borderColor: currentColor,
+                      color: currentStatus ? getTextColor(currentColor) : '#000000'
+                    }}
                   >
-                    <option value="">None</option>
-                    {statusOptions.map((val) => (
-                      <option key={val} value={val}>{val}</option>
-                    ))}
+                    <option value="" style={{ backgroundColor: '#ffffff', color: '#000000' }}>None</option>
+                    {statusOptions.map((val) => {
+                      const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
+                      return (
+                        <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
+                          {val}
+                        </option>
+                      );
+                    })}
                   </select>
                 );
               })()}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette } from 'lucide-react';
 import settings from '../services/settings';
 import PageHeader, { getButtonStyle } from './PageHeader';
@@ -44,7 +44,8 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
         utm_term: '',
         utm_cd26: '',
         final_trafficked_url: ''
-      }
+      },
+      feed: {}
     },
     imageBaseUrls: {
       image1: '',
@@ -56,6 +57,7 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
     },
     spreadsheetId: '',
     treeStructure: 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
+    feedStructure: 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2',
     lookAndFeel: {
       logo: '',
       headerColor: '#2870ed',
@@ -64,7 +66,14 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       buttonStyle: 'border: 1px solid white;',
       secondaryColor1: '#eb4c79',
       secondaryColor2: '#02a3a4',
-      secondaryColor3: '#711c7a'
+      secondaryColor3: '#711c7a',
+      statusColors: {
+        ACTIVE: '#34a853',
+        INACTIVE: '#cccccc',
+        ERROR: '#ff0000',
+        INPROGRESS: '#ff6d01',
+        PLANNED: '#ffff00'
+      }
     }
   });
   const [loading, setLoading] = useState(true);
@@ -101,6 +110,7 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
         imageBaseUrls: config.imageBaseUrls,
         patterns: config.patterns,
         treeStructure: config.treeStructure,
+        feedStructure: config.feedStructure,
         lookAndFeel: config.lookAndFeel
       });
 
@@ -126,6 +136,14 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       let current = newConfig;
 
       for (let i = 0; i < keys.length - 1; i++) {
+        // Ensure nested objects exist
+        if (!current[keys[i]]) {
+          current[keys[i]] = {};
+        }
+        // Make a copy to avoid mutating the original
+        if (i < keys.length - 2 || typeof current[keys[i]] === 'object') {
+          current[keys[i]] = { ...current[keys[i]] };
+        }
         current = current[keys[i]];
       }
 
@@ -133,6 +151,16 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       return newConfig;
     });
   };
+
+  // Parse feed structure to extract column names (full names with prefixes)
+  const feedVariables = useMemo(() => {
+    if (!config.feedStructure) return [];
+
+    return config.feedStructure
+      .split(',')
+      .map(field => field.trim())
+      .filter(v => v); // Remove empty strings
+  }, [config.feedStructure]);
 
   if (loading) {
     return (
@@ -212,6 +240,50 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                     </a>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tree Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Tree Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Decision Tree Hierarchy
+                </label>
+                <input
+                  type="text"
+                  value={config.treeStructure || 'Product → Strategy → Targeting Type → Audience → Topic → Messages'}
+                  onChange={(e) => handleInputChange('treeStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="Product → Strategy → Targeting Type → Audience → Topic → Messages"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the hierarchy levels for the tree view using → arrows to separate levels
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Feed Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Feed Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Feed CSV Header
+                </label>
+                <textarea
+                  value={config.feedStructure || 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2'}
+                  onChange={(e) => handleInputChange('feedStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  rows="4"
+                  placeholder="Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the CSV header for the feed view using comma-separated field definitions (Type:field_name)
+                </p>
               </div>
             </div>
           </div>
@@ -422,6 +494,125 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                 </div>
               </div>
             </div>
+
+            {/* Status Colors Section */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-4">Status Colors</h3>
+              <p className="text-xs text-gray-600 mb-4">
+                These colors are used in status dropdowns and indicators throughout the application
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Active Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Active Status
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.ACTIVE || '#34a853'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.ACTIVE', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.ACTIVE || '#34a853'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.ACTIVE', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#34a853"
+                    />
+                  </div>
+                </div>
+
+                {/* In Progress Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    In Progress Status
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.INPROGRESS || '#ff6d01'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INPROGRESS', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.INPROGRESS || '#ff6d01'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INPROGRESS', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#ff6d01"
+                    />
+                  </div>
+                </div>
+
+                {/* Planned Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Planned Status
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.PLANNED || '#ffff00'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PLANNED', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.PLANNED || '#ffff00'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PLANNED', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#ffff00"
+                    />
+                  </div>
+                </div>
+
+                {/* Inactive Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Inactive Status
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.INACTIVE || '#cccccc'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INACTIVE', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.INACTIVE || '#cccccc'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INACTIVE', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#cccccc"
+                    />
+                  </div>
+                </div>
+
+                {/* Error Status */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Error Status
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.ERROR || '#ff0000'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.ERROR', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.ERROR || '#ff0000'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.ERROR', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#ff0000"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Pattern Configuration */}
@@ -458,114 +649,121 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                   Variables: Tag1, Tag2, Tag3, Tag4
                 </p>
               </div>
-            </div>
-          </div>
 
-          {/* Tree Structure Configuration */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Tree Structure</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Decision Tree Hierarchy
-                </label>
-                <input
-                  type="text"
-                  value={config.treeStructure || 'Product → Strategy → Targeting Type → Audience → Topic → Messages'}
-                  onChange={(e) => handleInputChange('treeStructure', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  placeholder="Product → Strategy → Targeting Type → Audience → Topic → Messages"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Define the hierarchy levels for the tree view using → arrows to separate levels
-                </p>
+              {/* Trafficking Patterns */}
+              <div className="pt-6 border-t border-gray-200">
+                <h3 className="text-md font-semibold text-gray-800 mb-4">Trafficking Patterns</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM Campaign Pattern
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_campaign}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_campaign', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM Source Pattern
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_source}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_source', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM Medium
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_medium}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_medium', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM Content
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_content}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_content', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM Term Pattern
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_term}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_term', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      UTM CD26 Pattern
+                    </label>
+                    <input
+                      type="text"
+                      value={config.patterns.trafficking.utm_cd26}
+                      onChange={(e) => handleInputChange('patterns.trafficking.utm_cd26', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Final Trafficked URL Pattern
+                    </label>
+                    <textarea
+                      value={config.patterns.trafficking.final_trafficked_url}
+                      onChange={(e) => handleInputChange('patterns.trafficking.final_trafficked_url', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      rows="3"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Variables: Landing_URL, PMMID, utm_campaign, utm_source, utm_medium, utm_content, utm_term, utm_cd26
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Trafficking Pattern Configuration */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Trafficking Patterns</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM Campaign Pattern
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_campaign}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_campaign', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM Source Pattern
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_source}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_source', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM Medium
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_medium}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_medium', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM Content
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_content}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_content', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM Term Pattern
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_term}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_term', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTM CD26 Pattern
-                </label>
-                <input
-                  type="text"
-                  value={config.patterns.trafficking.utm_cd26}
-                  onChange={(e) => handleInputChange('patterns.trafficking.utm_cd26', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Final Trafficked URL Pattern
-                </label>
-                <textarea
-                  value={config.patterns.trafficking.final_trafficked_url}
-                  onChange={(e) => handleInputChange('patterns.trafficking.final_trafficked_url', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  rows="3"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Variables: Landing_URL, PMMID, utm_campaign, utm_source, utm_medium, utm_content, utm_term, utm_cd26
+              {/* Feed Patterns */}
+              <div className="pt-6 border-t border-gray-200">
+                <h3 className="text-md font-semibold text-gray-800 mb-4">Feed Patterns</h3>
+                <p className="text-xs text-gray-600 mb-4">
+                  Configure pattern templates for each feed variable extracted from the Feed Structure string
                 </p>
+                <div className="space-y-3">
+                  {feedVariables.map((variable) => (
+                    <div key={variable} className="flex items-center gap-4">
+                      <label className="text-sm font-medium text-gray-700 w-48 flex-shrink-0">
+                        {variable}
+                      </label>
+                      <input
+                        type="text"
+                        value={config.patterns.feed?.[variable] || ''}
+                        onChange={(e) => handleInputChange(`patterns.feed.${variable}`, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        placeholder={`Pattern for ${variable}`}
+                      />
+                    </div>
+                  ))}
+                  {feedVariables.length === 0 && (
+                    <p className="text-sm text-gray-500 italic">
+                      No feed variables found. Configure Feed Structure above to define variables.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

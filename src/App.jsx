@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
-import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User } from 'lucide-react';
+import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
 import Matrix from './components/Matrix';
-import AssetsLibrary from './components/AssetsLibrary';
+import CreativeLibrary from './components/CreativeLibrary';
+import Assets from './components/Assets';
 import Monitoring from './components/Monitoring';
 import Templates from './components/Templates';
+import Tasks from './components/Tasks';
 import Users from './components/Users';
 import Settings from './components/Settings';
 import Login from './components/Login';
@@ -38,6 +40,40 @@ const App = () => {
   // Load matrix data once at app level to share across all components
   const matrixData = useMatrix();
 
+  // Matrix view state - persisted at app level
+  const [matrixViewState, setMatrixViewState] = useState(() => {
+    // Try to load from localStorage
+    const saved = localStorage.getItem('matrixViewState');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved matrix view state:', e);
+      }
+    }
+    // Default state
+    return {
+      viewMode: 'matrix',
+      matrixZoom: 1,
+      matrixPan: { x: 0, y: 0 },
+      treeZoom: 1,
+      displayMode: 'informative',
+      selectedStatuses: ['ACTIVE', 'INACTIVE', 'PLANNED', 'INPROGRESS', 'ERROR'],
+      selectedProducts: ['SZK', 'HK', 'VAL', 'SZA'],
+      audienceFilter: '',
+      topicFilter: ''
+    };
+  });
+
+  // Save matrix view state to localStorage whenever it changes (debounced to avoid excessive writes)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem('matrixViewState', JSON.stringify(matrixViewState));
+    }, 300); // Debounce: wait 300ms after last change before saving
+
+    return () => clearTimeout(timeoutId);
+  }, [matrixViewState]);
+
   // Load look and feel settings
   useEffect(() => {
     const loadLookAndFeel = async () => {
@@ -68,9 +104,11 @@ const App = () => {
 
   const modules = [
     { id: 'matrix', name: 'Messaging Matrix', icon: Table, component: Matrix, color: 'blue' },
-    { id: 'assets', name: 'Assets Library', icon: Image, component: AssetsLibrary, color: 'blue' },
+    { id: 'creative-library', name: 'Creative Library', icon: Image, component: CreativeLibrary, color: 'blue' },
+    { id: 'assets', name: 'Assets', icon: Package, component: Assets, color: 'purple' },
     { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
     { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
+    { id: 'tasks', name: 'Tasks', icon: CheckSquare, component: Tasks, color: 'indigo' },
     { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple' },
     { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray' }
   ];
@@ -159,6 +197,8 @@ const App = () => {
             currentModuleName={modules.find(m => m.id === currentModule)?.name}
             matrixData={matrixData}
             lookAndFeel={lookAndFeel}
+            matrixViewState={matrixViewState}
+            setMatrixViewState={setMatrixViewState}
           />
         </div>
       </div>

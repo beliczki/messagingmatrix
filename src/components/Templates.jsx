@@ -77,7 +77,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
                   </thead>
                   <tbody>
                     {templates.map((template) => (
-                      <tr key={template.name} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr key={template.name} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onDoubleClick={() => handleEdit(template)}>
                         <td className="py-3 px-4">
                           <button
                             onClick={() => handleEdit(template)}
@@ -548,7 +548,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     return uniquePlaceholders.map(placeholder => {
       if (templateConfig && templateConfig.placeholders && templateConfig.placeholders[placeholder]) {
         const config = templateConfig.placeholders[placeholder];
-        const binding = config.binding || '';
+        const binding = config['binding-messagingmatrix'] || '';
         let value = '';
         let fieldFound = false;
 
@@ -1007,27 +1007,6 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
                   </button>
                 </div>
 
-                {/* Size Selector */}
-                <select
-                  value={previewSize}
-                  onChange={(e) => setPreviewSize(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  {template.dimensions && template.dimensions.length > 0 ? (
-                    template.dimensions.map((dimension) => (
-                      <option key={dimension} value={dimension}>
-                        {dimension}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="300x250">300x250</option>
-                      <option value="300x600">300x600</option>
-                      <option value="640x360">640x360</option>
-                      <option value="970x250">970x250</option>
-                    </>
-                  )}
-                </select>
                 {/* Message Navigation */}
                 <div className="flex items-center gap-1">
                   <button
@@ -1072,6 +1051,29 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
                     <ChevronRight size={16} className="text-gray-600" />
                   </button>
                 </div>
+
+                {/* Size Selector */}
+                <select
+                  value={previewSize}
+                  onChange={(e) => setPreviewSize(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  {template.dimensions && template.dimensions.length > 0 ? (
+                    template.dimensions.map((dimension) => (
+                      <option key={dimension} value={dimension}>
+                        {dimension}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="300x250">300x250</option>
+                      <option value="300x600">300x600</option>
+                      <option value="640x360">640x360</option>
+                      <option value="970x250">970x250</option>
+                    </>
+                  )}
+                </select>
+
                 {/* Placeholder Menu Button */}
                 <button
                   onClick={() => setPlaceholderMenuOpen(true)}

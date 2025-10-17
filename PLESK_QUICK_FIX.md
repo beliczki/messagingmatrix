@@ -356,3 +356,38 @@ pm2 save
 ```
 
 This ensures backend restarts automatically after server reboots.
+
+---
+
+## Lessons Learned from This Fix
+
+### The Zombie Process Problem
+The most challenging issue was a Node.js process running on port 3003 that couldn't be killed through normal Plesk controls:
+- **Disable/Enable Node.js**: Didn't stop the process
+- **Restart App button**: Only queued a restart "after first request"
+- **SSH terminal**: Had missing library errors (`libtinfo.so.6`)
+- **pm2 list**: Not available in problematic terminal
+
+**Final solution**: Changed PORT to 3004 as a workaround instead of fighting the zombie process.
+
+### Key Takeaways
+1. **Always verify process status** before and after restart attempts
+2. **Test SSH terminal access** before you need it in an emergency
+3. **Document backup ports** for quick recovery
+4. **Use PM2 exclusively** for process management - don't mix with manual node commands
+5. **Test "Restart App" behavior** - in Plesk it means "restart on next request", not immediate
+
+### What Worked Well
+- **service-account.json minification**: Once properly formatted, worked perfectly
+- **Google Sheets API integration**: Robust after initial setup
+- **Plesk Git integration**: Made code deployment simple
+- **Port change workaround**: Quick recovery when processes couldn't be killed
+
+### Prevention Checklist
+For future deployments, ensure:
+- [ ] SSH terminal is tested and functional
+- [ ] PM2 is properly installed and accessible
+- [ ] Process management tools (netstat, lsof, kill) are available
+- [ ] Backup ports are documented (e.g., 3003, 3004, 3005)
+- [ ] All config files are validated before upload
+- [ ] Deployment checklist is followed step-by-step
