@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Image as ImageIcon, Grid, List, Upload, X, Filter, Calendar, Tag, Monitor, Download, ExternalLink, CheckSquare, Square, Share2, Copy, Check, LayoutGrid } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import CreativeShare from './CreativeShare';
@@ -23,6 +23,12 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
+  // Virtual scrolling state
+  const [windowStart, setWindowStart] = useState(0);
+  const [windowSize] = useState(42);
+  const scrollContainerRef = useRef(null);
+  const lastScrollY = useRef(0);
+
   useEffect(() => {
     loadCreatives();
   }, []);
@@ -32,6 +38,76 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     const creativeList = await processAssets(assetModules);
     setCreatives(creativeList);
   };
+
+  // Virtual scrolling handler
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const scrollY = container.scrollTop;
+    const scrollDirection = scrollY > lastScrollY.current ? 'down' : 'up';
+    lastScrollY.current = scrollY;
+
+    // Get total items after filtering
+    const totalItems = filterAssets(creatives, filterText).length;
+
+    // Calculate scroll percentage based on viewport
+    const scrollHeight = container.scrollHeight - container.clientHeight;
+    const scrollPercent = scrollHeight > 0 ? scrollY / scrollHeight : 0;
+
+    // Calculate approximate item index based on scroll position
+    const approximateItemIndex = Math.floor(scrollPercent * totalItems);
+
+    // Get current window end
+    const currentWindowEnd = windowStart + windowSize;
+    const currentWindowMiddle = windowStart + Math.floor(windowSize / 2);
+
+    if (scrollDirection === 'down') {
+      // Scrolling down: if we're past the middle (21 items), load next batch
+      if (approximateItemIndex > currentWindowMiddle && currentWindowEnd < totalItems) {
+        const newStart = Math.min(windowStart + 12, totalItems - windowSize);
+        if (newStart > windowStart) {
+          setWindowStart(newStart);
+        }
+      }
+    } else if (scrollDirection === 'up') {
+      // Scrolling up: if we're before 25% of window, load previous batch
+      const currentWindowQuarter = windowStart + Math.floor(windowSize / 4);
+      if (approximateItemIndex < currentWindowQuarter && windowStart > 0) {
+        const newStart = Math.max(windowStart - 12, 0);
+        if (newStart < windowStart) {
+          setWindowStart(newStart);
+        }
+      }
+    }
+  }, [creatives, filterText, windowStart, windowSize]);
+
+  // Setup scroll listener
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // Throttle scroll events
+    let scrollTimeout;
+    const throttledScroll = () => {
+      if (scrollTimeout) return;
+      scrollTimeout = setTimeout(() => {
+        handleScroll();
+        scrollTimeout = null;
+      }, 100);
+    };
+
+    container.addEventListener('scroll', throttledScroll);
+    return () => {
+      container.removeEventListener('scroll', throttledScroll);
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+    };
+  }, [handleScroll]);
+
+  // Reset window when filter changes
+  useEffect(() => {
+    setWindowStart(0);
+  }, [filterText]);
 
   const toggleSelectorMode = () => {
     setSelectorMode(!selectorMode);
@@ -179,7 +255,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     e.preventDefault();
   };
 
-  const filteredCreatives = filterAssets(creatives, filterText);
+  // Get filtered creatives and apply virtual scrolling window
+  const allFilteredCreatives = filterAssets(creatives, filterText);
+  const totalCreatives = allFilteredCreatives.length;
+  const windowEnd = Math.min(windowStart + windowSize, totalCreatives);
+  const filteredCreatives = allFilteredCreatives.slice(windowStart, windowEnd);
+
+  // For debugging
+  const debugInfo = `Showing ${windowStart + 1}-${windowEnd} of ${totalCreatives}`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -228,8 +311,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       </PageHeader>
 
       {/* Content */}
-      <div className="p-8">
+      <div
+        ref={scrollContainerRef}
+        className="p-8 overflow-y-auto"
+        style={{ height: 'calc(100vh - 100px)' }}
+      >
         <div className="max-w-7xl mx-auto">
+          {/* Virtual Scrolling Debug Info */}
+          <div className="mb-2 text-xs text-gray-500 text-right">
+            {debugInfo}
+          </div>
+
           {/* Filter and Controls Row */}
           <div className="flex items-center gap-4 mb-6">
             <div className="flex items-center gap-2 flex-1">
@@ -259,12 +351,12 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               <>
                 <button
                   onClick={() => {
-                    const allFilteredIds = new Set(filteredCreatives.map(creative => creative.id));
+                    const allFilteredIds = new Set(allFilteredCreatives.map(creative => creative.id));
                     setSelectedCreativeIds(allFilteredIds);
                   }}
                   className="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                 >
-                  Select All
+                  Select All ({totalCreatives})
                 </button>
                 <button
                   onClick={() => setSelectedCreativeIds(new Set())}
