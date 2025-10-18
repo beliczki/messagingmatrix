@@ -16,7 +16,10 @@ const CreativeLibraryMasonryView = ({
   currentLoadingItem,
   loadingImageRef,
   handleImageLoaded,
-  setNextItemIndex
+  setNextItemIndex,
+  templateHtml,
+  templateConfig,
+  templateCss
 }) => {
   return (
     <div className="relative">
@@ -45,6 +48,9 @@ const CreativeLibraryMasonryView = ({
                   onSelect={onSelectCreative}
                   isOutsideRange={isOutsideRange}
                   savedHeight={savedHeight}
+                  templateHtml={templateHtml}
+                  templateConfig={templateConfig}
+                  templateCss={templateCss}
                 />
               );
             })}

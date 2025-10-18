@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image as ImageIcon, Check } from 'lucide-react';
+import settings from '../services/settings';
 
 const CreativeLibraryItem = ({
   creative,
@@ -8,7 +9,10 @@ const CreativeLibraryItem = ({
   onToggleSelection,
   onSelect,
   isOutsideRange = false,
-  savedHeight = 300
+  savedHeight = 300,
+  templateHtml = '',
+  templateConfig = null,
+  templateCss = null
 }) => {
   const isVideo = creative.extension === 'mp4';
   const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
@@ -34,6 +38,44 @@ const CreativeLibraryItem = ({
     } else {
       onSelect(creative);
     }
+  };
+
+  // Helper function to build full image URLs
+  const buildImageUrl = (imageKey, filename) => {
+    if (!filename) return '';
+    if (filename.startsWith('http://') || filename.startsWith('https://')) {
+      return filename;
+    }
+    const imageBaseUrls = settings.getImageBaseUrls();
+    return (imageBaseUrls[imageKey] || '') + filename;
+  };
+
+  // Helper function to populate template with message data
+  const populateTemplate = (html, msg) => {
+    if (!msg || !html) return html;
+    let result = html;
+
+    if (templateConfig && templateConfig.placeholders) {
+      Object.keys(templateConfig.placeholders).forEach(placeholderName => {
+        const config = templateConfig.placeholders[placeholderName];
+        const binding = config['binding-messagingmatrix'];
+        let value = config.default || '';
+
+        if (binding) {
+          const fieldName = binding.replace(/^message\./i, '').toLowerCase();
+          value = msg[fieldName] || value;
+
+          if (config.type === 'image' && value) {
+            value = buildImageUrl(fieldName, value);
+          }
+        }
+
+        const regex = new RegExp(`\\{\\{${placeholderName}\\}\\}`, 'g');
+        result = result.replace(regex, value);
+      });
+    }
+
+    return result;
   };
 
   // Render placeholder for items outside loaded range
@@ -90,20 +132,79 @@ const CreativeLibraryItem = ({
             preload="metadata"
           />
         )}
-        {isDynamic && creative.bannerSize && (
-          <div
-            className="w-full bg-white flex items-center justify-center border border-gray-300"
-            style={{
-              aspectRatio: `${creative.bannerSize.width} / ${creative.bannerSize.height}`
-            }}
-          >
-            <div className="text-center p-4">
-              <div className="text-lg font-semibold text-gray-800 mb-2">{creative.bannerSize.width}x{creative.bannerSize.height}</div>
-              <div className="text-sm text-gray-600">{creative.bannerSize.name}</div>
-              <div className="text-xs text-gray-500 mt-2">MC{creative.messageData.number}_{creative.messageData.variant}</div>
+        {isDynamic && creative.bannerSize && (() => {
+          if (!templateHtml || !templateCss) return null;
+
+          const width = creative.bannerSize.width;
+          const height = creative.bannerSize.height;
+          const sizeKey = `${width}x${height}`;
+
+          // Inject CSS inline into the HTML
+          let htmlWithCss = templateHtml;
+
+          // Replace CSS link references with inline styles
+          if (templateCss.main && templateCss[sizeKey]) {
+            const combinedCss = `${templateCss.main}\n${templateCss[sizeKey]}`;
+            htmlWithCss = htmlWithCss.replace(
+              /<link rel="stylesheet" href="main.css".*?>/,
+              `<style>${combinedCss}</style>`
+            );
+            htmlWithCss = htmlWithCss.replace(
+              /<link rel="stylesheet" href="\[\[css\]\]".*?>/,
+              ''
+            );
+          }
+
+          // Populate template with message data
+          const populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
+
+          return (
+            <div className="w-full bg-white border border-gray-300 overflow-hidden">
+              {/* Outer wrapper - takes full column width and maintains aspect ratio */}
+              <div
+                style={{
+                  width: '100%',
+                  aspectRatio: `${width} / ${height}`,
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Inner container - sized at banner dimensions, then scaled to fit */}
+                <div
+                  style={{
+                    width: `${width}px`,
+                    height: `${height}px`,
+                    transformOrigin: 'top left',
+                    transform: 'scale(var(--scale))',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0
+                  }}
+                  ref={(el) => {
+                    if (el) {
+                      // Calculate scale to fit column width
+                      const parentWidth = el.parentElement?.offsetWidth || width;
+                      const scale = parentWidth / width;
+                      el.style.setProperty('--scale', scale.toString());
+                    }
+                  }}
+                >
+                  <iframe
+                    srcDoc={populatedHtml}
+                    style={{
+                      width: `${width}px`,
+                      height: `${height}px`,
+                      border: 0,
+                      display: 'block'
+                    }}
+                    title={`${creative.product || 'Creative'} Preview`}
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {!isImage && !isVideo && !isDynamic && (
           <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
             <ImageIcon size={48} className="text-gray-400" />

@@ -7,6 +7,14 @@ import CreativeLibraryMasonryView from './CreativeLibraryMasonryView';
 import CreativeLibraryListView from './CreativeLibraryListView';
 import CreativeLibraryUploadDialogs from './CreativeLibraryUploadDialogs';
 import { processAssets, filterAssets } from '../utils/assetUtils';
+import templateHtmlRaw from '../templates/html/index.html?raw';
+import templateConfigUrl from '../templates/html/template.json?url';
+import mainCss from '../templates/html/main.css?raw';
+import css300x250 from '../templates/html/300x250.css?raw';
+import css300x600 from '../templates/html/300x600.css?raw';
+import css640x360 from '../templates/html/640x360.css?raw';
+import css970x250 from '../templates/html/970x250.css?raw';
+import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const [creatives, setCreatives] = useState([]);
@@ -25,6 +33,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [generatedShareUrl, setGeneratedShareUrl] = useState(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
+  const [templateHtml, setTemplateHtml] = useState('');
+  const [templateConfig, setTemplateConfig] = useState(null);
+  const [templateCss, setTemplateCss] = useState(null);
 
   // Virtual scrolling configuration
   const loadChunkSize = 16;
@@ -81,6 +92,36 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   useEffect(() => {
     loadCreatives();
   }, [matrixData?.messages]);
+
+  // Load template HTML and config
+  useEffect(() => {
+    const loadTemplate = async () => {
+      try {
+        // HTML is already loaded as raw string via import
+        setTemplateHtml(templateHtmlRaw);
+
+        // Set up CSS map
+        const cssMap = {
+          main: mainCss,
+          '300x250': css300x250,
+          '300x600': css300x600,
+          '640x360': css640x360,
+          '970x250': css970x250,
+          '1080x1080': css1080x1080
+        };
+        setTemplateCss(cssMap);
+
+        // Only need to fetch the JSON config
+        const configResponse = await fetch(templateConfigUrl);
+        const config = await configResponse.json();
+        setTemplateConfig(config);
+      } catch (error) {
+        console.error('Failed to load template:', error);
+      }
+    };
+
+    loadTemplate();
+  }, []);
 
   // MC Template supported banner sizes (from src/templates/html/*.css)
   const bannerSizes = [
@@ -719,6 +760,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
               loadingImageRef={loadingImageRef}
               handleImageLoaded={handleImageLoaded}
               setNextItemIndex={setNextItemIndex}
+              templateHtml={templateHtml}
+              templateConfig={templateConfig}
+              templateCss={templateCss}
             />
           ) : (
             <CreativeLibraryListView
