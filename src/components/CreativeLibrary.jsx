@@ -26,6 +26,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   // Virtual scrolling state
   const [windowStart, setWindowStart] = useState(0);
   const [windowSize] = useState(42);
+  const [topSpacerHeight, setTopSpacerHeight] = useState(0);
+  const [bottomSpacerHeight, setBottomSpacerHeight] = useState(0);
   const scrollContainerRef = useRef(null);
   const lastScrollY = useRef(0);
   const isUpdatingWindow = useRef(false);
@@ -58,8 +60,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     });
   }, []);
 
-  // Calculate masonry container height for a set of items
-  const calculateMasonryHeight = useCallback((items, columnCount) => {
+  // Calculate spacer height for items in a masonry layout
+  const calculateSpacerHeight = useCallback((items, columnCount) => {
+    if (items.length === 0) return 0;
+
     const columnHeights = Array(columnCount).fill(0);
     const gapSize = 16; // Tailwind gap-4 = 1rem = 16px
 
@@ -99,7 +103,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 1;
 
     if (scrollDirection === 'down') {
-      // Scrolling down: if we're past the middle (21 items), load next batch
+      // Scrolling down: if we're past the middle, load next batch
       if (approximateItemIndex > currentWindowMiddle && currentWindowEnd < totalItems) {
         const newStart = Math.min(windowStart + 12, totalItems - windowSize);
         if (newStart > windowStart) {
@@ -108,28 +112,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           // Save positions before update
           saveItemPositions();
 
-          // Calculate masonry height change for removed items
-          const allFiltered = filterAssets(creatives, filterText);
-          const currentItems = allFiltered.slice(windowStart, windowStart + windowSize);
-          const newItems = allFiltered.slice(newStart, newStart + windowSize);
-
-          const currentHeight = calculateMasonryHeight(currentItems, columnCount);
-          const newHeight = calculateMasonryHeight(newItems, columnCount);
-          const heightDifference = currentHeight - newHeight;
-
           // Update window
           setWindowStart(newStart);
 
-          // Adjust scroll to compensate for removed items
-          requestAnimationFrame(() => {
-            if (scrollContainerRef.current && heightDifference > 0) {
-              scrollContainerRef.current.scrollTop = scrollY - heightDifference;
-              lastScrollY.current = scrollContainerRef.current.scrollTop;
-            }
-            setTimeout(() => {
-              isUpdatingWindow.current = false;
-            }, 50);
-          });
+          // Calculate spacer heights
+          const allFiltered = filterAssets(creatives, filterText);
+          const itemsBefore = allFiltered.slice(0, newStart);
+          const itemsAfter = allFiltered.slice(newStart + windowSize);
+
+          const topHeight = calculateSpacerHeight(itemsBefore, columnCount);
+          const bottomHeight = calculateSpacerHeight(itemsAfter, columnCount);
+
+          setTopSpacerHeight(topHeight);
+          setBottomSpacerHeight(bottomHeight);
+
+          setTimeout(() => {
+            isUpdatingWindow.current = false;
+          }, 50);
         }
       }
     } else if (scrollDirection === 'up') {
@@ -143,32 +142,27 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           // Save positions before update
           saveItemPositions();
 
-          // Calculate masonry height change for added items
-          const allFiltered = filterAssets(creatives, filterText);
-          const currentItems = allFiltered.slice(windowStart, windowStart + windowSize);
-          const newItems = allFiltered.slice(newStart, newStart + windowSize);
-
-          const currentHeight = calculateMasonryHeight(currentItems, columnCount);
-          const newHeight = calculateMasonryHeight(newItems, columnCount);
-          const heightDifference = newHeight - currentHeight;
-
           // Update window
           setWindowStart(newStart);
 
-          // Adjust scroll to compensate for added items
-          requestAnimationFrame(() => {
-            if (scrollContainerRef.current && heightDifference > 0) {
-              scrollContainerRef.current.scrollTop = scrollY + heightDifference;
-              lastScrollY.current = scrollContainerRef.current.scrollTop;
-            }
-            setTimeout(() => {
-              isUpdatingWindow.current = false;
-            }, 50);
-          });
+          // Calculate spacer heights
+          const allFiltered = filterAssets(creatives, filterText);
+          const itemsBefore = allFiltered.slice(0, newStart);
+          const itemsAfter = allFiltered.slice(newStart + windowSize);
+
+          const topHeight = calculateSpacerHeight(itemsBefore, columnCount);
+          const bottomHeight = calculateSpacerHeight(itemsAfter, columnCount);
+
+          setTopSpacerHeight(topHeight);
+          setBottomSpacerHeight(bottomHeight);
+
+          setTimeout(() => {
+            isUpdatingWindow.current = false;
+          }, 50);
         }
       }
     }
-  }, [creatives, filterText, windowStart, windowSize, viewMode, saveItemPositions, calculateMasonryHeight]);
+  }, [creatives, filterText, windowStart, windowSize, viewMode, saveItemPositions, calculateSpacerHeight]);
 
   // Setup scroll listener
   useEffect(() => {
@@ -486,6 +480,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               </>
             )}
           </div>
+          {/* Top Spacer */}
+          {topSpacerHeight > 0 && (
+            <div style={{ height: `${topSpacerHeight}px` }} />
+          )}
+
           {/* Assets Grid */}
           {viewMode === 'grid3' ? (
             <div ref={gridRef} className="flex gap-4">
@@ -817,6 +816,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                 </table>
               </div>
             </div>
+          )}
+
+          {/* Bottom Spacer */}
+          {bottomSpacerHeight > 0 && (
+            <div style={{ height: `${bottomSpacerHeight}px` }} />
           )}
 
           {filteredCreatives.length === 0 && (
