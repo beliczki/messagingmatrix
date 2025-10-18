@@ -28,6 +28,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [windowSize] = useState(42);
   const scrollContainerRef = useRef(null);
   const lastScrollY = useRef(0);
+  const isUpdatingWindow = useRef(false);
+  const itemPositions = useRef(new Map()); // Track positions of items
+  const gridRef = useRef(null);
 
   useEffect(() => {
     loadCreatives();
@@ -39,9 +42,25 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     setCreatives(creativeList);
   };
 
+  // Save current item positions
+  const saveItemPositions = useCallback(() => {
+    if (!gridRef.current) return;
+
+    const items = gridRef.current.querySelectorAll('[data-creative-id]');
+    items.forEach(item => {
+      const id = item.getAttribute('data-creative-id');
+      const rect = item.getBoundingClientRect();
+      const containerRect = scrollContainerRef.current.getBoundingClientRect();
+      itemPositions.current.set(id, {
+        top: rect.top - containerRect.top + scrollContainerRef.current.scrollTop,
+        height: rect.height
+      });
+    });
+  }, []);
+
   // Virtual scrolling handler
   const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current) return;
+    if (!scrollContainerRef.current || isUpdatingWindow.current) return;
 
     const container = scrollContainerRef.current;
     const scrollY = container.scrollTop;
@@ -67,7 +86,31 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       if (approximateItemIndex > currentWindowMiddle && currentWindowEnd < totalItems) {
         const newStart = Math.min(windowStart + 12, totalItems - windowSize);
         if (newStart > windowStart) {
+          isUpdatingWindow.current = true;
+
+          // Save positions before update
+          saveItemPositions();
+
+          // Calculate height of items being removed
+          const removedItemsHeight = Array.from({ length: 12 }, (_, i) => {
+            const allFiltered = filterAssets(creatives, filterText);
+            const item = allFiltered[windowStart + i];
+            return item ? (itemPositions.current.get(item.id)?.height || 0) : 0;
+          }).reduce((sum, h) => sum + h, 0);
+
+          // Update window
           setWindowStart(newStart);
+
+          // Adjust scroll to compensate for removed items
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current && removedItemsHeight > 0) {
+              scrollContainerRef.current.scrollTop = scrollY - removedItemsHeight;
+              lastScrollY.current = scrollContainerRef.current.scrollTop;
+            }
+            setTimeout(() => {
+              isUpdatingWindow.current = false;
+            }, 50);
+          });
         }
       }
     } else if (scrollDirection === 'up') {
@@ -76,11 +119,33 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       if (approximateItemIndex < currentWindowQuarter && windowStart > 0) {
         const newStart = Math.max(windowStart - 12, 0);
         if (newStart < windowStart) {
+          isUpdatingWindow.current = true;
+
+          // Save positions before update
+          saveItemPositions();
+
+          // Calculate approximate height of items being added (use average)
+          const avgHeight = Array.from(itemPositions.current.values())
+            .reduce((sum, pos, _, arr) => sum + pos.height / arr.length, 0) || 300;
+          const addedItemsHeight = avgHeight * 12;
+
+          // Update window
           setWindowStart(newStart);
+
+          // Adjust scroll to compensate for added items
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop = scrollY + addedItemsHeight;
+              lastScrollY.current = scrollContainerRef.current.scrollTop;
+            }
+            setTimeout(() => {
+              isUpdatingWindow.current = false;
+            }, 50);
+          });
         }
       }
     }
-  }, [creatives, filterText, windowStart, windowSize]);
+  }, [creatives, filterText, windowStart, windowSize, saveItemPositions]);
 
   // Setup scroll listener
   useEffect(() => {
@@ -369,7 +434,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           </div>
           {/* Assets Grid */}
           {viewMode === 'grid3' ? (
-            <div className="columns-1 sm:columns-2 lg:columns-3 gap-4">
+            <div ref={gridRef} className="columns-1 sm:columns-2 lg:columns-3 gap-4">
               {filteredCreatives.map(creative => {
                 const isVideo = creative.extension === 'mp4';
                 const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
@@ -400,6 +465,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                 return (
                   <div
                     key={creative.id}
+                    data-creative-id={creative.id}
                     className="group cursor-pointer mb-4 break-inside-avoid"
                     onMouseDown={handleMouseDown}
                     onMouseUp={handleMouseUp}
@@ -484,7 +550,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               })}
             </div>
           ) : viewMode === 'grid4' ? (
-            <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+            <div ref={gridRef} className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
               {filteredCreatives.map(creative => {
                 const isVideo = creative.extension === 'mp4';
                 const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
@@ -515,6 +581,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                 return (
                   <div
                     key={creative.id}
+                    data-creative-id={creative.id}
                     className="group cursor-pointer mb-4 break-inside-avoid"
                     onMouseDown={handleMouseDown}
                     onMouseUp={handleMouseUp}
@@ -601,7 +668,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           ) : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table ref={gridRef} className="w-full">
                   <thead className="bg-gray-50">
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">Creative</th>
@@ -620,6 +687,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                       return (
                         <tr
                           key={creative.id}
+                          data-creative-id={creative.id}
                           className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
                           onClick={() => {
                             if (selectorMode) {
