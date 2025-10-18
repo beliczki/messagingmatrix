@@ -58,6 +58,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     });
   }, []);
 
+  // Calculate masonry container height for a set of items
+  const calculateMasonryHeight = useCallback((items, columnCount) => {
+    const columnHeights = Array(columnCount).fill(0);
+    const gapSize = 16; // Tailwind gap-4 = 1rem = 16px
+
+    items.forEach((item) => {
+      const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
+      const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
+      columnHeights[shortestColumnIndex] += estimatedHeight + gapSize;
+    });
+
+    return Math.max(...columnHeights);
+  }, []);
+
   // Virtual scrolling handler
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current || isUpdatingWindow.current) return;
@@ -81,6 +95,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     const currentWindowEnd = windowStart + windowSize;
     const currentWindowMiddle = windowStart + Math.floor(windowSize / 2);
 
+    // Determine column count based on view mode (list view doesn't use masonry)
+    const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 1;
+
     if (scrollDirection === 'down') {
       // Scrolling down: if we're past the middle (21 items), load next batch
       if (approximateItemIndex > currentWindowMiddle && currentWindowEnd < totalItems) {
@@ -91,20 +108,22 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           // Save positions before update
           saveItemPositions();
 
-          // Calculate height of items being removed
-          const removedItemsHeight = Array.from({ length: 12 }, (_, i) => {
-            const allFiltered = filterAssets(creatives, filterText);
-            const item = allFiltered[windowStart + i];
-            return item ? (itemPositions.current.get(item.id)?.height || 0) : 0;
-          }).reduce((sum, h) => sum + h, 0);
+          // Calculate masonry height change for removed items
+          const allFiltered = filterAssets(creatives, filterText);
+          const currentItems = allFiltered.slice(windowStart, windowStart + windowSize);
+          const newItems = allFiltered.slice(newStart, newStart + windowSize);
+
+          const currentHeight = calculateMasonryHeight(currentItems, columnCount);
+          const newHeight = calculateMasonryHeight(newItems, columnCount);
+          const heightDifference = currentHeight - newHeight;
 
           // Update window
           setWindowStart(newStart);
 
           // Adjust scroll to compensate for removed items
           requestAnimationFrame(() => {
-            if (scrollContainerRef.current && removedItemsHeight > 0) {
-              scrollContainerRef.current.scrollTop = scrollY - removedItemsHeight;
+            if (scrollContainerRef.current && heightDifference > 0) {
+              scrollContainerRef.current.scrollTop = scrollY - heightDifference;
               lastScrollY.current = scrollContainerRef.current.scrollTop;
             }
             setTimeout(() => {
@@ -124,18 +143,22 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           // Save positions before update
           saveItemPositions();
 
-          // Calculate approximate height of items being added (use average)
-          const avgHeight = Array.from(itemPositions.current.values())
-            .reduce((sum, pos, _, arr) => sum + pos.height / arr.length, 0) || 300;
-          const addedItemsHeight = avgHeight * 12;
+          // Calculate masonry height change for added items
+          const allFiltered = filterAssets(creatives, filterText);
+          const currentItems = allFiltered.slice(windowStart, windowStart + windowSize);
+          const newItems = allFiltered.slice(newStart, newStart + windowSize);
+
+          const currentHeight = calculateMasonryHeight(currentItems, columnCount);
+          const newHeight = calculateMasonryHeight(newItems, columnCount);
+          const heightDifference = newHeight - currentHeight;
 
           // Update window
           setWindowStart(newStart);
 
           // Adjust scroll to compensate for added items
           requestAnimationFrame(() => {
-            if (scrollContainerRef.current) {
-              scrollContainerRef.current.scrollTop = scrollY + addedItemsHeight;
+            if (scrollContainerRef.current && heightDifference > 0) {
+              scrollContainerRef.current.scrollTop = scrollY + heightDifference;
               lastScrollY.current = scrollContainerRef.current.scrollTop;
             }
             setTimeout(() => {
@@ -145,7 +168,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         }
       }
     }
-  }, [creatives, filterText, windowStart, windowSize, saveItemPositions]);
+  }, [creatives, filterText, windowStart, windowSize, viewMode, saveItemPositions, calculateMasonryHeight]);
 
   // Setup scroll listener
   useEffect(() => {
