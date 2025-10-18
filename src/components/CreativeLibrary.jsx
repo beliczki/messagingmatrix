@@ -33,6 +33,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const scrollContainerRef = useRef(null);
   const isUpdatingWindow = useRef(false);
   const itemPositions = useRef(new Map()); // Track positions of items
+  const itemColumnAssignments = useRef(new Map()); // Track which column each item is in
   const gridRef = useRef(null);
 
   useEffect(() => {
@@ -288,10 +289,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const totalCreatives = allFilteredCreatives.length;
   const visibleItems = allFilteredCreatives.slice(0, totalVisible);
 
-  // Mark which items should show placeholders (outside loaded range)
+  // Mark which items should show placeholders (outside loaded range) and add index
   const filteredCreatives = visibleItems.map((item, index) => ({
     ...item,
-    isPlaceholder: index < loadedStart || index >= loadedEnd
+    isPlaceholder: index < loadedStart || index >= loadedEnd,
+    originalIndex: index // Add original index for debugging
   }));
 
   // Masonry distribution: Distribute items across columns balancing by height
@@ -299,17 +301,45 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     const columns = Array.from({ length: columnCount }, () => []);
     const columnHeights = Array(columnCount).fill(0);
 
+    console.log(`\n=== Distributing ${items.length} items across ${columnCount} columns ===`);
+
+    // First pass: place already-loaded items in their assigned columns
+    const unassignedItems = [];
+
     items.forEach((item) => {
-      // Find shortest column
+      const existingColumn = itemColumnAssignments.current.get(item.id);
+
+      // If item already has a column assignment AND is loaded (not placeholder), preserve it
+      if (existingColumn !== undefined && !item.isPlaceholder && existingColumn < columnCount) {
+        columns[existingColumn].push(item);
+        const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
+        columnHeights[existingColumn] += estimatedHeight;
+
+        console.log(`Item ${item.originalIndex} (${item.id?.substring(0, 8)}) → Column ${existingColumn} [PRESERVED] (placeholder: ${item.isPlaceholder})`);
+      } else {
+        // New item or placeholder - will be assigned in second pass
+        unassignedItems.push(item);
+      }
+    });
+
+    // Second pass: assign new items and placeholders to shortest columns
+    unassignedItems.forEach((item) => {
       const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
 
-      // Add item to shortest column
       columns[shortestColumnIndex].push(item);
-
-      // Estimate item height based on saved position or default
       const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
       columnHeights[shortestColumnIndex] += estimatedHeight;
+
+      // Save the column assignment for non-placeholder items
+      if (!item.isPlaceholder) {
+        itemColumnAssignments.current.set(item.id, shortestColumnIndex);
+      }
+
+      console.log(`Item ${item.originalIndex} (${item.id?.substring(0, 8)}) → Column ${shortestColumnIndex} [NEW] (placeholder: ${item.isPlaceholder})`);
     });
+
+    console.log('Column heights:', columnHeights);
+    console.log('Items per column:', columns.map(col => col.length));
 
     return columns;
   }, []);
@@ -493,6 +523,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         onClick={handleClick}
                       >
                         <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                          {/* Item number badge */}
+                          <div className="absolute top-2 left-2 z-[5] bg-yellow-500 text-black font-bold px-2 py-1 rounded text-xs">
+                            #{creative.originalIndex}
+                          </div>
+
                           {selectorMode && (
                             <div className="absolute top-2 right-2 z-[5]">
                               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -628,6 +663,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         onClick={handleClick}
                       >
                         <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                          {/* Item number badge */}
+                          <div className="absolute top-2 left-2 z-[5] bg-yellow-500 text-black font-bold px-2 py-1 rounded text-xs">
+                            #{creative.originalIndex}
+                          </div>
+
                           {selectorMode && (
                             <div className="absolute top-2 right-2 z-[5]">
                               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
