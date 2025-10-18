@@ -23,10 +23,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
+  // Virtual scrolling configuration
+  const loadChunkSize = 6; // Number of items to load/unload per wheel scroll
+
   // Virtual scrolling state - track total count and loaded range
-  const [totalVisible, setTotalVisible] = useState(6); // Total items to render (grows with scrolling)
+  const [totalVisible, setTotalVisible] = useState(loadChunkSize); // Total items to render (grows with scrolling)
   const [loadedStart, setLoadedStart] = useState(0); // Start of loaded range
-  const [loadedEnd, setLoadedEnd] = useState(6); // End of loaded range
+  const [loadedEnd, setLoadedEnd] = useState(loadChunkSize); // End of loaded range
   const scrollContainerRef = useRef(null);
   const isUpdatingWindow = useRef(false);
   const itemPositions = useRef(new Map()); // Track positions of items
@@ -56,7 +59,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     });
   }, []);
 
-  // Wheel-based virtual scrolling - 1st scroll: add 6, 2nd scroll: add 6 + unload first 6
+  // Wheel-based virtual scrolling - 1st scroll: add chunk, 2nd scroll: add chunk + unload first chunk
   const handleWheel = useCallback((e) => {
     if (isUpdatingWindow.current) {
       e.preventDefault();
@@ -75,16 +78,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         // Save positions before update
         saveItemPositions();
 
-        if (totalVisible === 6) {
-          // First scroll: add 6 more (6 → 12), all loaded
-          setTotalVisible(12);
+        if (totalVisible === loadChunkSize) {
+          // First scroll: add one chunk more (loadChunkSize → loadChunkSize * 2), all loaded
+          setTotalVisible(loadChunkSize * 2);
           setLoadedStart(0);
-          setLoadedEnd(12);
+          setLoadedEnd(loadChunkSize * 2);
         } else {
-          // Second+ scroll: add 6 more, unload first 6
-          setTotalVisible(Math.min(totalVisible + 6, totalItems));
-          setLoadedStart(loadedStart + 6);
-          setLoadedEnd(Math.min(loadedEnd + 6, totalItems));
+          // Second+ scroll: add one chunk more, unload first chunk
+          setTotalVisible(Math.min(totalVisible + loadChunkSize, totalItems));
+          setLoadedStart(loadedStart + loadChunkSize);
+          setLoadedEnd(Math.min(loadedEnd + loadChunkSize, totalItems));
         }
 
         setTimeout(() => {
@@ -100,13 +103,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         // Save positions before update
         saveItemPositions();
 
-        // Load previous 6
-        setLoadedStart(Math.max(0, loadedStart - 6));
-        setLoadedEnd(loadedEnd - 6);
+        // Load previous chunk
+        setLoadedStart(Math.max(0, loadedStart - loadChunkSize));
+        setLoadedEnd(loadedEnd - loadChunkSize);
 
         // If we're back at start, reduce total visible
-        if (loadedStart - 6 <= 0) {
-          setTotalVisible(6);
+        if (loadedStart - loadChunkSize <= 0) {
+          setTotalVisible(loadChunkSize);
         }
 
         setTimeout(() => {
@@ -114,7 +117,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         }, 100);
       }
     }
-  }, [creatives, filterText, totalVisible, loadedStart, loadedEnd, saveItemPositions]);
+  }, [creatives, filterText, totalVisible, loadedStart, loadedEnd, saveItemPositions, loadChunkSize]);
 
   // Setup wheel listener
   useEffect(() => {
@@ -129,10 +132,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
   // Reset state when filter changes
   useEffect(() => {
-    setTotalVisible(6);
+    setTotalVisible(loadChunkSize);
     setLoadedStart(0);
-    setLoadedEnd(6);
-  }, [filterText]);
+    setLoadedEnd(loadChunkSize);
+  }, [filterText, loadChunkSize]);
 
   const toggleSelectorMode = () => {
     setSelectorMode(!selectorMode);
