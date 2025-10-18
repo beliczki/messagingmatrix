@@ -24,7 +24,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
   // Virtual scrolling configuration
-  const loadChunkSize = 4; // Number of items to load/unload per wheel scroll
+  const loadChunkSize = 16; // Number of items to load/unload per scroll
+
+  // Dynamic column count based on view mode
+  const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 4;
 
   // Virtual scrolling state - track total count and loaded range
   const [totalVisible, setTotalVisible] = useState(loadChunkSize); // Total items to render (grows with scrolling)
@@ -32,14 +35,32 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [loadedEnd, setLoadedEnd] = useState(loadChunkSize); // End of loaded range
   const scrollContainerRef = useRef(null);
   const isUpdatingWindow = useRef(false);
+  const lastUpdateTime = useRef(0);
   const itemPositions = useRef(new Map()); // Track positions of items
   const itemColumnAssignments = useRef(new Map()); // Track which column each item is in
   const gridRef = useRef(null);
   const columnRefs = useRef([]); // Refs for each column div
+  const chunkBoundaries = useRef(new Map()); // Track actual pixel heights for each chunk {start, end}
 
-  // Sequential masonry loading state
-  const [columnItems, setColumnItems] = useState({ 0: [], 1: [], 2: [], 3: [] }); // Items assigned to each column
-  const [columnHeights, setColumnHeights] = useState({ 0: 0, 1: 0, 2: 0, 3: 0 }); // Track column heights
+  // Sequential masonry loading state - initialize with current column count
+  const initializeColumns = (count) => {
+    const cols = {};
+    for (let i = 0; i < count; i++) {
+      cols[i] = [];
+    }
+    return cols;
+  };
+
+  const initializeHeights = (count) => {
+    const heights = {};
+    for (let i = 0; i < count; i++) {
+      heights[i] = 0;
+    }
+    return heights;
+  };
+
+  const [columnItems, setColumnItems] = useState(() => initializeColumns(columnCount));
+  const [columnHeights, setColumnHeights] = useState(() => initializeHeights(columnCount));
   const [nextItemIndex, setNextItemIndex] = useState(0); // Next item to load
   const loadingItemRef = useRef(null); // Currently loading item
   const loadingImageRef = useRef(null); // Ref to the loading image element
@@ -68,32 +89,51 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     });
   }, []);
 
-  // Handle image load - add to shortest column and trigger next
+  // Handle image/video load - add to shortest column and trigger next
   const handleImageLoaded = useCallback((creative, itemIndex, event) => {
-    console.log(`\n📸 Image #${itemIndex} loaded: ${creative.filename}`);
+    const isVideo = creative.extension === 'mp4';
+    console.log(`\n${isVideo ? '🎬' : '📸'} ${isVideo ? 'Video' : 'Image'} #${itemIndex} loaded: ${creative.filename}`);
 
-    // Get the loaded image dimensions
-    const img = event.target;
-    const imageHeight = img.naturalHeight;
-    const imageWidth = img.naturalWidth;
+    // Get the loaded media dimensions
+    const media = event.target;
+    const mediaHeight = isVideo ? media.videoHeight : media.naturalHeight;
+    const mediaWidth = isVideo ? media.videoWidth : media.naturalWidth;
 
     // Calculate rendered height based on column width (assuming equal columns)
-    // The grid has 4 columns with gaps, so approximate width per column
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / 4 - 16; // Subtract gap
-    const renderedHeight = (imageHeight / imageWidth) * columnWidth;
+    // Use dynamic column count
+    const currentColumnCount = Object.keys(columnHeights).length;
+    const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16; // Subtract gap
+    const renderedHeight = (mediaHeight / mediaWidth) * columnWidth;
 
-    console.log(`📐 Image dimensions: ${imageWidth}x${imageHeight} → Rendered height: ${Math.round(renderedHeight)}px`);
+    console.log(`📐 ${isVideo ? 'Video' : 'Image'} dimensions: ${mediaWidth}x${mediaHeight} → Rendered height: ${Math.round(renderedHeight)}px`);
 
     // Find shortest column from current state
-    const heights = [
-      columnHeights[0],
-      columnHeights[1],
-      columnHeights[2],
-      columnHeights[3]
-    ];
+    const heights = Object.values(columnHeights);
     const shortestCol = heights.indexOf(Math.min(...heights));
 
-    console.log(`📏 Column heights:`, heights, `| Shortest: Column ${shortestCol} (${Math.round(heights[shortestCol])}px)`);
+    console.log(`📏 Column heights (${currentColumnCount} cols):`, heights, `| Shortest: Column ${shortestCol} (${Math.round(heights[shortestCol])}px)`);
+
+    // Calculate chunk boundaries
+    const chunkIndex = Math.floor(itemIndex / loadChunkSize);
+    const itemYStart = columnHeights[shortestCol]; // Where this item starts in its column
+    const itemYEnd = columnHeights[shortestCol] + renderedHeight; // Where it ends
+
+    // Update chunk boundaries - track min start and max end across all items in chunk
+    const existingBoundary = chunkBoundaries.current.get(chunkIndex);
+    if (existingBoundary) {
+      chunkBoundaries.current.set(chunkIndex, {
+        start: Math.min(existingBoundary.start, itemYStart),
+        end: Math.max(existingBoundary.end, itemYEnd)
+      });
+    } else {
+      chunkBoundaries.current.set(chunkIndex, {
+        start: itemYStart,
+        end: itemYEnd
+      });
+    }
+
+    const boundary = chunkBoundaries.current.get(chunkIndex);
+    console.log(`📦 Chunk ${chunkIndex} boundaries: ${Math.round(boundary.start)}-${Math.round(boundary.end)}px (height: ${Math.round(boundary.end - boundary.start)}px)`);
 
     // Save the item height for future placeholder use
     itemPositions.current.set(creative.id, {
@@ -116,103 +156,176 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
     // Load next item (but don't exceed loadedEnd)
     setNextItemIndex(itemIndex + 1);
-  }, [columnHeights]);
+  }, [columnHeights, loadChunkSize]);
 
-  // Wheel-based virtual scrolling - 1st scroll: add chunk, 2nd scroll: add chunk + unload first chunk
-  const handleWheel = useCallback((e) => {
-    if (isUpdatingWindow.current) {
-      e.preventDefault();
-      return;
+  // Scroll-based virtual scrolling - use actual chunk boundaries instead of estimation
+  const handleScroll = useCallback(() => {
+    // Safety mechanism: if lock is held for more than 500ms, force release it
+    const now = Date.now();
+    if (isUpdatingWindow.current && now - lastUpdateTime.current > 500) {
+      console.warn('⚠️ Force releasing scroll lock after timeout');
+      isUpdatingWindow.current = false;
     }
+
+    if (isUpdatingWindow.current || !scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const scrollTop = container.scrollTop;
+    const clientHeight = container.clientHeight;
 
     // Get total items after filtering
     const totalItems = filterAssets(creatives, filterText).length;
+    if (totalItems === 0) return;
 
-    if (e.deltaY > 0) {
-      // Scrolling down
-      if (totalVisible < totalItems) {
-        e.preventDefault();
+    // If no chunks loaded yet, start from beginning
+    if (chunkBoundaries.current.size === 0) {
+      if (loadedStart !== 0 || loadedEnd !== loadChunkSize * 2) {
         isUpdatingWindow.current = true;
-
-        // Save positions before update
+        lastUpdateTime.current = Date.now();
         saveItemPositions();
-
-        if (totalVisible === loadChunkSize) {
-          // First scroll: add one chunk more (loadChunkSize → loadChunkSize * 2), all loaded
-          setTotalVisible(loadChunkSize * 2);
-          setLoadedStart(0);
-          setLoadedEnd(loadChunkSize * 2);
-        } else {
-          // Second+ scroll: add one chunk more, unload first chunk
-          setTotalVisible(Math.min(totalVisible + loadChunkSize, totalItems));
-          setLoadedStart(loadedStart + loadChunkSize);
-          setLoadedEnd(Math.min(loadedEnd + loadChunkSize, totalItems));
-        }
-
-        setTimeout(() => {
+        setTotalVisible(loadChunkSize * 2);
+        setLoadedStart(0);
+        setLoadedEnd(loadChunkSize * 2);
+        requestAnimationFrame(() => {
           isUpdatingWindow.current = false;
-        }, 100);
+        });
       }
-    } else if (e.deltaY < 0) {
-      // Scrolling up
-      if (loadedStart > 0) {
-        e.preventDefault();
-        isUpdatingWindow.current = true;
-
-        // Save positions before update
-        saveItemPositions();
-
-        // Load previous chunk
-        setLoadedStart(Math.max(0, loadedStart - loadChunkSize));
-        setLoadedEnd(loadedEnd - loadChunkSize);
-
-        // If we're back at start, reduce total visible
-        if (loadedStart - loadChunkSize <= 0) {
-          setTotalVisible(loadChunkSize);
-        }
-
-        setTimeout(() => {
-          isUpdatingWindow.current = false;
-        }, 100);
-      }
+      return;
     }
-  }, [creatives, filterText, totalVisible, loadedStart, loadedEnd, saveItemPositions, loadChunkSize]);
 
-  // Setup wheel listener
+    // Calculate viewport boundaries
+    const viewportStart = scrollTop;
+    const viewportEnd = scrollTop + clientHeight;
+
+    // Find which chunks intersect with the viewport based on actual boundaries
+    const visibleChunks = [];
+    chunkBoundaries.current.forEach((bounds, chunkIndex) => {
+      // Check if chunk's bounding box intersects with viewport
+      if (bounds.end >= viewportStart && bounds.start <= viewportEnd) {
+        visibleChunks.push(chunkIndex);
+      }
+    });
+
+    if (visibleChunks.length === 0) {
+      // No chunks visible - viewport is beyond loaded content
+      // Load based on scroll position relative to max column height
+      const maxColHeight = Math.max(...Object.values(columnHeights));
+
+      if (scrollTop > maxColHeight) {
+        // Scrolled beyond loaded content - do nothing, wait for more to load
+        return;
+      }
+
+      // Before loaded content - load from start
+      const targetStart = 0;
+      const targetEnd = Math.min(totalItems, loadChunkSize * 2);
+      const targetVisible = targetEnd;
+
+      if (targetStart !== loadedStart || targetEnd !== loadedEnd) {
+        isUpdatingWindow.current = true;
+        lastUpdateTime.current = Date.now();
+        console.log(`📊 Viewport before content | Loading chunks 0-1 | Range: ${targetStart}-${targetEnd}`);
+        saveItemPositions();
+        setTotalVisible(targetVisible);
+        setLoadedStart(targetStart);
+        setLoadedEnd(targetEnd);
+        requestAnimationFrame(() => {
+          isUpdatingWindow.current = false;
+        });
+      }
+      return;
+    }
+
+    // Get the range of visible chunks
+    const minVisibleChunk = Math.min(...visibleChunks);
+    const maxVisibleChunk = Math.max(...visibleChunks);
+
+    // Load visible chunks + 1 before + 1 after for buffering
+    const totalChunks = Math.ceil(totalItems / loadChunkSize);
+    const targetStartChunk = Math.max(0, minVisibleChunk - 1);
+    const targetEndChunk = Math.min(totalChunks - 1, maxVisibleChunk + 1);
+
+    const targetStart = targetStartChunk * loadChunkSize;
+    const targetEnd = Math.min(totalItems, (targetEndChunk + 1) * loadChunkSize);
+    const targetVisible = Math.max(targetEnd, loadChunkSize * 2);
+
+    // Only update if the range has changed
+    if (targetStart !== loadedStart || targetEnd !== loadedEnd) {
+      isUpdatingWindow.current = true;
+      lastUpdateTime.current = Date.now();
+
+      // Log visible chunks with their actual boundaries
+      const chunkInfo = visibleChunks.map(idx => {
+        const bounds = chunkBoundaries.current.get(idx);
+        return `Chunk ${idx} (${Math.round(bounds.start)}-${Math.round(bounds.end)}px)`;
+      }).join(', ');
+
+      console.log(`📊 Scroll: ${Math.round(scrollTop)}px | Viewport: ${Math.round(viewportStart)}-${Math.round(viewportEnd)}px`);
+      console.log(`   Visible: ${chunkInfo}`);
+      console.log(`   Loading chunks ${targetStartChunk}-${targetEndChunk} | Items: ${targetStart}-${targetEnd}`);
+
+      // Save positions before update
+      saveItemPositions();
+
+      setTotalVisible(targetVisible);
+      setLoadedStart(targetStart);
+      setLoadedEnd(targetEnd);
+
+      requestAnimationFrame(() => {
+        isUpdatingWindow.current = false;
+      });
+    }
+  }, [creatives, filterText, loadedStart, loadedEnd, saveItemPositions, loadChunkSize, columnHeights]);
+
+  // Setup scroll listener
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
-      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('scroll', handleScroll);
     };
-  }, [handleWheel]);
+  }, [handleScroll]);
 
   // Reset state when filter changes
   useEffect(() => {
-    setTotalVisible(loadChunkSize);
+    console.log(`🔄 Filter changed: "${filterText}" - Resetting sequential loading`);
+    setTotalVisible(loadChunkSize * 2);
     setLoadedStart(0);
-    setLoadedEnd(loadChunkSize);
-    // Reset sequential loading
-    setColumnItems({ 0: [], 1: [], 2: [], 3: [] });
-    setColumnHeights({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    setLoadedEnd(loadChunkSize * 2);
+    // Reset sequential loading completely with current column count
+    setColumnItems(initializeColumns(columnCount));
+    setColumnHeights(initializeHeights(columnCount));
     setNextItemIndex(0);
-  }, [filterText, loadChunkSize]);
+    // Clear chunk boundaries
+    chunkBoundaries.current.clear();
+    // Clear saved item positions
+    itemPositions.current.clear();
+
+    // Scroll to top when filter changes
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [filterText, loadChunkSize, columnCount]);
 
   // Clear column assignments when view mode changes
   useEffect(() => {
     itemColumnAssignments.current.clear();
-    console.log('Column assignments cleared due to view mode change:', viewMode);
-    // Reset sequential loading
-    setColumnItems({ 0: [], 1: [], 2: [], 3: [] });
-    setColumnHeights({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    console.log(`🔄 View mode changed to ${viewMode} (${columnCount} columns) - Resetting sequential loading`);
+    // Reset sequential loading with new column count
+    setColumnItems(initializeColumns(columnCount));
+    setColumnHeights(initializeHeights(columnCount));
     setNextItemIndex(0);
-  }, [viewMode]);
+    // Clear chunk boundaries
+    chunkBoundaries.current.clear();
+    // Clear saved item positions
+    itemPositions.current.clear();
+  }, [viewMode, columnCount]);
 
   // When loaded range changes, only reload the newly visible items
   useEffect(() => {
-    if (viewMode === 'grid4') {
+    if (viewMode === 'grid3' || viewMode === 'grid4') {
       console.log(`🔄 Loaded range changed: ${loadedStart}-${loadedEnd}`);
 
       // Find items that need to be loaded (within new range but not already loaded)
@@ -396,18 +509,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   }));
 
   // Get the current item that should be loading (only if within loaded range)
-  const currentLoadingItem = (nextItemIndex >= loadedStart && nextItemIndex < loadedEnd)
-    ? filteredCreatives[nextItemIndex]
+  // Use allFilteredCreatives (full filtered list) not filteredCreatives (visible slice)
+  const currentLoadingItem = (nextItemIndex >= loadedStart && nextItemIndex < loadedEnd && nextItemIndex < totalCreatives)
+    ? allFilteredCreatives[nextItemIndex]
     : null;
 
-  // Simple round-robin for grid3 (fallback)
-  const grid3Columns = useMemo(() => {
-    const columns = [[], [], []];
-    filteredCreatives.forEach((item, index) => {
-      columns[index % 3].push(item);
-    });
-    return columns;
-  }, [filteredCreatives]);
+  // Debug logging
+  if (viewMode === 'grid3' || viewMode === 'grid4') {
+    console.log(`🔍 Loading state: nextItemIndex=${nextItemIndex}, loadedStart=${loadedStart}, loadedEnd=${loadedEnd}, totalCreatives=${totalCreatives}, currentLoadingItem=${currentLoadingItem ? currentLoadingItem.filename : 'null'}`);
+  }
+
+  // Calculate max column height for background container (add 10% of viewport height)
+  const maxColumnHeight = Math.max(...Object.values(columnHeights));
+  const containerHeight = maxColumnHeight + (typeof window !== 'undefined' ? window.innerHeight * 0.1 : 80);
 
   // For debugging
   const unloadedCount = totalVisible - (loadedEnd - loadedStart);
@@ -462,7 +576,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       {/* Content */}
       <div
         ref={scrollContainerRef}
-        className="p-8 overflow-y-hidden"
+        className="p-8 overflow-y-auto"
         style={{ height: 'calc(100vh - 100px)' }}
       >
         <div className="max-w-7xl mx-auto">
@@ -519,12 +633,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
           {/* Assets Grid */}
           {viewMode === 'grid3' ? (
-            <div ref={gridRef} className="flex gap-4">
-              {grid3Columns.map((column, columnIndex) => (
-                <div key={columnIndex} className="flex-1 flex flex-col gap-4">
-                  {column.map(creative => {
-                    // Show grey placeholder if marked as placeholder
-                    if (creative.isPlaceholder) {
+            <div className="relative">
+              {/* Background container */}
+              <div
+                className="absolute top-0 left-0 right-0 bg-transparent pointer-events-none"
+                style={{ height: `${containerHeight}px` }}
+              />
+
+              {/* Masonry grid */}
+              <div ref={gridRef} className="flex gap-4 relative z-10">
+                {Object.keys(columnItems).map((columnIndex) => (
+                  <div key={columnIndex} className="flex-1 flex flex-col gap-4">
+                  {/* Render already-loaded items in this column */}
+                  {columnItems[columnIndex].map(creative => {
+                    // Check if item is outside loaded range - show placeholder
+                    const isOutsideRange = creative.originalIndex < loadedStart || creative.originalIndex >= loadedEnd;
+
+                    if (isOutsideRange) {
                       const savedHeight = itemPositions.current.get(creative.id)?.height || 300;
                       return (
                         <div
@@ -650,13 +775,80 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                       </div>
                     );
                   })}
+
+                  {/* Render the currently-loading item (hidden, just for loading) */}
+                  {currentLoadingItem && columnIndex === '0' && (() => {
+                    const isVideo = currentLoadingItem.extension === 'mp4';
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(currentLoadingItem.extension);
+
+                    console.log(`🎯 Rendering hidden loader for item #${nextItemIndex}: ${currentLoadingItem.filename} (${isVideo ? 'video' : isImage ? 'image' : 'unknown'})`);
+
+                    return (
+                      <div key={`loader-${nextItemIndex}`} style={{position: 'absolute', left: '-9999px', width: '200px'}}>
+                        {isImage && (
+                          <img
+                            ref={(el) => {
+                              loadingImageRef.current = el;
+                              // Check if image already loaded (cached)
+                              if (el && el.complete && el.naturalHeight !== 0) {
+                                console.log(`✅ Image already loaded (cached): ${currentLoadingItem.filename}`);
+                                // Trigger the handler directly since onLoad won't fire
+                                handleImageLoaded(currentLoadingItem, nextItemIndex, { target: el });
+                              }
+                            }}
+                            src={currentLoadingItem.url}
+                            alt="loading"
+                            onLoad={(e) => {
+                              console.log(`✅ onLoad fired for ${currentLoadingItem.filename}`);
+                              handleImageLoaded(currentLoadingItem, nextItemIndex, e);
+                            }}
+                            onError={(e) => {
+                              console.error(`❌ onError fired for ${currentLoadingItem.filename}`, e);
+                              setNextItemIndex(nextItemIndex + 1);
+                            }}
+                          />
+                        )}
+                        {isVideo && (
+                          <video
+                            ref={(el) => {
+                              loadingImageRef.current = el;
+                              // Check if video metadata already loaded
+                              if (el && el.readyState >= 1) {
+                                console.log(`✅ Video metadata already loaded: ${currentLoadingItem.filename}`);
+                                handleImageLoaded(currentLoadingItem, nextItemIndex, { target: el });
+                              }
+                            }}
+                            src={currentLoadingItem.url}
+                            onLoadedMetadata={(e) => {
+                              console.log(`✅ onLoadedMetadata fired for ${currentLoadingItem.filename}`);
+                              handleImageLoaded(currentLoadingItem, nextItemIndex, e);
+                            }}
+                            onError={(e) => {
+                              console.error(`❌ onError fired for ${currentLoadingItem.filename}`, e);
+                              setNextItemIndex(nextItemIndex + 1);
+                            }}
+                            preload="metadata"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
+              </div>
             </div>
           ) : viewMode === 'grid4' ? (
-            <div ref={gridRef} className="flex gap-4">
-              {[0, 1, 2, 3].map((columnIndex) => (
-                <div key={columnIndex} className="flex-1 flex flex-col gap-4">
+            <div className="relative">
+              {/* Background container that extends 1 viewport beyond content */}
+              <div
+                className="absolute top-0 left-0 right-0 bg-transparent pointer-events-none"
+                style={{ height: `${containerHeight}px` }}
+              />
+
+              {/* Masonry grid */}
+              <div ref={gridRef} className="flex gap-4 relative z-10">
+                {Object.keys(columnItems).map((columnIndex) => (
+                  <div key={columnIndex} className="flex-1 flex flex-col gap-4">
                   {/* Render already-loaded items in this column */}
                   {columnItems[columnIndex].map(creative => {
                     // Check if item is outside loaded range - show placeholder
@@ -680,18 +872,39 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                     const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
                     const isSelected = selectedCreativeIds.has(creative.id);
 
+                    let longPressTimer = null;
+
+                    const handleMouseDown = () => {
+                      longPressTimer = setTimeout(() => {
+                        setSelectorMode(true);
+                      }, 500);
+                    };
+
+                    const handleMouseUp = () => {
+                      if (longPressTimer) {
+                        clearTimeout(longPressTimer);
+                      }
+                    };
+
+                    const handleClick = () => {
+                      if (selectorMode) {
+                        toggleCreativeSelection(creative.id);
+                      } else {
+                        setSelectedCreative(creative);
+                      }
+                    };
+
                     return (
                       <div
                         key={creative.id}
                         data-creative-id={creative.id}
                         className="group cursor-pointer"
-                        onClick={() => {
-                          if (selectorMode) {
-                            toggleCreativeSelection(creative.id);
-                          } else {
-                            setSelectedCreative(creative);
-                          }
-                        }}
+                        onMouseDown={handleMouseDown}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        onTouchStart={handleMouseDown}
+                        onTouchEnd={handleMouseUp}
+                        onClick={handleClick}
                       >
                         <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
                           {selectorMode && (
@@ -763,19 +976,65 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                   })}
 
                   {/* Render the currently-loading item (hidden, just for loading) */}
-                  {currentLoadingItem && columnIndex === 0 && (
-                    <div style={{position: 'absolute', left: '-9999px'}}>
-                      <img
-                        ref={loadingImageRef}
-                        src={currentLoadingItem.url}
-                        alt="loading"
-                        onLoad={(e) => handleImageLoaded(currentLoadingItem, nextItemIndex, e)}
-                        onError={() => setNextItemIndex(nextItemIndex + 1)}
-                      />
-                    </div>
-                  )}
+                  {currentLoadingItem && columnIndex === '0' && (() => {
+                    const isVideo = currentLoadingItem.extension === 'mp4';
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(currentLoadingItem.extension);
+
+                    console.log(`🎯 Rendering hidden loader for item #${nextItemIndex}: ${currentLoadingItem.filename} (${isVideo ? 'video' : isImage ? 'image' : 'unknown'})`);
+
+                    return (
+                      <div key={`loader-${nextItemIndex}`} style={{position: 'absolute', left: '-9999px', width: '200px'}}>
+                        {isImage && (
+                          <img
+                            ref={(el) => {
+                              loadingImageRef.current = el;
+                              // Check if image already loaded (cached)
+                              if (el && el.complete && el.naturalHeight !== 0) {
+                                console.log(`✅ Image already loaded (cached): ${currentLoadingItem.filename}`);
+                                // Trigger the handler directly since onLoad won't fire
+                                handleImageLoaded(currentLoadingItem, nextItemIndex, { target: el });
+                              }
+                            }}
+                            src={currentLoadingItem.url}
+                            alt="loading"
+                            onLoad={(e) => {
+                              console.log(`✅ onLoad fired for ${currentLoadingItem.filename}`);
+                              handleImageLoaded(currentLoadingItem, nextItemIndex, e);
+                            }}
+                            onError={(e) => {
+                              console.error(`❌ onError fired for ${currentLoadingItem.filename}`, e);
+                              setNextItemIndex(nextItemIndex + 1);
+                            }}
+                          />
+                        )}
+                        {isVideo && (
+                          <video
+                            ref={(el) => {
+                              loadingImageRef.current = el;
+                              // Check if video metadata already loaded
+                              if (el && el.readyState >= 1) {
+                                console.log(`✅ Video metadata already loaded: ${currentLoadingItem.filename}`);
+                                handleImageLoaded(currentLoadingItem, nextItemIndex, { target: el });
+                              }
+                            }}
+                            src={currentLoadingItem.url}
+                            onLoadedMetadata={(e) => {
+                              console.log(`✅ onLoadedMetadata fired for ${currentLoadingItem.filename}`);
+                              handleImageLoaded(currentLoadingItem, nextItemIndex, e);
+                            }}
+                            onError={(e) => {
+                              console.error(`❌ onError fired for ${currentLoadingItem.filename}`, e);
+                              setNextItemIndex(nextItemIndex + 1);
+                            }}
+                            preload="metadata"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
+              </div>
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
