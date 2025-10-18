@@ -24,7 +24,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
   // Virtual scrolling configuration
-  const loadChunkSize = 8; // Number of items to load/unload per wheel scroll
+  const loadChunkSize = 4; // Number of items to load/unload per wheel scroll
 
   // Virtual scrolling state - track total count and loaded range
   const [totalVisible, setTotalVisible] = useState(loadChunkSize); // Total items to render (grows with scrolling)
@@ -35,6 +35,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const itemPositions = useRef(new Map()); // Track positions of items
   const itemColumnAssignments = useRef(new Map()); // Track which column each item is in
   const gridRef = useRef(null);
+  const columnRefs = useRef([]); // Refs for each column div
+
+  // Sequential masonry loading state
+  const [columnItems, setColumnItems] = useState({ 0: [], 1: [], 2: [], 3: [] }); // Items assigned to each column
+  const [columnHeights, setColumnHeights] = useState({ 0: 0, 1: 0, 2: 0, 3: 0 }); // Track column heights
+  const [nextItemIndex, setNextItemIndex] = useState(0); // Next item to load
+  const loadingItemRef = useRef(null); // Currently loading item
+  const loadingImageRef = useRef(null); // Ref to the loading image element
 
   useEffect(() => {
     loadCreatives();
@@ -59,6 +67,56 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       });
     });
   }, []);
+
+  // Handle image load - add to shortest column and trigger next
+  const handleImageLoaded = useCallback((creative, itemIndex, event) => {
+    console.log(`\n📸 Image #${itemIndex} loaded: ${creative.filename}`);
+
+    // Get the loaded image dimensions
+    const img = event.target;
+    const imageHeight = img.naturalHeight;
+    const imageWidth = img.naturalWidth;
+
+    // Calculate rendered height based on column width (assuming equal columns)
+    // The grid has 4 columns with gaps, so approximate width per column
+    const columnWidth = (gridRef.current?.offsetWidth || 1000) / 4 - 16; // Subtract gap
+    const renderedHeight = (imageHeight / imageWidth) * columnWidth;
+
+    console.log(`📐 Image dimensions: ${imageWidth}x${imageHeight} → Rendered height: ${Math.round(renderedHeight)}px`);
+
+    // Find shortest column from current state
+    const heights = [
+      columnHeights[0],
+      columnHeights[1],
+      columnHeights[2],
+      columnHeights[3]
+    ];
+    const shortestCol = heights.indexOf(Math.min(...heights));
+
+    console.log(`📏 Column heights:`, heights, `| Shortest: Column ${shortestCol} (${Math.round(heights[shortestCol])}px)`);
+
+    // Save the item height for future placeholder use
+    itemPositions.current.set(creative.id, {
+      height: renderedHeight
+    });
+
+    // Add item to the shortest column
+    setColumnItems(prev => {
+      const updated = { ...prev };
+      updated[shortestCol] = [...updated[shortestCol], { ...creative, originalIndex: itemIndex }];
+      console.log(`✅ Added to Column ${shortestCol} | Column now has ${updated[shortestCol].length} items`);
+      return updated;
+    });
+
+    // Update column height (add image height + gap)
+    setColumnHeights(prev => ({
+      ...prev,
+      [shortestCol]: prev[shortestCol] + renderedHeight + 16 // 16px gap
+    }));
+
+    // Load next item (but don't exceed loadedEnd)
+    setNextItemIndex(itemIndex + 1);
+  }, [columnHeights]);
 
   // Wheel-based virtual scrolling - 1st scroll: add chunk, 2nd scroll: add chunk + unload first chunk
   const handleWheel = useCallback((e) => {
@@ -136,13 +194,48 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     setTotalVisible(loadChunkSize);
     setLoadedStart(0);
     setLoadedEnd(loadChunkSize);
+    // Reset sequential loading
+    setColumnItems({ 0: [], 1: [], 2: [], 3: [] });
+    setColumnHeights({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    setNextItemIndex(0);
   }, [filterText, loadChunkSize]);
 
   // Clear column assignments when view mode changes
   useEffect(() => {
     itemColumnAssignments.current.clear();
     console.log('Column assignments cleared due to view mode change:', viewMode);
+    // Reset sequential loading
+    setColumnItems({ 0: [], 1: [], 2: [], 3: [] });
+    setColumnHeights({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    setNextItemIndex(0);
   }, [viewMode]);
+
+  // When loaded range changes, only reload the newly visible items
+  useEffect(() => {
+    if (viewMode === 'grid4') {
+      console.log(`🔄 Loaded range changed: ${loadedStart}-${loadedEnd}`);
+
+      // Find items that need to be loaded (within new range but not already loaded)
+      const currentLoadedIndices = new Set();
+      Object.values(columnItems).flat().forEach(item => {
+        currentLoadedIndices.add(item.originalIndex);
+      });
+
+      // Check if we need to reload from scratch
+      let needsReload = false;
+      for (let i = loadedStart; i < loadedEnd; i++) {
+        if (!currentLoadedIndices.has(i)) {
+          needsReload = true;
+          break;
+        }
+      }
+
+      // Only reset if we actually need new items
+      if (needsReload && currentLoadedIndices.size === 0) {
+        setNextItemIndex(loadedStart);
+      }
+    }
+  }, [loadedStart, loadedEnd, viewMode, columnItems]);
 
   const toggleSelectorMode = () => {
     setSelectorMode(!selectorMode);
@@ -302,68 +395,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     originalIndex: index // Add original index for debugging
   }));
 
-  // Masonry distribution: Distribute items across columns balancing by height
-  const distributeToColumns = useCallback((items, columnCount) => {
-    const columns = Array.from({ length: columnCount }, () => []);
-    const columnHeights = Array(columnCount).fill(0);
+  // Get the current item that should be loading (only if within loaded range)
+  const currentLoadingItem = (nextItemIndex >= loadedStart && nextItemIndex < loadedEnd)
+    ? filteredCreatives[nextItemIndex]
+    : null;
 
-    console.log(`\n=== Distributing ${items.length} items across ${columnCount} columns ===`);
-
-    // First pass: place already-loaded items in their assigned columns
-    const unassignedItems = [];
-
-    items.forEach((item) => {
-      const existingColumn = itemColumnAssignments.current.get(item.id);
-
-      // If item already has a column assignment AND is loaded (not placeholder), preserve it
-      if (existingColumn !== undefined && !item.isPlaceholder && existingColumn < columnCount) {
-        columns[existingColumn].push(item);
-        const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
-        columnHeights[existingColumn] += estimatedHeight;
-
-        console.log(`Item ${item.originalIndex} (${item.id?.substring(0, 8)}) → Column ${existingColumn} [PRESERVED] (placeholder: ${item.isPlaceholder})`);
-      } else {
-        // New item or placeholder - will be assigned in second pass
-        unassignedItems.push(item);
-      }
+  // Simple round-robin for grid3 (fallback)
+  const grid3Columns = useMemo(() => {
+    const columns = [[], [], []];
+    filteredCreatives.forEach((item, index) => {
+      columns[index % 3].push(item);
     });
-
-    // Second pass: assign new items and placeholders to shortest columns
-    unassignedItems.forEach((item) => {
-      const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
-
-      columns[shortestColumnIndex].push(item);
-      const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
-      columnHeights[shortestColumnIndex] += estimatedHeight;
-
-      // Save the column assignment for non-placeholder items
-      if (!item.isPlaceholder) {
-        itemColumnAssignments.current.set(item.id, shortestColumnIndex);
-      }
-
-      console.log(`Item ${item.originalIndex} (${item.id?.substring(0, 8)}) → Column ${shortestColumnIndex} [NEW] (placeholder: ${item.isPlaceholder})`);
-    });
-
-    console.log('Column heights:', columnHeights);
-    console.log('Items per column:', columns.map(col => col.length));
-
     return columns;
-  }, []);
-
-  // Distribute only the visible items
-  const grid3Columns = useMemo(
-    () => distributeToColumns(filteredCreatives, 3),
-    [filteredCreatives, distributeToColumns]
-  );
-
-  const grid4Columns = useMemo(
-    () => distributeToColumns(filteredCreatives, 4),
-    [filteredCreatives, distributeToColumns]
-  );
+  }, [filteredCreatives]);
 
   // For debugging
   const unloadedCount = totalVisible - (loadedEnd - loadedStart);
-  const debugInfo = `Showing ${totalVisible} of ${totalCreatives} (loaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'})`;
+  const debugInfo = `Showing ${totalVisible} of ${totalCreatives} (loaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'}) | Next to load: #${nextItemIndex}`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -529,11 +577,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         onClick={handleClick}
                       >
                         <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
-                          {/* Item number badge */}
-                          <div className="absolute top-2 left-2 z-[5] bg-yellow-500 text-black font-bold px-2 py-1 rounded text-xs">
-                            #{creative.originalIndex}
-                          </div>
-
                           {selectorMode && (
                             <div className="absolute top-2 right-2 z-[5]">
                               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -612,11 +655,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             </div>
           ) : viewMode === 'grid4' ? (
             <div ref={gridRef} className="flex gap-4">
-              {grid4Columns.map((column, columnIndex) => (
+              {[0, 1, 2, 3].map((columnIndex) => (
                 <div key={columnIndex} className="flex-1 flex flex-col gap-4">
-                  {column.map(creative => {
-                    // Show grey placeholder if marked as placeholder
-                    if (creative.isPlaceholder) {
+                  {/* Render already-loaded items in this column */}
+                  {columnItems[columnIndex].map(creative => {
+                    // Check if item is outside loaded range - show placeholder
+                    const isOutsideRange = creative.originalIndex < loadedStart || creative.originalIndex >= loadedEnd;
+
+                    if (isOutsideRange) {
                       const savedHeight = itemPositions.current.get(creative.id)?.height || 300;
                       return (
                         <div
@@ -634,46 +680,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                     const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
                     const isSelected = selectedCreativeIds.has(creative.id);
 
-                    let longPressTimer = null;
-
-                    const handleMouseDown = () => {
-                      longPressTimer = setTimeout(() => {
-                        setSelectorMode(true);
-                      }, 500);
-                    };
-
-                    const handleMouseUp = () => {
-                      if (longPressTimer) {
-                        clearTimeout(longPressTimer);
-                      }
-                    };
-
-                    const handleClick = () => {
-                      if (selectorMode) {
-                        toggleCreativeSelection(creative.id);
-                      } else {
-                        setSelectedCreative(creative);
-                      }
-                    };
-
                     return (
                       <div
                         key={creative.id}
                         data-creative-id={creative.id}
                         className="group cursor-pointer"
-                        onMouseDown={handleMouseDown}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        onTouchStart={handleMouseDown}
-                        onTouchEnd={handleMouseUp}
-                        onClick={handleClick}
+                        onClick={() => {
+                          if (selectorMode) {
+                            toggleCreativeSelection(creative.id);
+                          } else {
+                            setSelectedCreative(creative);
+                          }
+                        }}
                       >
                         <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
-                          {/* Item number badge */}
-                          <div className="absolute top-2 left-2 z-[5] bg-yellow-500 text-black font-bold px-2 py-1 rounded text-xs">
-                            #{creative.originalIndex}
-                          </div>
-
                           {selectorMode && (
                             <div className="absolute top-2 right-2 z-[5]">
                               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -691,7 +711,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                               src={creative.url}
                               alt={creative.filename}
                               className="w-full h-auto object-cover"
-                              loading="lazy"
                             />
                           )}
                           {isVideo && (
@@ -700,11 +719,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                               className="w-full h-auto object-cover"
                               preload="metadata"
                             />
-                          )}
-                          {!isImage && !isVideo && (
-                            <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
-                              <ImageIcon size={48} className="text-gray-400" />
-                            </div>
                           )}
 
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
@@ -747,6 +761,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                       </div>
                     );
                   })}
+
+                  {/* Render the currently-loading item (hidden, just for loading) */}
+                  {currentLoadingItem && columnIndex === 0 && (
+                    <div style={{position: 'absolute', left: '-9999px'}}>
+                      <img
+                        ref={loadingImageRef}
+                        src={currentLoadingItem.url}
+                        alt="loading"
+                        onLoad={(e) => handleImageLoaded(currentLoadingItem, nextItemIndex, e)}
+                        onError={() => setNextItemIndex(nextItemIndex + 1)}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
