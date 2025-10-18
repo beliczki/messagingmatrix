@@ -23,13 +23,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
-  // Virtual scrolling state
-  const [windowStart, setWindowStart] = useState(0);
-  const [windowSize] = useState(42);
-  const [topSpacerHeight, setTopSpacerHeight] = useState(0);
-  const [bottomSpacerHeight, setBottomSpacerHeight] = useState(0);
+  // Virtual scrolling state - track total count and loaded range
+  const [totalVisible, setTotalVisible] = useState(6); // Total items to render (grows with scrolling)
+  const [loadedStart, setLoadedStart] = useState(0); // Start of loaded range
+  const [loadedEnd, setLoadedEnd] = useState(6); // End of loaded range
   const scrollContainerRef = useRef(null);
-  const lastScrollY = useRef(0);
   const isUpdatingWindow = useRef(false);
   const itemPositions = useRef(new Map()); // Track positions of items
   const gridRef = useRef(null);
@@ -52,143 +50,88 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     items.forEach(item => {
       const id = item.getAttribute('data-creative-id');
       const rect = item.getBoundingClientRect();
-      const containerRect = scrollContainerRef.current.getBoundingClientRect();
       itemPositions.current.set(id, {
-        top: rect.top - containerRect.top + scrollContainerRef.current.scrollTop,
         height: rect.height
       });
     });
   }, []);
 
-  // Calculate spacer height for items in a masonry layout
-  const calculateSpacerHeight = useCallback((items, columnCount) => {
-    if (items.length === 0) return 0;
-
-    const columnHeights = Array(columnCount).fill(0);
-    const gapSize = 16; // Tailwind gap-4 = 1rem = 16px
-
-    items.forEach((item) => {
-      const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
-      const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
-      columnHeights[shortestColumnIndex] += estimatedHeight + gapSize;
-    });
-
-    return Math.max(...columnHeights);
-  }, []);
-
-  // Virtual scrolling handler
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current || isUpdatingWindow.current) return;
-
-    const container = scrollContainerRef.current;
-    const scrollY = container.scrollTop;
-    const scrollDirection = scrollY > lastScrollY.current ? 'down' : 'up';
-    lastScrollY.current = scrollY;
+  // Wheel-based virtual scrolling - 1st scroll: add 6, 2nd scroll: add 6 + unload first 6
+  const handleWheel = useCallback((e) => {
+    if (isUpdatingWindow.current) {
+      e.preventDefault();
+      return;
+    }
 
     // Get total items after filtering
     const totalItems = filterAssets(creatives, filterText).length;
 
-    // Calculate scroll percentage based on viewport
-    const scrollHeight = container.scrollHeight - container.clientHeight;
-    const scrollPercent = scrollHeight > 0 ? scrollY / scrollHeight : 0;
+    if (e.deltaY > 0) {
+      // Scrolling down
+      if (totalVisible < totalItems) {
+        e.preventDefault();
+        isUpdatingWindow.current = true;
 
-    // Calculate approximate item index based on scroll position
-    const approximateItemIndex = Math.floor(scrollPercent * totalItems);
+        // Save positions before update
+        saveItemPositions();
 
-    // Get current window end
-    const currentWindowEnd = windowStart + windowSize;
-    const currentWindowMiddle = windowStart + Math.floor(windowSize / 2);
-
-    // Determine column count based on view mode (list view doesn't use masonry)
-    const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 1;
-
-    if (scrollDirection === 'down') {
-      // Scrolling down: if we're past the middle, load next batch
-      if (approximateItemIndex > currentWindowMiddle && currentWindowEnd < totalItems) {
-        const newStart = Math.min(windowStart + 12, totalItems - windowSize);
-        if (newStart > windowStart) {
-          isUpdatingWindow.current = true;
-
-          // Save positions before update
-          saveItemPositions();
-
-          // Update window
-          setWindowStart(newStart);
-
-          // Calculate spacer heights
-          const allFiltered = filterAssets(creatives, filterText);
-          const itemsBefore = allFiltered.slice(0, newStart);
-          const itemsAfter = allFiltered.slice(newStart + windowSize);
-
-          const topHeight = calculateSpacerHeight(itemsBefore, columnCount);
-          const bottomHeight = calculateSpacerHeight(itemsAfter, columnCount);
-
-          setTopSpacerHeight(topHeight);
-          setBottomSpacerHeight(bottomHeight);
-
-          setTimeout(() => {
-            isUpdatingWindow.current = false;
-          }, 50);
+        if (totalVisible === 6) {
+          // First scroll: add 6 more (6 → 12), all loaded
+          setTotalVisible(12);
+          setLoadedStart(0);
+          setLoadedEnd(12);
+        } else {
+          // Second+ scroll: add 6 more, unload first 6
+          setTotalVisible(Math.min(totalVisible + 6, totalItems));
+          setLoadedStart(loadedStart + 6);
+          setLoadedEnd(Math.min(loadedEnd + 6, totalItems));
         }
+
+        setTimeout(() => {
+          isUpdatingWindow.current = false;
+        }, 100);
       }
-    } else if (scrollDirection === 'up') {
-      // Scrolling up: if we're before 25% of window, load previous batch
-      const currentWindowQuarter = windowStart + Math.floor(windowSize / 4);
-      if (approximateItemIndex < currentWindowQuarter && windowStart > 0) {
-        const newStart = Math.max(windowStart - 12, 0);
-        if (newStart < windowStart) {
-          isUpdatingWindow.current = true;
+    } else if (e.deltaY < 0) {
+      // Scrolling up
+      if (loadedStart > 0) {
+        e.preventDefault();
+        isUpdatingWindow.current = true;
 
-          // Save positions before update
-          saveItemPositions();
+        // Save positions before update
+        saveItemPositions();
 
-          // Update window
-          setWindowStart(newStart);
+        // Load previous 6
+        setLoadedStart(Math.max(0, loadedStart - 6));
+        setLoadedEnd(loadedEnd - 6);
 
-          // Calculate spacer heights
-          const allFiltered = filterAssets(creatives, filterText);
-          const itemsBefore = allFiltered.slice(0, newStart);
-          const itemsAfter = allFiltered.slice(newStart + windowSize);
-
-          const topHeight = calculateSpacerHeight(itemsBefore, columnCount);
-          const bottomHeight = calculateSpacerHeight(itemsAfter, columnCount);
-
-          setTopSpacerHeight(topHeight);
-          setBottomSpacerHeight(bottomHeight);
-
-          setTimeout(() => {
-            isUpdatingWindow.current = false;
-          }, 50);
+        // If we're back at start, reduce total visible
+        if (loadedStart - 6 <= 0) {
+          setTotalVisible(6);
         }
+
+        setTimeout(() => {
+          isUpdatingWindow.current = false;
+        }, 100);
       }
     }
-  }, [creatives, filterText, windowStart, windowSize, viewMode, saveItemPositions, calculateSpacerHeight]);
+  }, [creatives, filterText, totalVisible, loadedStart, loadedEnd, saveItemPositions]);
 
-  // Setup scroll listener
+  // Setup wheel listener
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    // Throttle scroll events
-    let scrollTimeout;
-    const throttledScroll = () => {
-      if (scrollTimeout) return;
-      scrollTimeout = setTimeout(() => {
-        handleScroll();
-        scrollTimeout = null;
-      }, 100);
-    };
-
-    container.addEventListener('scroll', throttledScroll);
+    container.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
-      container.removeEventListener('scroll', throttledScroll);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      container.removeEventListener('wheel', handleWheel);
     };
-  }, [handleScroll]);
+  }, [handleWheel]);
 
-  // Reset window when filter changes
+  // Reset state when filter changes
   useEffect(() => {
-    setWindowStart(0);
+    setTotalVisible(6);
+    setLoadedStart(0);
+    setLoadedEnd(6);
   }, [filterText]);
 
   const toggleSelectorMode = () => {
@@ -337,11 +280,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     e.preventDefault();
   };
 
-  // Get filtered creatives and apply virtual scrolling window
+  // Get filtered creatives - render from 0 to totalVisible with placeholders
   const allFilteredCreatives = filterAssets(creatives, filterText);
   const totalCreatives = allFilteredCreatives.length;
-  const windowEnd = Math.min(windowStart + windowSize, totalCreatives);
-  const filteredCreatives = allFilteredCreatives.slice(windowStart, windowEnd);
+  const visibleItems = allFilteredCreatives.slice(0, totalVisible);
+
+  // Mark which items should show placeholders (outside loaded range)
+  const filteredCreatives = visibleItems.map((item, index) => ({
+    ...item,
+    isPlaceholder: index < loadedStart || index >= loadedEnd
+  }));
 
   // Masonry distribution: Distribute items across columns balancing by height
   const distributeToColumns = useCallback((items, columnCount) => {
@@ -363,7 +311,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     return columns;
   }, []);
 
-  // Distribute items for grid views
+  // Distribute only the visible items
   const grid3Columns = useMemo(
     () => distributeToColumns(filteredCreatives, 3),
     [filteredCreatives, distributeToColumns]
@@ -375,7 +323,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   );
 
   // For debugging
-  const debugInfo = `Showing ${windowStart + 1}-${windowEnd} of ${totalCreatives}`;
+  const unloadedCount = totalVisible - (loadedEnd - loadedStart);
+  const debugInfo = `Showing ${totalVisible} of ${totalCreatives} (loaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'})`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -426,7 +375,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       {/* Content */}
       <div
         ref={scrollContainerRef}
-        className="p-8 overflow-y-auto"
+        className="p-8 overflow-y-hidden"
         style={{ height: 'calc(100vh - 100px)' }}
       >
         <div className="max-w-7xl mx-auto">
@@ -480,10 +429,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               </>
             )}
           </div>
-          {/* Top Spacer */}
-          {topSpacerHeight > 0 && (
-            <div style={{ height: `${topSpacerHeight}px` }} />
-          )}
 
           {/* Assets Grid */}
           {viewMode === 'grid3' ? (
@@ -491,6 +436,21 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               {grid3Columns.map((column, columnIndex) => (
                 <div key={columnIndex} className="flex-1 flex flex-col gap-4">
                   {column.map(creative => {
+                    // Show grey placeholder if marked as placeholder
+                    if (creative.isPlaceholder) {
+                      const savedHeight = itemPositions.current.get(creative.id)?.height || 300;
+                      return (
+                        <div
+                          key={creative.id}
+                          data-creative-id={creative.id}
+                          className="rounded-lg bg-gray-200 flex items-center justify-center"
+                          style={{ height: `${savedHeight}px` }}
+                        >
+                          <div className="text-gray-400 text-sm">Unloaded</div>
+                        </div>
+                      );
+                    }
+
                     const isVideo = creative.extension === 'mp4';
                     const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
                     const isSelected = selectedCreativeIds.has(creative.id);
@@ -611,6 +571,21 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
               {grid4Columns.map((column, columnIndex) => (
                 <div key={columnIndex} className="flex-1 flex flex-col gap-4">
                   {column.map(creative => {
+                    // Show grey placeholder if marked as placeholder
+                    if (creative.isPlaceholder) {
+                      const savedHeight = itemPositions.current.get(creative.id)?.height || 300;
+                      return (
+                        <div
+                          key={creative.id}
+                          data-creative-id={creative.id}
+                          className="rounded-lg bg-gray-200 flex items-center justify-center"
+                          style={{ height: `${savedHeight}px` }}
+                        >
+                          <div className="text-gray-400 text-sm">Unloaded</div>
+                        </div>
+                      );
+                    }
+
                     const isVideo = creative.extension === 'mp4';
                     const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
                     const isSelected = selectedCreativeIds.has(creative.id);
@@ -818,12 +793,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             </div>
           )}
 
-          {/* Bottom Spacer */}
-          {bottomSpacerHeight > 0 && (
-            <div style={{ height: `${bottomSpacerHeight}px` }} />
-          )}
-
-          {filteredCreatives.length === 0 && (
+          {filteredCreatives.length === 0 && totalCreatives === 0 && (
             <div className="text-center py-12 text-gray-500">
               <ImageIcon size={48} className="mx-auto mb-4 text-gray-300" />
               <p>No creatives found</p>
