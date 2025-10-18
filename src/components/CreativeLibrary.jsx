@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Image as ImageIcon, Grid, List, Upload, X, Filter, Calendar, Tag, Monitor, Download, ExternalLink, CheckSquare, Square, Share2, Copy, Check, LayoutGrid } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import CreativeShare from './CreativeShare';
@@ -326,6 +326,37 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const windowEnd = Math.min(windowStart + windowSize, totalCreatives);
   const filteredCreatives = allFilteredCreatives.slice(windowStart, windowEnd);
 
+  // Masonry distribution: Distribute items across columns balancing by height
+  const distributeToColumns = useCallback((items, columnCount) => {
+    const columns = Array.from({ length: columnCount }, () => []);
+    const columnHeights = Array(columnCount).fill(0);
+
+    items.forEach((item) => {
+      // Find shortest column
+      const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
+
+      // Add item to shortest column
+      columns[shortestColumnIndex].push(item);
+
+      // Estimate item height based on saved position or default
+      const estimatedHeight = itemPositions.current.get(item.id)?.height || 300;
+      columnHeights[shortestColumnIndex] += estimatedHeight;
+    });
+
+    return columns;
+  }, []);
+
+  // Distribute items for grid views
+  const grid3Columns = useMemo(
+    () => distributeToColumns(filteredCreatives, 3),
+    [filteredCreatives, distributeToColumns]
+  );
+
+  const grid4Columns = useMemo(
+    () => distributeToColumns(filteredCreatives, 4),
+    [filteredCreatives, distributeToColumns]
+  );
+
   // For debugging
   const debugInfo = `Showing ${windowStart + 1}-${windowEnd} of ${totalCreatives}`;
 
@@ -434,236 +465,244 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           </div>
           {/* Assets Grid */}
           {viewMode === 'grid3' ? (
-            <div ref={gridRef} className="columns-1 sm:columns-2 lg:columns-3 gap-4">
-              {filteredCreatives.map(creative => {
-                const isVideo = creative.extension === 'mp4';
-                const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
-                const isSelected = selectedCreativeIds.has(creative.id);
+            <div ref={gridRef} className="flex gap-4">
+              {grid3Columns.map((column, columnIndex) => (
+                <div key={columnIndex} className="flex-1 flex flex-col gap-4">
+                  {column.map(creative => {
+                    const isVideo = creative.extension === 'mp4';
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
+                    const isSelected = selectedCreativeIds.has(creative.id);
 
-                let longPressTimer = null;
+                    let longPressTimer = null;
 
-                const handleMouseDown = () => {
-                  longPressTimer = setTimeout(() => {
-                    setSelectorMode(true);
-                  }, 500);
-                };
+                    const handleMouseDown = () => {
+                      longPressTimer = setTimeout(() => {
+                        setSelectorMode(true);
+                      }, 500);
+                    };
 
-                const handleMouseUp = () => {
-                  if (longPressTimer) {
-                    clearTimeout(longPressTimer);
-                  }
-                };
+                    const handleMouseUp = () => {
+                      if (longPressTimer) {
+                        clearTimeout(longPressTimer);
+                      }
+                    };
 
-                const handleClick = () => {
-                  if (selectorMode) {
-                    toggleCreativeSelection(creative.id);
-                  } else {
-                    setSelectedCreative(creative);
-                  }
-                };
+                    const handleClick = () => {
+                      if (selectorMode) {
+                        toggleCreativeSelection(creative.id);
+                      } else {
+                        setSelectedCreative(creative);
+                      }
+                    };
 
-                return (
-                  <div
-                    key={creative.id}
-                    data-creative-id={creative.id}
-                    className="group cursor-pointer mb-4 break-inside-avoid"
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    onClick={handleClick}
-                  >
-                    <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
-                      {selectorMode && (
-                        <div className="absolute top-2 right-2 z-[5]">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                            isSelected
-                              ? 'bg-blue-500 border-blue-500'
-                              : 'bg-white/80 border-white backdrop-blur-sm'
-                          }`}>
-                            {isSelected && <Check size={16} className="text-white" />}
+                    return (
+                      <div
+                        key={creative.id}
+                        data-creative-id={creative.id}
+                        className="group cursor-pointer"
+                        onMouseDown={handleMouseDown}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        onTouchStart={handleMouseDown}
+                        onTouchEnd={handleMouseUp}
+                        onClick={handleClick}
+                      >
+                        <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                          {selectorMode && (
+                            <div className="absolute top-2 right-2 z-[5]">
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                isSelected
+                                  ? 'bg-blue-500 border-blue-500'
+                                  : 'bg-white/80 border-white backdrop-blur-sm'
+                              }`}>
+                                {isSelected && <Check size={16} className="text-white" />}
+                              </div>
+                            </div>
+                          )}
+
+                          {isImage && (
+                            <img
+                              src={creative.url}
+                              alt={creative.filename}
+                              className="w-full h-auto object-cover"
+                              loading="lazy"
+                            />
+                          )}
+                          {isVideo && (
+                            <video
+                              src={creative.url}
+                              className="w-full h-auto object-cover"
+                              preload="metadata"
+                            />
+                          )}
+                          {!isImage && !isVideo && (
+                            <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
+                              <ImageIcon size={48} className="text-gray-400" />
+                            </div>
+                          )}
+
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
+                            <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
+                              {creative.product || creative.filename}
+                            </h3>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                                {creative.extension}
+                              </span>
+                              {creative.size && (
+                                <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                                  {creative.size}
+                                </span>
+                              )}
+                              {creative.variant && (
+                                <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                                  v{creative.variant.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+
+                            {(creative.platforms.length > 0 || creative.tags.length > 0) && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {creative.platforms.map(platform => (
+                                  <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                    {platform}
+                                  </span>
+                                ))}
+                                {creative.tags.slice(0, 2).map(tag => (
+                                  <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
-
-                      {isImage && (
-                        <img
-                          src={creative.url}
-                          alt={creative.filename}
-                          className="w-full h-auto object-cover"
-                          loading="lazy"
-                        />
-                      )}
-                      {isVideo && (
-                        <video
-                          src={creative.url}
-                          className="w-full h-auto object-cover"
-                          preload="metadata"
-                        />
-                      )}
-                      {!isImage && !isVideo && (
-                        <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
-                          <ImageIcon size={48} className="text-gray-400" />
-                        </div>
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
-                        <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
-                          {creative.product || creative.filename}
-                        </h3>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
-                            {creative.extension}
-                          </span>
-                          {creative.size && (
-                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
-                              {creative.size}
-                            </span>
-                          )}
-                          {creative.variant && (
-                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
-                              v{creative.variant.toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-
-                        {(creative.platforms.length > 0 || creative.tags.length > 0) && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {creative.platforms.map(platform => (
-                              <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
-                                {platform}
-                              </span>
-                            ))}
-                            {creative.tags.slice(0, 2).map(tag => (
-                              <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           ) : viewMode === 'grid4' ? (
-            <div ref={gridRef} className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
-              {filteredCreatives.map(creative => {
-                const isVideo = creative.extension === 'mp4';
-                const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
-                const isSelected = selectedCreativeIds.has(creative.id);
+            <div ref={gridRef} className="flex gap-4">
+              {grid4Columns.map((column, columnIndex) => (
+                <div key={columnIndex} className="flex-1 flex flex-col gap-4">
+                  {column.map(creative => {
+                    const isVideo = creative.extension === 'mp4';
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
+                    const isSelected = selectedCreativeIds.has(creative.id);
 
-                let longPressTimer = null;
+                    let longPressTimer = null;
 
-                const handleMouseDown = () => {
-                  longPressTimer = setTimeout(() => {
-                    setSelectorMode(true);
-                  }, 500);
-                };
+                    const handleMouseDown = () => {
+                      longPressTimer = setTimeout(() => {
+                        setSelectorMode(true);
+                      }, 500);
+                    };
 
-                const handleMouseUp = () => {
-                  if (longPressTimer) {
-                    clearTimeout(longPressTimer);
-                  }
-                };
+                    const handleMouseUp = () => {
+                      if (longPressTimer) {
+                        clearTimeout(longPressTimer);
+                      }
+                    };
 
-                const handleClick = () => {
-                  if (selectorMode) {
-                    toggleCreativeSelection(creative.id);
-                  } else {
-                    setSelectedCreative(creative);
-                  }
-                };
+                    const handleClick = () => {
+                      if (selectorMode) {
+                        toggleCreativeSelection(creative.id);
+                      } else {
+                        setSelectedCreative(creative);
+                      }
+                    };
 
-                return (
-                  <div
-                    key={creative.id}
-                    data-creative-id={creative.id}
-                    className="group cursor-pointer mb-4 break-inside-avoid"
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    onClick={handleClick}
-                  >
-                    <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
-                      {selectorMode && (
-                        <div className="absolute top-2 right-2 z-[5]">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                            isSelected
-                              ? 'bg-blue-500 border-blue-500'
-                              : 'bg-white/80 border-white backdrop-blur-sm'
-                          }`}>
-                            {isSelected && <Check size={16} className="text-white" />}
+                    return (
+                      <div
+                        key={creative.id}
+                        data-creative-id={creative.id}
+                        className="group cursor-pointer"
+                        onMouseDown={handleMouseDown}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                        onTouchStart={handleMouseDown}
+                        onTouchEnd={handleMouseUp}
+                        onClick={handleClick}
+                      >
+                        <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+                          {selectorMode && (
+                            <div className="absolute top-2 right-2 z-[5]">
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                isSelected
+                                  ? 'bg-blue-500 border-blue-500'
+                                  : 'bg-white/80 border-white backdrop-blur-sm'
+                              }`}>
+                                {isSelected && <Check size={16} className="text-white" />}
+                              </div>
+                            </div>
+                          )}
+
+                          {isImage && (
+                            <img
+                              src={creative.url}
+                              alt={creative.filename}
+                              className="w-full h-auto object-cover"
+                              loading="lazy"
+                            />
+                          )}
+                          {isVideo && (
+                            <video
+                              src={creative.url}
+                              className="w-full h-auto object-cover"
+                              preload="metadata"
+                            />
+                          )}
+                          {!isImage && !isVideo && (
+                            <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
+                              <ImageIcon size={48} className="text-gray-400" />
+                            </div>
+                          )}
+
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
+                            <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
+                              {creative.product || creative.filename}
+                            </h3>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                                {creative.extension}
+                              </span>
+                              {creative.size && (
+                                <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                                  {creative.size}
+                                </span>
+                              )}
+                              {creative.variant && (
+                                <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                                  v{creative.variant.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+
+                            {(creative.platforms.length > 0 || creative.tags.length > 0) && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {creative.platforms.map(platform => (
+                                  <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                    {platform}
+                                  </span>
+                                ))}
+                                {creative.tags.slice(0, 2).map(tag => (
+                                  <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
-
-                      {isImage && (
-                        <img
-                          src={creative.url}
-                          alt={creative.filename}
-                          className="w-full h-auto object-cover"
-                          loading="lazy"
-                        />
-                      )}
-                      {isVideo && (
-                        <video
-                          src={creative.url}
-                          className="w-full h-auto object-cover"
-                          preload="metadata"
-                        />
-                      )}
-                      {!isImage && !isVideo && (
-                        <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
-                          <ImageIcon size={48} className="text-gray-400" />
-                        </div>
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
-                        <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
-                          {creative.product || creative.filename}
-                        </h3>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
-                            {creative.extension}
-                          </span>
-                          {creative.size && (
-                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
-                              {creative.size}
-                            </span>
-                          )}
-                          {creative.variant && (
-                            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
-                              v{creative.variant.toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-
-                        {(creative.platforms.length > 0 || creative.tags.length > 0) && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {creative.platforms.map(platform => (
-                              <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
-                                {platform}
-                              </span>
-                            ))}
-                            {creative.tags.slice(0, 2).map(tag => (
-                              <span key={tag} className="px-2 py-0.5 bg-green-500/80 backdrop-blur-sm text-white rounded text-xs">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
