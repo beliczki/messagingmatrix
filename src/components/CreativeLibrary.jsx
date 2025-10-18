@@ -24,7 +24,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
 
   // Virtual scrolling configuration
-  const loadChunkSize = 6; // Number of items to load/unload per wheel scroll
+  const loadChunkSize = 8; // Number of items to load/unload per wheel scroll
 
   // Virtual scrolling state - track total count and loaded range
   const [totalVisible, setTotalVisible] = useState(loadChunkSize); // Total items to render (grows with scrolling)
