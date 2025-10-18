@@ -138,6 +138,12 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     setLoadedEnd(loadChunkSize);
   }, [filterText, loadChunkSize]);
 
+  // Clear column assignments when view mode changes
+  useEffect(() => {
+    itemColumnAssignments.current.clear();
+    console.log('Column assignments cleared due to view mode change:', viewMode);
+  }, [viewMode]);
+
   const toggleSelectorMode = () => {
     setSelectorMode(!selectorMode);
     if (selectorMode) {
