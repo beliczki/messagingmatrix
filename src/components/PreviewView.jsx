@@ -97,6 +97,11 @@ const PublicPreviewView = ({ previewId }) => {
     }
   }, [currentUser]);
 
+  // Helper function to check if asset is a static local folder review
+  const isStaticLocalReview = (asset) => {
+    return asset.isLocalFolderReview === true && asset.staticPath;
+  };
+
   // Helper function to extract coordinates from comment text
   const extractCoordinates = (text) => {
     // Try rectangle format first: @rect(x1%, y1%, x2%, y2%)
@@ -141,15 +146,22 @@ const PublicPreviewView = ({ previewId }) => {
 
     setPreview(loadedPreview);
 
-    // Get assets for this preview
-    const assets = allAssets.filter(asset => {
-      const matches = loadedPreview.assetIds.includes(asset.id);
-      console.log(`Checking asset ${asset.id}: ${matches}`);
-      return matches;
-    });
+    // Check if we have assets array in the share data (for static local reviews)
+    if (loadedPreview.assets && Array.isArray(loadedPreview.assets)) {
+      console.log('PublicPreviewView: Using assets from share data:', loadedPreview.assets);
+      setPreviewAssets(loadedPreview.assets);
+    } else {
+      // Fallback to loading from allAssets (for regular shares)
+      const assets = allAssets.filter(asset => {
+        const matches = loadedPreview.assetIds.includes(asset.id);
+        console.log(`Checking asset ${asset.id}: ${matches}`);
+        return matches;
+      });
 
-    console.log('PublicPreviewView: Filtered assets:', assets);
-    setPreviewAssets(assets);
+      console.log('PublicPreviewView: Filtered assets:', assets);
+      setPreviewAssets(assets);
+    }
+
     setLoading(false);
   };
 
@@ -438,6 +450,7 @@ const PublicPreviewView = ({ previewId }) => {
             {displayedAssets.map(asset => {
               const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
               const isVideo = asset.extension === 'mp4';
+              const isStatic = isStaticLocalReview(asset);
               const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
 
               return (
@@ -447,7 +460,18 @@ const PublicPreviewView = ({ previewId }) => {
                   onClick={() => setSelectedAsset(asset)}
                 >
                   <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
-                    {isImage && (
+                    {isStatic && (
+                      <iframe
+                        src={asset.staticPath}
+                        className="w-full h-auto object-cover pointer-events-none"
+                        style={{
+                          aspectRatio: asset.bannerSize ? `${asset.bannerSize.width} / ${asset.bannerSize.height}` : '16/9',
+                          border: 'none'
+                        }}
+                        title={asset.folderName || asset.filename}
+                      />
+                    )}
+                    {!isStatic && isImage && (
                       <img
                         src={asset.url}
                         alt={asset.filename}
@@ -455,7 +479,7 @@ const PublicPreviewView = ({ previewId }) => {
                         loading="lazy"
                       />
                     )}
-                    {isVideo && (
+                    {!isStatic && isVideo && (
                       <video
                         src={asset.url}
                         className="w-full h-auto object-cover"
@@ -520,13 +544,15 @@ const PublicPreviewView = ({ previewId }) => {
                 <div className="p-4 border-b border-white/20">
                   <h3 className="text-md font-bold text-white flex items-center gap-2 mb-3">
                     <Info size={18} />
-                    File Details
+                    {isStaticLocalReview(selectedAsset) ? 'Ad Details' : 'File Details'}
                   </h3>
 
                   <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-white/70">File name:</span>
-                      <p className="text-white font-medium truncate">{selectedAsset.filename}</p>
+                      <span className="text-white/70">{isStaticLocalReview(selectedAsset) ? 'Ad name:' : 'File name:'}</span>
+                      <p className="text-white font-medium truncate">
+                        {isStaticLocalReview(selectedAsset) ? selectedAsset.folderName : selectedAsset.filename}
+                      </p>
                     </div>
 
                     {assetDimensions && (
@@ -538,30 +564,53 @@ const PublicPreviewView = ({ previewId }) => {
 
                     <div>
                       <span className="text-white/70">Format:</span>
-                      <p className="text-white font-medium uppercase">{selectedAsset.extension}</p>
+                      <p className="text-white font-medium uppercase">
+                        {isStaticLocalReview(selectedAsset) ? 'HTML Ad' : selectedAsset.extension}
+                      </p>
                     </div>
+
+                    {isStaticLocalReview(selectedAsset) && selectedAsset.messageData && (
+                      <>
+                        <div>
+                          <span className="text-white/70">Message:</span>
+                          <p className="text-white font-medium">
+                            MC{selectedAsset.messageData.number} - {selectedAsset.messageData.variant}
+                          </p>
+                        </div>
+                        {selectedAsset.messageData.name && (
+                          <div>
+                            <span className="text-white/70">Campaign:</span>
+                            <p className="text-white font-medium truncate">{selectedAsset.messageData.name}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2 mt-4">
                     <a
-                      href={selectedAsset.url}
-                      download={selectedAsset.filename}
-                      className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                      title="Download"
-                    >
-                      <Download size={16} />
-                      Download
-                    </a>
-                    <a
-                      href={selectedAsset.url}
+                      href={isStaticLocalReview(selectedAsset) ? selectedAsset.staticPath : selectedAsset.url}
+                      {...(isStaticLocalReview(selectedAsset) ? {} : { download: selectedAsset.filename })}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
-                      title="Open in new tab"
+                      className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                      title={isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
                     >
-                      <ExternalLink size={16} />
+                      {isStaticLocalReview(selectedAsset) ? <ExternalLink size={16} /> : <Download size={16} />}
+                      {isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
                     </a>
+                    {!isStaticLocalReview(selectedAsset) && (
+                      <a
+                        href={selectedAsset.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
+                        title="Open in new tab"
+                      >
+                        <ExternalLink size={16} />
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -735,22 +784,26 @@ const PublicPreviewView = ({ previewId }) => {
                   )}
                 </button>
                 <a
-                  href={selectedAsset.url}
-                  download={selectedAsset.filename}
-                  className="p-3 hover:bg-white/20 rounded transition-colors"
-                  title="Download"
-                >
-                  <Download size={24} className="text-white" />
-                </a>
-                <a
-                  href={selectedAsset.url}
+                  href={isStaticLocalReview(selectedAsset) ? selectedAsset.staticPath : selectedAsset.url}
+                  {...(isStaticLocalReview(selectedAsset) ? {} : { download: selectedAsset.filename })}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-3 hover:bg-white/20 rounded transition-colors"
-                  title="Open in new tab"
+                  title={isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
                 >
-                  <ExternalLink size={24} className="text-white" />
+                  {isStaticLocalReview(selectedAsset) ? <ExternalLink size={24} className="text-white" /> : <Download size={24} className="text-white" />}
                 </a>
+                {!isStaticLocalReview(selectedAsset) && (
+                  <a
+                    href={selectedAsset.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-3 hover:bg-white/20 rounded transition-colors"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink size={24} className="text-white" />
+                  </a>
+                )}
               </div>
             )}
           </div>
@@ -804,7 +857,28 @@ const PublicPreviewView = ({ previewId }) => {
 
             {/* Asset Display */}
             <div className="flex items-center justify-center relative" style={{ height: '80vh' }}>
-              {selectedAsset.extension === 'mp4' ? (
+              {isStaticLocalReview(selectedAsset) ? (
+                <iframe
+                  src={selectedAsset.staticPath}
+                  className="rounded-lg shadow-2xl bg-white"
+                  style={{
+                    width: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.width}px` : '800px',
+                    height: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.height}px` : '600px',
+                    maxWidth: '90vw',
+                    maxHeight: '80vh',
+                    border: 'none'
+                  }}
+                  title={selectedAsset.folderName || selectedAsset.filename}
+                  onLoad={(e) => {
+                    if (selectedAsset.bannerSize) {
+                      setAssetDimensions({
+                        width: selectedAsset.bannerSize.width,
+                        height: selectedAsset.bannerSize.height
+                      });
+                    }
+                  }}
+                />
+              ) : selectedAsset.extension === 'mp4' ? (
                 <video
                   src={selectedAsset.url}
                   controls
