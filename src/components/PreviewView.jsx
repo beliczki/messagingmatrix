@@ -543,49 +543,21 @@ const PublicPreviewView = ({ previewId }) => {
                   className="group cursor-pointer mb-4 break-inside-avoid"
                   onClick={() => setSelectedAsset(asset)}
                 >
-                  <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
+                  <div
+                    className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white"
+                    style={isStatic && asset.bannerSize ? {
+                      aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`
+                    } : {}}
+                  >
                     {isStatic && asset.bannerSize && (
-                      <div
-                        className="w-full relative overflow-hidden"
+                      <iframe
+                        src={asset.staticPath}
+                        className="pointer-events-none w-full h-full"
                         style={{
-                          aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`
+                          border: 'none'
                         }}
-                      >
-                        <iframe
-                          src={asset.staticPath}
-                          className="pointer-events-none"
-                          style={{
-                            width: `${asset.bannerSize.width}px`,
-                            height: `${asset.bannerSize.height}px`,
-                            border: 'none',
-                            transform: 'scale(var(--iframe-scale))',
-                            transformOrigin: 'top left'
-                          }}
-                          title={asset.folderName || asset.filename}
-                        />
-                        <style>{`
-                          @media (max-width: 639px) {
-                            iframe[title="${(asset.folderName || asset.filename).replace(/"/g, '\\"')}"] {
-                              --iframe-scale: calc((100vw - 2rem) / ${asset.bannerSize.width});
-                            }
-                          }
-                          @media (min-width: 640px) and (max-width: 1023px) {
-                            iframe[title="${(asset.folderName || asset.filename).replace(/"/g, '\\"')}"] {
-                              --iframe-scale: calc(((100vw - 2rem) / 2 - 0.5rem) / ${asset.bannerSize.width});
-                            }
-                          }
-                          @media (min-width: 1024px) and (max-width: 1279px) {
-                            iframe[title="${(asset.folderName || asset.filename).replace(/"/g, '\\"')}"] {
-                              --iframe-scale: calc(((100vw - 3rem) / 3 - 0.67rem) / ${asset.bannerSize.width});
-                            }
-                          }
-                          @media (min-width: 1280px) {
-                            iframe[title="${(asset.folderName || asset.filename).replace(/"/g, '\\"')}"] {
-                              --iframe-scale: calc(((1280px - 4rem) / 4 - 0.75rem) / ${asset.bannerSize.width});
-                            }
-                          }
-                        `}</style>
-                      </div>
+                        title={asset.folderName || asset.filename}
+                      />
                     )}
                     {!isStatic && isImage && (
                       <img
