@@ -118,7 +118,8 @@ export const filterAssets = (assets, filterText) => {
   if (!filterText.trim()) return assets;
 
   return assets.filter(asset => {
-    const searchableText = [
+    // Build searchable text including dynamic message data if available
+    const searchableFields = [
       asset.filename,
       asset.product,
       asset.size,
@@ -126,7 +127,24 @@ export const filterAssets = (assets, filterText) => {
       ...asset.platforms,
       ...asset.tags,
       asset.variant
-    ].filter(Boolean).join(' ').toLowerCase();
+    ];
+
+    // Add message data fields for dynamic creatives
+    if (asset.isDynamic && asset.messageData) {
+      const msg = asset.messageData;
+      searchableFields.push(
+        msg.headline,
+        msg.copy,
+        msg.advertiser,
+        msg.name,
+        msg.cta,
+        msg.legalline,
+        msg.number,
+        msg.variant
+      );
+    }
+
+    const searchableText = searchableFields.filter(Boolean).join(' ').toLowerCase();
 
     const filterLower = filterText.toLowerCase();
 

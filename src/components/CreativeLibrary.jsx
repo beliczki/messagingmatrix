@@ -77,6 +77,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const loadingItemRef = useRef(null);
   const loadingImageRef = useRef(null);
   const processedDynamicItems = useRef(new Set());
+  const processedRegularItems = useRef(new Set());
   const columnItemsRef = useRef(columnItems);
   const columnHeightsRef = useRef(columnHeights);
 
@@ -136,28 +137,52 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     const assetModules = import.meta.glob('/src/creatives/*.*', { eager: true, as: 'url' });
     const creativeList = await processAssets(assetModules);
 
-    // Generate dynamic message creatives if matrixData is available
+    // Generate dynamic message creatives for ALL messages if matrixData is available
     if (matrixData?.messages && matrixData.messages.length > 0) {
-      const firstMessage = matrixData.messages.find(m => m.status !== 'deleted');
+      const activeMessages = matrixData.messages.filter(m => m.status !== 'deleted');
 
-      if (firstMessage) {
-        const messageCreatives = bannerSizes.map((size, index) => ({
-          id: `message-${firstMessage.id}-${size.width}x${size.height}`,
-          filename: `MC${firstMessage.number}_${firstMessage.variant}_${size.width}x${size.height}.html`,
-          extension: 'html',
-          url: null,
-          product: firstMessage.name || `Message ${firstMessage.number}`,
-          size: `${size.width}x${size.height}`,
-          variant: firstMessage.variant,
-          date: new Date().toISOString().split('T')[0],
-          platforms: [],
-          tags: [size.name, 'dynamic', 'message'],
-          isDynamic: true,
-          messageData: firstMessage,
-          bannerSize: size
-        }));
+      if (activeMessages.length > 0) {
+        // Deduplicate messages by number+variant combination
+        // Keep only the first occurrence of each unique number+variant pair
+        const uniqueMessages = [];
+        const seen = new Set();
 
-        setCreatives([...messageCreatives, ...creativeList]);
+        activeMessages.forEach(message => {
+          const key = `${message.number}-${message.variant}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueMessages.push(message);
+          }
+        });
+
+        console.log('📊 Total active messages:', activeMessages.length);
+        console.log('✅ Unique messages after deduplication:', uniqueMessages.length);
+        console.log('🔍 Unique messages:', uniqueMessages.map(m => `MC${m.number}-${m.variant} (ID: ${m.id}, Name: ${m.name})`));
+
+        const allMessageCreatives = [];
+
+        // Create creatives for each unique message
+        uniqueMessages.forEach(message => {
+          const messageCreatives = bannerSizes.map((size) => ({
+            id: `mc${message.number}-${message.variant}-${size.width}x${size.height}`,
+            filename: `MC${message.number}_${message.variant}_${size.width}x${size.height}.html`,
+            extension: 'html',
+            url: null,
+            product: message.name || `Message ${message.number}`,
+            size: `${size.width}x${size.height}`,
+            variant: message.variant,
+            date: new Date().toISOString().split('T')[0],
+            platforms: [],
+            tags: [size.name, 'dynamic', 'message', `mc${message.number}`, `v${message.variant}`],
+            isDynamic: true,
+            messageData: message,
+            bannerSize: size
+          }));
+
+          allMessageCreatives.push(...messageCreatives);
+        });
+
+        setCreatives([...allMessageCreatives, ...creativeList]);
         return;
       }
     }
@@ -181,6 +206,15 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Handle image/video load - add to shortest column and trigger next
   const handleImageLoaded = useCallback((creative, itemIndex, event) => {
+    // Check if this item has already been processed (by ID only)
+    if (processedRegularItems.current.has(creative.id)) {
+      console.log('⚠️ Item already processed, skipping:', creative.id);
+      setNextItemIndex(itemIndex + 1);
+      return;
+    }
+
+    processedRegularItems.current.add(creative.id);
+
     const isVideo = creative.extension === 'mp4';
     const media = event.target;
     const mediaHeight = isVideo ? media.videoHeight : media.naturalHeight;
@@ -334,15 +368,24 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Reset state when filter changes
   useEffect(() => {
+    const emptyColumns = initializeColumns(columnCount);
+    const emptyHeights = initializeHeights(columnCount);
+
     setTotalVisible(loadChunkSize * 2);
     setLoadedStart(0);
     setLoadedEnd(loadChunkSize * 2);
-    setColumnItems(initializeColumns(columnCount));
-    setColumnHeights(initializeHeights(columnCount));
+    setColumnItems(emptyColumns);
+    setColumnHeights(emptyHeights);
     setNextItemIndex(0);
+
+    // Immediately update refs to prevent stale data
+    columnItemsRef.current = emptyColumns;
+    columnHeightsRef.current = emptyHeights;
+
     chunkBoundaries.current.clear();
     itemPositions.current.clear();
     processedDynamicItems.current.clear();
+    processedRegularItems.current.clear();
 
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
@@ -351,13 +394,22 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Clear column assignments when view mode changes
   useEffect(() => {
+    const emptyColumns = initializeColumns(columnCount);
+    const emptyHeights = initializeHeights(columnCount);
+
     itemColumnAssignments.current.clear();
-    setColumnItems(initializeColumns(columnCount));
-    setColumnHeights(initializeHeights(columnCount));
+    setColumnItems(emptyColumns);
+    setColumnHeights(emptyHeights);
     setNextItemIndex(0);
+
+    // Immediately update refs to prevent stale data
+    columnItemsRef.current = emptyColumns;
+    columnHeightsRef.current = emptyHeights;
+
     chunkBoundaries.current.clear();
     itemPositions.current.clear();
     processedDynamicItems.current.clear();
+    processedRegularItems.current.clear();
   }, [viewMode, columnCount]);
 
   // When loaded range changes, only reload the newly visible items
@@ -389,27 +441,32 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
     const allFiltered = filterAssets(creatives, filterText);
 
+    // Find which dynamic items in the loaded range haven't been processed yet
     const dynamicCreativesToAdd = [];
     for (let i = loadedStart; i < loadedEnd && i < allFiltered.length; i++) {
       const creative = allFiltered[i];
-      const itemKey = `${creative.id}-${i}`;
-      if (creative.isDynamic && !processedDynamicItems.current.has(itemKey)) {
+      // Track by ID only, not by ID+index
+      if (creative.isDynamic && !processedDynamicItems.current.has(creative.id)) {
         dynamicCreativesToAdd.push({ creative, index: i });
-        processedDynamicItems.current.add(itemKey);
+        processedDynamicItems.current.add(creative.id);
       }
     }
 
     if (dynamicCreativesToAdd.length === 0) return;
 
+    console.log('🔄 Adding dynamic creatives to columns:', dynamicCreativesToAdd.map(d => `${d.creative.id} at index ${d.index}`));
+
     const currentColumnCount = Object.keys(columnHeightsRef.current).length;
     const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
 
+    // Copy existing column structure
     const newColumnItems = {};
     Object.keys(columnItemsRef.current).forEach(key => {
       newColumnItems[key] = [...columnItemsRef.current[key]];
     });
     const workingHeights = { ...columnHeightsRef.current };
 
+    // Add only the new dynamic items
     dynamicCreativesToAdd.forEach(({ creative, index }) => {
       const aspectRatio = creative.bannerSize.width / creative.bannerSize.height;
       const renderedHeight = columnWidth / aspectRatio;
