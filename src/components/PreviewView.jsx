@@ -297,18 +297,84 @@ const PublicPreviewView = ({ previewId }) => {
       // Fetch and add each asset to the ZIP
       for (const asset of previewAssets) {
         try {
-          const response = await fetch(asset.url);
-          const blob = await response.blob();
-          zip.file(asset.filename, blob);
+          // Check if this is a static HTML ad
+          if (isStaticLocalReview(asset) && asset.staticPath && asset.folderName) {
+            // Create a folder for this HTML ad
+            const adFolder = zip.folder(asset.folderName);
+
+            // Extract folder path from staticPath
+            const pathParts = asset.staticPath.split('/');
+            const folderPath = pathParts.slice(0, -1).join('/');
+
+            // List of known files to fetch
+            const knownFiles = ['index.html', 'styles.css', 'manifest.json'];
+
+            // Fetch known files
+            for (const filename of knownFiles) {
+              try {
+                const fileUrl = `${folderPath}/${filename}`;
+                const response = await fetch(fileUrl);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  adFolder.file(filename, blob);
+                }
+              } catch (error) {
+                console.error(`Failed to fetch ${filename}:`, error);
+              }
+            }
+
+            // Fetch index.html to parse for images
+            try {
+              const htmlResponse = await fetch(`${folderPath}/index.html`);
+              if (htmlResponse.ok) {
+                const htmlText = await htmlResponse.text();
+
+                // Extract image references from HTML
+                const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+                const imageSources = [];
+                let match;
+
+                while ((match = imgRegex.exec(htmlText)) !== null) {
+                  const imgSrc = match[1];
+                  // Only include local images (not http/https URLs)
+                  if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+                    imageSources.push(imgSrc);
+                  }
+                }
+
+                // Fetch and add images to zip
+                for (const imgSrc of imageSources) {
+                  try {
+                    const imgUrl = `${folderPath}/${imgSrc}`;
+                    const imgResponse = await fetch(imgUrl);
+                    if (imgResponse.ok) {
+                      const imgBlob = await imgResponse.blob();
+                      adFolder.file(imgSrc, imgBlob);
+                    }
+                  } catch (error) {
+                    console.error(`Failed to fetch image ${imgSrc}:`, error);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Failed to parse HTML for images:', error);
+            }
+          } else {
+            // Regular asset (image, video, etc.)
+            const response = await fetch(asset.url);
+            const blob = await response.blob();
+            zip.file(asset.filename, blob);
+          }
         } catch (error) {
-          console.error(`Failed to fetch ${asset.filename}:`, error);
+          console.error(`Failed to fetch ${asset.filename || asset.folderName}:`, error);
         }
       }
 
       // Generate ZIP file
       const zipBlob = await zip.generateAsync({
         type: 'blob',
-        compression: 'STORE' // No compression for faster generation
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
       });
 
       // Use preview title or date for ZIP filename
