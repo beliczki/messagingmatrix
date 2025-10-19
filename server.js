@@ -386,11 +386,12 @@ app.post('/api/shares', async (req, res) => {
     for (const creative of creatives) {
       if (creative.isDynamic && creative.messageData && templateData.templateHtml && templateData.templateCss) {
         try {
-          // Generate folder name: name_dimensions
-          const messageName = (creative.messageData.name || `MC${creative.messageData.number}${creative.messageData.variant}`)
-            .replace(/[^a-zA-Z0-9-_]/g, '_'); // Sanitize filename
+          // Generate folder name: MC{{Number}}_{{Variant}}_{{Dimensions}}_{{Version}}
+          const mcNumber = creative.messageData.number || '0';
+          const mcVariant = creative.messageData.variant || 'A';
           const dimensions = `${creative.bannerSize.width}x${creative.bannerSize.height}`;
-          const folderName = `${messageName}_${dimensions}`;
+          const version = creative.messageData.version || 'v1';
+          const folderName = `MC${mcNumber}_${mcVariant}_${dimensions}_${version}`;
           const adDir = path.join(shareDir, folderName);
 
           // Create ad directory
@@ -489,13 +490,35 @@ app.post('/api/shares', async (req, res) => {
           // Save HTML file
           fs.writeFileSync(path.join(adDir, 'index.html'), populatedHtml, 'utf8');
 
+          // Copy and populate manifest.json
+          const templateName = templateData.templateName || 'html';
+          const manifestSourcePath = path.join(templatesDir, templateName, 'manifest.json');
+
+          if (fs.existsSync(manifestSourcePath)) {
+            try {
+              let manifestContent = fs.readFileSync(manifestSourcePath, 'utf8');
+
+              // Replace {{ad.width}} and {{ad.height}} with actual values
+              manifestContent = manifestContent.replace(/\{\{ad\.width\}\}/g, creative.bannerSize.width.toString());
+              manifestContent = manifestContent.replace(/\{\{ad\.height\}\}/g, creative.bannerSize.height.toString());
+
+              // Save populated manifest
+              fs.writeFileSync(path.join(adDir, 'manifest.json'), manifestContent, 'utf8');
+              console.log(`  ✓ Copied and populated manifest.json`);
+            } catch (manifestError) {
+              console.error(`  ✗ Error processing manifest.json:`, manifestError.message);
+            }
+          }
+
           console.log(`✓ Created static ad: ${folderName}`);
 
-          // Add to processed assets list with new path
+          // Add to processed assets list with new path and mark as local folder review
           processedAssets.push({
             ...creative,
             staticPath: `/share/${shareId}/${folderName}/index.html`,
-            folderName
+            folderName,
+            isLocalFolderReview: true,
+            reviewType: 'static-local'
           });
         } catch (error) {
           console.error(`Error processing dynamic ad ${creative.id}:`, error);

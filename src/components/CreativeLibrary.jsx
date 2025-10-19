@@ -897,6 +897,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         isOpen={showShareDialog}
         onClose={closeShareDialog}
         selectedCreativeIds={selectedCreativeIds}
+        selectedCreatives={allFilteredCreatives.filter(c => selectedCreativeIds.has(c.id))}
         shareTitle={shareTitle}
         setShareTitle={setShareTitle}
         selectedBaseColor={selectedBaseColor}
@@ -906,6 +907,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         copiedUrl={copiedUrl}
         setCopiedUrl={setCopiedUrl}
         lookAndFeel={lookAndFeel}
+        templateHtml={templateHtml}
+        templateConfig={templateConfig}
+        templateCss={templateCss}
+        templateName="html"
       />
 
       {/* Creative Preview */}

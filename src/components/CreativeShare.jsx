@@ -6,6 +6,7 @@ const CreativeShare = ({
   isOpen,
   onClose,
   selectedCreativeIds,
+  selectedCreatives = [],
   shareTitle,
   setShareTitle,
   selectedBaseColor,
@@ -14,14 +15,29 @@ const CreativeShare = ({
   setGeneratedShareUrl,
   copiedUrl,
   setCopiedUrl,
-  lookAndFeel
+  lookAndFeel,
+  templateHtml = '',
+  templateConfig = null,
+  templateCss = null,
+  templateName = 'html'
 }) => {
   if (!isOpen) return null;
 
   const handleCreateShare = async () => {
     if (selectedCreativeIds.size > 0) {
       try {
-        const result = await createPreview(Array.from(selectedCreativeIds), shareTitle, selectedBaseColor);
+        const result = await createPreview(
+          Array.from(selectedCreativeIds),
+          selectedCreatives,
+          shareTitle,
+          selectedBaseColor,
+          {
+            templateHtml,
+            templateConfig,
+            templateCss,
+            templateName
+          }
+        );
         setGeneratedShareUrl(result.url);
       } catch (error) {
         console.error('Failed to create share:', error);
