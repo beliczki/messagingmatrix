@@ -46,6 +46,7 @@ const PublicPreviewView = ({ previewId }) => {
   const [rectangleStart, setRectangleStart] = useState(null);
   const [mouseDownTime, setMouseDownTime] = useState(null);
   const [showOnlyCommented, setShowOnlyCommented] = useState(false);
+  const [downloadingAdId, setDownloadingAdId] = useState(null);
 
   // Load configuration
   useEffect(() => {
@@ -320,6 +321,89 @@ const PublicPreviewView = ({ previewId }) => {
       alert('Failed to create download archive. Please try again.');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleDownloadStaticAd = async (asset) => {
+    if (!asset.staticPath || !asset.folderName) return;
+
+    setDownloadingAdId(asset.id);
+    try {
+      const zip = new JSZip();
+
+      // Extract folder path from staticPath (/share/{shareId}/{folderName}/index.html)
+      const pathParts = asset.staticPath.split('/');
+      const folderPath = pathParts.slice(0, -1).join('/'); // Remove index.html
+
+      // List of known files to fetch
+      const knownFiles = ['index.html', 'styles.css', 'manifest.json'];
+
+      // Fetch known files
+      for (const filename of knownFiles) {
+        try {
+          const fileUrl = `${folderPath}/${filename}`;
+          const response = await fetch(fileUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            zip.file(filename, blob);
+          }
+        } catch (error) {
+          console.error(`Failed to fetch ${filename}:`, error);
+        }
+      }
+
+      // Fetch index.html to parse for images
+      try {
+        const htmlResponse = await fetch(`${folderPath}/index.html`);
+        if (htmlResponse.ok) {
+          const htmlText = await htmlResponse.text();
+
+          // Extract image references from HTML
+          const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+          const imageSources = [];
+          let match;
+
+          while ((match = imgRegex.exec(htmlText)) !== null) {
+            const imgSrc = match[1];
+            // Only include local images (not http/https URLs)
+            if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+              imageSources.push(imgSrc);
+            }
+          }
+
+          // Fetch and add images to zip
+          for (const imgSrc of imageSources) {
+            try {
+              const imgUrl = `${folderPath}/${imgSrc}`;
+              const imgResponse = await fetch(imgUrl);
+              if (imgResponse.ok) {
+                const imgBlob = await imgResponse.blob();
+                zip.file(imgSrc, imgBlob);
+              }
+            } catch (error) {
+              console.error(`Failed to fetch image ${imgSrc}:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse HTML for images:', error);
+      }
+
+      // Generate ZIP file
+      const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      // Trigger download
+      const zipFilename = `${asset.folderName}.zip`;
+      saveAs(zipBlob, zipFilename);
+    } catch (error) {
+      console.error('Failed to create static ad ZIP:', error);
+      alert('Failed to download ad. Please try again.');
+    } finally {
+      setDownloadingAdId(null);
     }
   };
 
@@ -611,27 +695,49 @@ const PublicPreviewView = ({ previewId }) => {
 
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2 mt-4">
-                    <a
-                      href={isStaticLocalReview(selectedAsset) ? selectedAsset.staticPath : selectedAsset.url}
-                      {...(isStaticLocalReview(selectedAsset) ? {} : { download: selectedAsset.filename })}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                      title={isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
-                    >
-                      {isStaticLocalReview(selectedAsset) ? <ExternalLink size={16} /> : <Download size={16} />}
-                      {isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
-                    </a>
-                    {!isStaticLocalReview(selectedAsset) && (
-                      <a
-                        href={selectedAsset.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
-                        title="Open in new tab"
-                      >
-                        <ExternalLink size={16} />
-                      </a>
+                    {isStaticLocalReview(selectedAsset) ? (
+                      <>
+                        <button
+                          onClick={() => handleDownloadStaticAd(selectedAsset)}
+                          disabled={downloadingAdId === selectedAsset.id}
+                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Download as ZIP"
+                        >
+                          <Download size={16} />
+                          {downloadingAdId === selectedAsset.id ? 'Downloading...' : 'Download'}
+                        </button>
+                        <a
+                          href={selectedAsset.staticPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                          title="Open"
+                        >
+                          <ExternalLink size={16} />
+                          Open
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        <a
+                          href={selectedAsset.url}
+                          download={selectedAsset.filename}
+                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                          title="Download"
+                        >
+                          <Download size={16} />
+                          Download
+                        </a>
+                        <a
+                          href={selectedAsset.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink size={16} />
+                        </a>
+                      </>
                     )}
                   </div>
                 </div>
@@ -805,26 +911,46 @@ const PublicPreviewView = ({ previewId }) => {
                     </span>
                   )}
                 </button>
-                <a
-                  href={isStaticLocalReview(selectedAsset) ? selectedAsset.staticPath : selectedAsset.url}
-                  {...(isStaticLocalReview(selectedAsset) ? {} : { download: selectedAsset.filename })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-3 hover:bg-white/20 rounded transition-colors"
-                  title={isStaticLocalReview(selectedAsset) ? 'Open' : 'Download'}
-                >
-                  {isStaticLocalReview(selectedAsset) ? <ExternalLink size={24} className="text-white" /> : <Download size={24} className="text-white" />}
-                </a>
-                {!isStaticLocalReview(selectedAsset) && (
-                  <a
-                    href={selectedAsset.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-3 hover:bg-white/20 rounded transition-colors"
-                    title="Open in new tab"
-                  >
-                    <ExternalLink size={24} className="text-white" />
-                  </a>
+                {isStaticLocalReview(selectedAsset) ? (
+                  <>
+                    <button
+                      onClick={() => handleDownloadStaticAd(selectedAsset)}
+                      disabled={downloadingAdId === selectedAsset.id}
+                      className="p-3 hover:bg-white/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Download as ZIP"
+                    >
+                      <Download size={24} className="text-white" />
+                    </button>
+                    <a
+                      href={selectedAsset.staticPath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 hover:bg-white/20 rounded transition-colors"
+                      title="Open"
+                    >
+                      <ExternalLink size={24} className="text-white" />
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href={selectedAsset.url}
+                      download={selectedAsset.filename}
+                      className="p-3 hover:bg-white/20 rounded transition-colors"
+                      title="Download"
+                    >
+                      <Download size={24} className="text-white" />
+                    </a>
+                    <a
+                      href={selectedAsset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 hover:bg-white/20 rounded transition-colors"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink size={24} className="text-white" />
+                    </a>
+                  </>
                 )}
               </div>
             )}
