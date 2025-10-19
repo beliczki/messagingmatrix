@@ -1070,26 +1070,188 @@ const PublicPreviewView = ({ previewId }) => {
             {/* Asset Display */}
             <div className="flex items-center justify-center relative" style={{ height: '80vh' }}>
               {isStaticLocalReview(selectedAsset) ? (
-                <iframe
-                  src={selectedAsset.staticPath}
-                  className="rounded-lg shadow-2xl bg-white"
-                  style={{
-                    width: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.width}px` : '800px',
-                    height: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.height}px` : '600px',
-                    maxWidth: '90vw',
-                    maxHeight: '80vh',
-                    border: 'none'
-                  }}
-                  title={selectedAsset.folderName || selectedAsset.filename}
-                  onLoad={(e) => {
-                    if (selectedAsset.bannerSize) {
-                      setAssetDimensions({
-                        width: selectedAsset.bannerSize.width,
-                        height: selectedAsset.bannerSize.height
-                      });
+                <div className="relative" style={{ maxHeight: '80vh', maxWidth: '100%' }}>
+                  <iframe
+                    src={selectedAsset.staticPath}
+                    className="rounded-lg shadow-2xl bg-white"
+                    style={{
+                      width: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.width}px` : '800px',
+                      height: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.height}px` : '600px',
+                      maxWidth: '90vw',
+                      maxHeight: '80vh',
+                      border: 'none',
+                      display: 'block'
+                    }}
+                    title={selectedAsset.folderName || selectedAsset.filename}
+                    onLoad={(e) => {
+                      if (selectedAsset.bannerSize) {
+                        setAssetDimensions({
+                          width: selectedAsset.bannerSize.width,
+                          height: selectedAsset.bannerSize.height
+                        });
+                      }
+                    }}
+                  />
+
+                  {/* Transparent overlay for capturing mouse events */}
+                  <div
+                    className="absolute top-0 left-0 right-0 bottom-0 cursor-crosshair"
+                    style={{
+                      pointerEvents: 'all',
+                      zIndex: 10
+                    }}
+                    onMouseDown={handleImageMouseDown}
+                    onMouseMove={handleImageMouseMove}
+                    onMouseUp={handleImageMouseUp}
+                  />
+
+                  {/* Animation Styles */}
+                  <style>{`
+                    @keyframes dash-animation {
+                      to {
+                        stroke-dashoffset: -20;
+                      }
                     }
-                  }}
-                />
+                    @keyframes dash-color-switch {
+                      0%, 100% {
+                        stroke: rgba(255, 255, 255, 1);
+                      }
+                      50% {
+                        stroke: rgba(0, 0, 0, 1);
+                      }
+                    }
+                    @keyframes circle-scale-pulse {
+                      0%, 100% {
+                        transform: scale(0.9);
+                      }
+                      50% {
+                        transform: scale(0.4);
+                      }
+                    }
+                    .animated-dash {
+                      animation: dash-animation 1s linear infinite, dash-color-switch 0.75s ease-in-out infinite;
+                    }
+                    .scale-pulse {
+                      transform-origin: center;
+                      transform-box: fill-box;
+                      animation: circle-scale-pulse 1.5s ease-in-out infinite;
+                    }
+                  `}</style>
+
+                  {/* User-Clicked Reference Marker - Dashed (hidden when hovering over comment) */}
+                  {userClickedRef && !hoveredCommentRef && (
+                    <>
+                      {userClickedRef.type === 'point' ? (
+                        <svg
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: `${userClickedRef.x}%`,
+                            top: `${userClickedRef.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: '100px',
+                            height: '100px',
+                            overflow: 'visible',
+                            zIndex: 20
+                          }}
+                        >
+                          <g className="scale-pulse">
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="none"
+                              stroke="white"
+                              strokeWidth="2"
+                              strokeDasharray="10 10"
+                              className="animated-dash"
+                            />
+                          </g>
+                        </svg>
+                      ) : (
+                        <svg
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: `${Math.min(userClickedRef.x1, userClickedRef.x2)}%`,
+                            top: `${Math.min(userClickedRef.y1, userClickedRef.y2)}%`,
+                            width: `${Math.abs(userClickedRef.x2 - userClickedRef.x1)}%`,
+                            height: `${Math.abs(userClickedRef.y2 - userClickedRef.y1)}%`,
+                            overflow: 'visible',
+                            zIndex: 20
+                          }}
+                        >
+                          <rect
+                            x="0"
+                            y="0"
+                            width="100%"
+                            height="100%"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="1"
+                            strokeDasharray="10 10"
+                            className="animated-dash"
+                          />
+                        </svg>
+                      )}
+                    </>
+                  )}
+
+                  {/* Hovered Comment Reference Marker - Solid */}
+                  {hoveredCommentRef && (
+                    <>
+                      {hoveredCommentRef.type === 'point' ? (
+                        <svg
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: `${hoveredCommentRef.x}%`,
+                            top: `${hoveredCommentRef.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: '100px',
+                            height: '100px',
+                            overflow: 'visible',
+                            zIndex: 20
+                          }}
+                        >
+                          <g className="scale-pulse">
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="none"
+                              stroke="white"
+                              strokeWidth="2"
+                              strokeDasharray="10 10"
+                              className="animated-dash"
+                            />
+                          </g>
+                        </svg>
+                      ) : (
+                        <svg
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: `${Math.min(hoveredCommentRef.x1, hoveredCommentRef.x2)}%`,
+                            top: `${Math.min(hoveredCommentRef.y1, hoveredCommentRef.y2)}%`,
+                            width: `${Math.abs(hoveredCommentRef.x2 - hoveredCommentRef.x1)}%`,
+                            height: `${Math.abs(hoveredCommentRef.y2 - hoveredCommentRef.y1)}%`,
+                            overflow: 'visible',
+                            zIndex: 20
+                          }}
+                        >
+                          <rect
+                            x="0"
+                            y="0"
+                            width="100%"
+                            height="100%"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="1"
+                            strokeDasharray="10 10"
+                            className="animated-dash"
+                          />
+                        </svg>
+                      )}
+                    </>
+                  )}
+                </div>
               ) : selectedAsset.extension === 'mp4' ? (
                 <video
                   src={selectedAsset.url}
