@@ -554,9 +554,11 @@ app.post('/api/shares', async (req, res) => {
     );
 
     // Build full share URL
-    // Use APP_BASE_URL from environment, or construct from request
+    // Use APP_BASE_URL from environment (for production)
+    // or FRONTEND_URL (for development), defaulting to localhost:5173
     const baseUrl = process.env.APP_BASE_URL ||
-                    `${req.protocol}://${req.get('host')}`;
+                    process.env.FRONTEND_URL ||
+                    'http://localhost:5173';
     const fullShareUrl = `${baseUrl}/share/${shareId}`;
 
     // Return share info
