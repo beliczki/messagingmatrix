@@ -264,6 +264,28 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           { value: 'list', label: 'List View' },
           { value: 'card', label: 'Card View' }
         ]}
+        titleFilters={
+          <>
+            {/* Filter Input */}
+            <div className="flex items-center gap-2">
+              <Filter size={18} className="text-white" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Filter tasks..."
+                className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
+              />
+            </div>
+
+            {/* Task Count */}
+            {tasks.length > 0 && (
+              <div className="text-sm text-white/80 whitespace-nowrap">
+                {pendingTasks.length} pending, {completedTasks.length} completed
+              </div>
+            )}
+          </>
+        }
       >
         <button
           onClick={handleFetchAndConvert}
@@ -288,26 +310,6 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className={viewMode === 'card' ? 'mx-auto' : 'max-w-5xl mx-auto'}>
-          {/* Filter and View Controls */}
-          <div className="mb-6 flex items-center gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              <Filter size={18} className="text-gray-400" />
-              <input
-                type="text"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter tasks (use 'and' / 'or' operators)..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            {tasks.length > 0 && (
-              <div className="text-sm text-gray-600 whitespace-nowrap">
-                {pendingTasks.length} pending, {completedTasks.length} completed
-              </div>
-            )}
-          </div>
-
           {/* Error Display */}
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">

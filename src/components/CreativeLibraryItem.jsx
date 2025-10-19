@@ -19,10 +19,13 @@ const CreativeLibraryItem = ({
   const isDynamic = creative.isDynamic && creative.extension === 'html';
 
   let longPressTimer = null;
+  let isLongPress = false;
 
   const handleMouseDown = () => {
+    isLongPress = false;
     longPressTimer = setTimeout(() => {
-      onToggleSelection(creative.id, true); // true = enable selector mode
+      isLongPress = true;
+      onToggleSelection(creative.id, true, true); // enableSelectorMode=true, skipToggle=true
     }, 500);
   };
 
@@ -33,6 +36,12 @@ const CreativeLibraryItem = ({
   };
 
   const handleClick = () => {
+    // Don't handle click if this was a long press
+    if (isLongPress) {
+      isLongPress = false;
+      return;
+    }
+
     if (selectorMode) {
       onToggleSelection(creative.id);
     } else {
@@ -178,7 +187,8 @@ const CreativeLibraryItem = ({
                     transform: 'scale(var(--scale))',
                     position: 'absolute',
                     top: 0,
-                    left: 0
+                    left: 0,
+                    pointerEvents: 'none' // Disable pointer events on container
                   }}
                   ref={(el) => {
                     if (el) {
@@ -195,12 +205,27 @@ const CreativeLibraryItem = ({
                       width: `${width}px`,
                       height: `${height}px`,
                       border: 0,
-                      display: 'block'
+                      display: 'block',
+                      pointerEvents: 'none' // Disable pointer events on iframe
                     }}
                     title={`${creative.product || 'Creative'} Preview`}
                     sandbox="allow-same-origin allow-scripts"
                   />
                 </div>
+
+                {/* Transparent overlay to catch clicks - positioned above iframe */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 1,
+                    cursor: 'pointer'
+                  }}
+                  aria-label="Click to preview or long-press to select"
+                />
               </div>
             </div>
           );

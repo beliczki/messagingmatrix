@@ -44,7 +44,7 @@ const CreativeLibraryMasonryView = ({
                   creative={creative}
                   selectorMode={selectorMode}
                   isSelected={selectedCreativeIds.has(creative.id)}
-                  onToggleSelection={(id, enableSelectorMode) => onToggleSelection(id, enableSelectorMode)}
+                  onToggleSelection={(id, enableSelectorMode, skipToggle) => onToggleSelection(id, enableSelectorMode, skipToggle)}
                   onSelect={onSelectCreative}
                   isOutsideRange={isOutsideRange}
                   savedHeight={savedHeight}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Image as ImageIcon, Filter, CheckSquare, Square, Share2, Upload } from 'lucide-react';
+import { Image as ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import CreativeShare from './CreativeShare';
 import CreativePreview from './CreativePreview';
@@ -36,6 +36,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [templateHtml, setTemplateHtml] = useState('');
   const [templateConfig, setTemplateConfig] = useState(null);
   const [templateCss, setTemplateCss] = useState(null);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
 
   // Virtual scrolling configuration
   const loadChunkSize = 16;
@@ -511,9 +512,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   };
 
-  const toggleCreativeSelection = (creativeId, enableSelectorMode = false) => {
+  const toggleCreativeSelection = (creativeId, enableSelectorMode = false, skipToggle = false) => {
     if (enableSelectorMode && !selectorMode) {
       setSelectorMode(true);
+    }
+
+    // If skipToggle is true (e.g., entering selector mode via long press), don't toggle selection
+    if (skipToggle) {
+      return;
     }
 
     const newSelection = new Set(selectedCreativeIds);
@@ -710,7 +716,57 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           { value: 'grid4', label: '4 Columns' },
           { value: 'list', label: 'List View' }
         ]}
+        titleFilters={
+          <>
+            {/* Filter Input */}
+            <div className="flex items-center gap-2">
+              <Filter size={18} className="text-white" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Filter creatives..."
+                className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
+              />
+            </div>
+
+            {/* Select Button */}
+            <button
+              onClick={toggleSelectorMode}
+              className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+                selectorMode
+                  ? 'bg-white text-gray-900 hover:bg-white/90'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
+              {selectorMode ? 'Selecting' : 'Select'}
+            </button>
+
+            {/* Select All / Deselect All */}
+            {selectorMode && (
+              <>
+                <button
+                  onClick={() => {
+                    const allFilteredIds = new Set(allFilteredCreatives.map(creative => creative.id));
+                    setSelectedCreativeIds(allFilteredIds);
+                  }}
+                  className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                >
+                  All ({totalCreatives})
+                </button>
+                <button
+                  onClick={() => setSelectedCreativeIds(new Set())}
+                  className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                >
+                  None
+                </button>
+              </>
+            )}
+          </>
+        }
       >
+        {/* Share Button */}
         {selectorMode && selectedCreativeIds.size > 0 && (
           <button
             onClick={() => {
@@ -724,81 +780,60 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
               setSelectedBaseColor(randomColor);
               setShowShareDialog(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity"
+            className="relative p-2 text-white rounded hover:opacity-90 transition-opacity"
             style={getButtonStyle(lookAndFeel)}
+            title={`Share ${selectedCreativeIds.size} creative${selectedCreativeIds.size > 1 ? 's' : ''}`}
           >
-            <Share2 size={16} />
-            Share ({selectedCreativeIds.size})
+            <Share2 size={20} />
+            {selectedCreativeIds.size > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {selectedCreativeIds.size}
+              </span>
+            )}
           </button>
         )}
+
+        {/* Upload Button */}
         <button
           onClick={() => setShowUploadDialog(true)}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity"
+          className="p-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
+          title="Upload creatives"
         >
-          <Upload size={16} />
-          Upload
+          <Upload size={20} />
         </button>
       </PageHeader>
 
       {/* Content */}
       <div
         ref={scrollContainerRef}
-        className="p-8 overflow-y-auto"
+        className="p-8 overflow-y-auto relative"
         style={{ height: 'calc(100vh - 100px)' }}
       >
-        <div className="max-w-7xl mx-auto">
-          {/* Virtual Scrolling Debug Info */}
-          <div className="mb-2 text-xs text-gray-500 text-right">
-            {debugInfo}
-          </div>
+        {/* Floating Info Button */}
+        <div className="fixed bottom-8 right-8 z-40">
+          <button
+            onClick={() => setShowDebugInfo(!showDebugInfo)}
+            className={`p-3 rounded-full shadow-lg transition-all ${
+              showDebugInfo
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-blue-600 hover:bg-blue-50'
+            }`}
+            title="View loading info"
+          >
+            <Info size={20} />
+          </button>
 
-          {/* Filter and Controls Row */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex items-center gap-2 flex-1">
-              <Filter size={18} className="text-gray-400" />
-              <input
-                type="text"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter creatives (use 'and' / 'or' operators)..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+          {/* Debug Info Panel */}
+          {showDebugInfo && (
+            <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 whitespace-nowrap border border-gray-200">
+              <div className="font-semibold mb-2 text-blue-600">Virtual Scrolling Info</div>
+              <div>{debugInfo}</div>
             </div>
+          )}
+        </div>
 
-            <button
-              onClick={toggleSelectorMode}
-              className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-                selectorMode
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
-              {selectorMode ? 'Selecting' : 'Select'}
-            </button>
-
-            {selectorMode && (
-              <>
-                <button
-                  onClick={() => {
-                    const allFilteredIds = new Set(allFilteredCreatives.map(creative => creative.id));
-                    setSelectedCreativeIds(allFilteredIds);
-                  }}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                >
-                  Select All ({totalCreatives})
-                </button>
-                <button
-                  onClick={() => setSelectedCreativeIds(new Set())}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                >
-                  Deselect All
-                </button>
-              </>
-            )}
-          </div>
-
+        <div className="max-w-7xl mx-auto">
           {/* Assets Grid */}
           {(viewMode === 'grid3' || viewMode === 'grid4') ? (
             <CreativeLibraryMasonryView
@@ -877,6 +912,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       <CreativePreview
         creative={selectedCreative}
         onClose={() => setSelectedCreative(null)}
+        templateHtml={templateHtml}
+        templateConfig={templateConfig}
+        templateCss={templateCss}
+        allCreatives={allFilteredCreatives}
+        onNavigate={setSelectedCreative}
       />
     </div>
   );
