@@ -198,7 +198,7 @@ const CreativeLibraryItem = ({
                       display: 'block'
                     }}
                     title={`${creative.product || 'Creative'} Preview`}
-                    sandbox="allow-same-origin"
+                    sandbox="allow-same-origin allow-scripts"
                   />
                 </div>
               </div>
