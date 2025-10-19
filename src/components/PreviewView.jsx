@@ -546,18 +546,30 @@ const PublicPreviewView = ({ previewId }) => {
                   <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
                     {isStatic && asset.bannerSize && (
                       <div
-                        className="w-full relative overflow-hidden"
                         style={{
-                          aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`
+                          width: '100%',
+                          aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`,
+                          position: 'relative',
+                          overflow: 'hidden'
                         }}
                       >
                         <div
                           style={{
                             width: `${asset.bannerSize.width}px`,
                             height: `${asset.bannerSize.height}px`,
-                            transformOrigin: 'top left'
+                            transformOrigin: 'top left',
+                            transform: 'scale(var(--scale))',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0
                           }}
-                          className={`iframe-scale-${asset.id}`}
+                          ref={(el) => {
+                            if (el) {
+                              const parentWidth = el.parentElement?.offsetWidth || asset.bannerSize.width;
+                              const scale = parentWidth / asset.bannerSize.width;
+                              el.style.setProperty('--scale', scale.toString());
+                            }
+                          }}
                         >
                           <iframe
                             src={asset.staticPath}
@@ -565,33 +577,12 @@ const PublicPreviewView = ({ previewId }) => {
                             style={{
                               width: `${asset.bannerSize.width}px`,
                               height: `${asset.bannerSize.height}px`,
-                              border: 'none'
+                              border: 0,
+                              display: 'block'
                             }}
                             title={asset.folderName || asset.filename}
                           />
                         </div>
-                        <style>{`
-                          @media (max-width: 639px) {
-                            .iframe-scale-${asset.id} {
-                              transform: scale(calc((100vw - 2rem) / ${asset.bannerSize.width}));
-                            }
-                          }
-                          @media (min-width: 640px) and (max-width: 1023px) {
-                            .iframe-scale-${asset.id} {
-                              transform: scale(calc(((100vw - 2rem) / 2 - 0.5rem) / ${asset.bannerSize.width}));
-                            }
-                          }
-                          @media (min-width: 1024px) and (max-width: 1279px) {
-                            .iframe-scale-${asset.id} {
-                              transform: scale(calc(((100vw - 3rem) / 3 - 0.67rem) / ${asset.bannerSize.width}));
-                            }
-                          }
-                          @media (min-width: 1280px) {
-                            .iframe-scale-${asset.id} {
-                              transform: scale(calc(((1280px - 4rem) / 4 - 0.75rem) / ${asset.bannerSize.width}));
-                            }
-                          }
-                        `}</style>
                       </div>
                     )}
                     {!isStatic && isImage && (
