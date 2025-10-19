@@ -553,10 +553,16 @@ app.post('/api/shares', async (req, res) => {
       'utf8'
     );
 
+    // Build full share URL
+    // Use APP_BASE_URL from environment, or construct from request
+    const baseUrl = process.env.APP_BASE_URL ||
+                    `${req.protocol}://${req.get('host')}`;
+    const fullShareUrl = `${baseUrl}/share/${shareId}`;
+
     // Return share info
     res.json({
       shareId,
-      url: `/share/${shareId}`
+      url: fullShareUrl
     });
   } catch (error) {
     console.error('Error creating share:', error);
