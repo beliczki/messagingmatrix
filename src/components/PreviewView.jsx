@@ -569,21 +569,11 @@ const PublicPreviewView = ({ previewId }) => {
                       </p>
                     </div>
 
-                    {isStaticLocalReview(selectedAsset) && selectedAsset.messageData && (
-                      <>
-                        <div>
-                          <span className="text-white/70">Message:</span>
-                          <p className="text-white font-medium">
-                            MC{selectedAsset.messageData.number} - {selectedAsset.messageData.variant}
-                          </p>
-                        </div>
-                        {selectedAsset.messageData.name && (
-                          <div>
-                            <span className="text-white/70">Campaign:</span>
-                            <p className="text-white font-medium truncate">{selectedAsset.messageData.name}</p>
-                          </div>
-                        )}
-                      </>
+                    {isStaticLocalReview(selectedAsset) && selectedAsset.messageData && selectedAsset.messageData.name && (
+                      <div>
+                        <span className="text-white/70">Message:</span>
+                        <p className="text-white font-medium truncate">{selectedAsset.messageData.name}</p>
+                      </div>
                     )}
                   </div>
 
