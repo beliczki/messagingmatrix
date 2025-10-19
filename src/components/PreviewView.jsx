@@ -460,16 +460,48 @@ const PublicPreviewView = ({ previewId }) => {
                   onClick={() => setSelectedAsset(asset)}
                 >
                   <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
-                    {isStatic && (
-                      <iframe
-                        src={asset.staticPath}
-                        className="w-full h-auto object-cover pointer-events-none"
+                    {isStatic && asset.bannerSize && (
+                      <div
+                        className="w-full relative"
                         style={{
-                          aspectRatio: asset.bannerSize ? `${asset.bannerSize.width} / ${asset.bannerSize.height}` : '16/9',
-                          border: 'none'
+                          aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`
                         }}
-                        title={asset.folderName || asset.filename}
-                      />
+                      >
+                        <div
+                          className="absolute top-0 left-0 origin-top-left"
+                          style={{
+                            width: `${asset.bannerSize.width}px`,
+                            height: `${asset.bannerSize.height}px`,
+                            transform: 'scale(var(--scale))',
+                            transformOrigin: 'top left'
+                          }}
+                        >
+                          <iframe
+                            src={asset.staticPath}
+                            className="pointer-events-none"
+                            style={{
+                              width: `${asset.bannerSize.width}px`,
+                              height: `${asset.bannerSize.height}px`,
+                              border: 'none'
+                            }}
+                            title={asset.folderName || asset.filename}
+                          />
+                        </div>
+                        <style>{`
+                          @media (max-width: 639px) {
+                            div[style*="--scale"] { --scale: calc(100vw / ${asset.bannerSize.width} * 0.95); }
+                          }
+                          @media (min-width: 640px) and (max-width: 1023px) {
+                            div[style*="--scale"] { --scale: calc((100vw - 2rem) / 2 / ${asset.bannerSize.width} * 0.95); }
+                          }
+                          @media (min-width: 1024px) and (max-width: 1279px) {
+                            div[style*="--scale"] { --scale: calc((100vw - 3rem) / 3 / ${asset.bannerSize.width} * 0.95); }
+                          }
+                          @media (min-width: 1280px) {
+                            div[style*="--scale"] { --scale: calc((1280px - 4rem) / 4 / ${asset.bannerSize.width} * 0.95); }
+                          }
+                        `}</style>
+                      </div>
                     )}
                     {!isStatic && isImage && (
                       <img
