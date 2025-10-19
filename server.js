@@ -497,13 +497,18 @@ app.post('/api/shares', async (req, res) => {
           if (fs.existsSync(manifestSourcePath)) {
             try {
               let manifestContent = fs.readFileSync(manifestSourcePath, 'utf8');
+              const manifest = JSON.parse(manifestContent);
 
               // Replace {{ad.width}} and {{ad.height}} with actual values
-              manifestContent = manifestContent.replace(/\{\{ad\.width\}\}/g, creative.bannerSize.width.toString());
-              manifestContent = manifestContent.replace(/\{\{ad\.height\}\}/g, creative.bannerSize.height.toString());
+              manifest.width = creative.bannerSize.width.toString();
+              manifest.height = creative.bannerSize.height.toString();
+
+              // Set title: MC{Number}_{Variant}_{Version} - {Name}
+              const titleName = creative.messageData.name || `Message ${mcNumber}`;
+              manifest.title = `MC${mcNumber}_${mcVariant}_${version} - ${titleName}`;
 
               // Save populated manifest
-              fs.writeFileSync(path.join(adDir, 'manifest.json'), manifestContent, 'utf8');
+              fs.writeFileSync(path.join(adDir, 'manifest.json'), JSON.stringify(manifest, null, 4), 'utf8');
               console.log(`  ✓ Copied and populated manifest.json`);
             } catch (manifestError) {
               console.error(`  ✗ Error processing manifest.json:`, manifestError.message);
