@@ -332,10 +332,46 @@ app.get('/api/shares/:shareId', (req, res) => {
   }
 });
 
+// Helper function to populate template with message data
+function populateTemplate(html, messageData, templateConfig, imageBaseUrls) {
+  if (!messageData || !html) return html;
+  let result = html;
+
+  if (templateConfig && templateConfig.placeholders) {
+    Object.keys(templateConfig.placeholders).forEach(placeholderName => {
+      const config = templateConfig.placeholders[placeholderName];
+      const binding = config['binding-messagingmatrix'];
+      let value = config.default || '';
+
+      if (binding) {
+        const fieldName = binding.replace(/^message\./i, '').toLowerCase();
+        value = messageData[fieldName] || value;
+
+        // Build full image URL if this is an image field
+        if (config.type === 'image' && value && imageBaseUrls) {
+          if (!value.startsWith('http://') && !value.startsWith('https://')) {
+            value = (imageBaseUrls[fieldName] || '') + value;
+          }
+        }
+      }
+
+      const regex = new RegExp(`\\{\\{${placeholderName}\\}\\}`, 'g');
+      result = result.replace(regex, value);
+    });
+  }
+
+  return result;
+}
+
 // Create new share
-app.post('/api/shares', (req, res) => {
+app.post('/api/shares', async (req, res) => {
   try {
-    const { assetIds, title, baseColor } = req.body;
+    const { assetIds, creatives = [], title, baseColor, templateData = {} } = req.body;
+
+    // Load config to get image base URLs
+    const configPath = path.join(__dirname, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const imageBaseUrls = config.imageBaseUrls || {};
 
     // Generate unique share ID
     const shareId = Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -344,10 +380,138 @@ app.post('/api/shares', (req, res) => {
     // Create share directory
     fs.mkdirSync(shareDir, { recursive: true });
 
+    // Process dynamic ads - create static HTML versions
+    const processedAssets = [];
+
+    for (const creative of creatives) {
+      if (creative.isDynamic && creative.messageData && templateData.templateHtml && templateData.templateCss) {
+        try {
+          // Generate folder name: name_dimensions
+          const messageName = (creative.messageData.name || `MC${creative.messageData.number}${creative.messageData.variant}`)
+            .replace(/[^a-zA-Z0-9-_]/g, '_'); // Sanitize filename
+          const dimensions = `${creative.bannerSize.width}x${creative.bannerSize.height}`;
+          const folderName = `${messageName}_${dimensions}`;
+          const adDir = path.join(shareDir, folderName);
+
+          // Create ad directory
+          fs.mkdirSync(adDir, { recursive: true });
+
+          // Get CSS for this size
+          const sizeKey = dimensions;
+          let combinedCss = '';
+          if (templateData.templateCss.main) {
+            combinedCss += templateData.templateCss.main + '\n';
+          }
+          if (templateData.templateCss[sizeKey]) {
+            combinedCss += templateData.templateCss[sizeKey];
+          }
+
+          // Save CSS file
+          fs.writeFileSync(path.join(adDir, 'styles.css'), combinedCss, 'utf8');
+
+          // Populate template with message data
+          let populatedHtml = populateTemplate(
+            templateData.templateHtml,
+            creative.messageData,
+            templateData.templateConfig,
+            imageBaseUrls
+          );
+
+          // Extract and copy images to local folder
+          const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+          const imagesToCopy = [];
+          let match;
+
+          while ((match = imgRegex.exec(populatedHtml)) !== null) {
+            imagesToCopy.push(match[1]);
+          }
+
+          // Copy images and update HTML references
+          for (const imgSrc of imagesToCopy) {
+            try {
+              let localImagePath = null;
+              const imgFilename = path.basename(imgSrc);
+
+              // Handle local file paths (e.g., /src/assets/image.png or src/assets/image.png)
+              if (imgSrc.startsWith('/')) {
+                // Absolute path from project root
+                localImagePath = path.join(__dirname, imgSrc);
+              } else if (imgSrc.startsWith('src/') || imgSrc.startsWith('public/')) {
+                // Relative path from project root
+                localImagePath = path.join(__dirname, imgSrc);
+              } else if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+                // Try to find the image in common locations
+                const possiblePaths = [
+                  path.join(__dirname, 'src', 'assets', imgFilename),
+                  path.join(__dirname, 'src', 'creatives', imgFilename),
+                  path.join(__dirname, 'public', imgFilename)
+                ];
+
+                for (const possiblePath of possiblePaths) {
+                  if (fs.existsSync(possiblePath)) {
+                    localImagePath = possiblePath;
+                    break;
+                  }
+                }
+              }
+
+              // Copy the image file if we found a local path
+              if (localImagePath && fs.existsSync(localImagePath)) {
+                const destPath = path.join(adDir, imgFilename);
+                fs.copyFileSync(localImagePath, destPath);
+
+                // Update HTML to reference local image
+                populatedHtml = populatedHtml.replace(
+                  new RegExp(`src=["']${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'g'),
+                  `src="${imgFilename}"`
+                );
+
+                console.log(`  ✓ Copied image: ${imgFilename}`);
+              } else if (imgSrc.startsWith('http://') || imgSrc.startsWith('https://')) {
+                // For remote URLs, keep the original URL (downloading would add complexity and latency)
+                console.log(`  → Remote image (kept as URL): ${imgFilename}`);
+              }
+            } catch (imgError) {
+              console.error(`  ✗ Error copying image ${imgSrc}:`, imgError.message);
+            }
+          }
+
+          // Replace CSS links with the actual styles file
+          populatedHtml = populatedHtml.replace(
+            /<link rel="stylesheet" href="main\.css".*?>/g,
+            '<link rel="stylesheet" href="styles.css">'
+          );
+          populatedHtml = populatedHtml.replace(
+            /<link rel="stylesheet" href="\[\[css\]\]".*?>/g,
+            ''
+          );
+
+          // Save HTML file
+          fs.writeFileSync(path.join(adDir, 'index.html'), populatedHtml, 'utf8');
+
+          console.log(`✓ Created static ad: ${folderName}`);
+
+          // Add to processed assets list with new path
+          processedAssets.push({
+            ...creative,
+            staticPath: `/share/${shareId}/${folderName}/index.html`,
+            folderName
+          });
+        } catch (error) {
+          console.error(`Error processing dynamic ad ${creative.id}:`, error);
+          // Continue with other ads even if one fails
+        }
+      } else {
+        // Non-dynamic creative, keep as-is
+        processedAssets.push(creative);
+      }
+    }
+
     // Create share data
     const shareData = {
       shareId,
       assetIds,
+      assets: processedAssets,
       title,
       baseColor,
       createdAt: new Date().toISOString(),
