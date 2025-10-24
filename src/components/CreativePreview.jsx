@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import settings from '../services/settings';
 
 const CreativePreview = ({
@@ -11,9 +11,24 @@ const CreativePreview = ({
   allCreatives = [],
   onNavigate = null
 }) => {
+  const [infoOpen, setInfoOpen] = useState(false);
+
   if (!creative) return null;
 
   const isDynamic = creative.isDynamic && creative.extension === 'html';
+  const isPng = creative.extension?.toLowerCase() === 'png';
+
+  // Checkerboard pattern for transparent PNG images
+  const checkerboardStyle = isPng ? {
+    backgroundImage: `
+      linear-gradient(45deg, #333 25%, transparent 25%),
+      linear-gradient(-45deg, #333 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #333 75%),
+      linear-gradient(-45deg, transparent 75%, #333 75%)
+    `,
+    backgroundSize: '30px 30px',
+    backgroundPosition: '0 0, 0 15px, 15px -15px, -15px 0px'
+  } : {};
 
   // Find current index in all creatives
   const currentIndex = allCreatives.findIndex(c => c.id === creative.id);
@@ -179,6 +194,19 @@ const CreativePreview = ({
             <ChevronRight size={20} />
           </button>
 
+          {/* Info Button */}
+          <button
+            onClick={() => setInfoOpen(!infoOpen)}
+            className={`p-2 rounded transition-colors ml-2 ${
+              infoOpen
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/10 hover:bg-white/20 text-white'
+            }`}
+            title="Show asset info"
+          >
+            <Info size={20} />
+          </button>
+
           {/* Close Button */}
           <button
             onClick={onClose}
@@ -197,8 +225,72 @@ const CreativePreview = ({
         ) : creative.extension === 'mp4' ? (
           <video src={creative.url} controls autoPlay className="max-w-full max-h-full rounded-lg" />
         ) : (
-          <img src={creative.url} alt={creative.filename} className="max-w-full max-h-full rounded-lg" />
+          <div className="flex items-center justify-center rounded-lg" style={checkerboardStyle}>
+            <img src={creative.url} alt={creative.filename} className="max-w-full max-h-full rounded-lg" style={{ display: 'block' }} />
+          </div>
         )}
+      </div>
+
+      {/* Info Slidein Panel */}
+      <div
+        className={`absolute top-0 right-0 bottom-0 w-96 bg-white shadow-xl border-l z-20 transform transition-transform duration-300 ease-in-out overflow-auto ${
+          infoOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4 border-b bg-gray-50 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Asset Info</h3>
+            <button
+              onClick={() => setInfoOpen(false)}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+            >
+              <X size={20} className="text-gray-600" />
+            </button>
+          </div>
+        </div>
+        <div className="p-4 space-y-4">
+          {/* Display all asset properties */}
+          {Object.entries(creative).map(([key, value]) => {
+            // Skip some non-display fields
+            if (['url', 'thumbnail', 'isPlaceholder', 'isDynamic', 'messageData', 'bannerSize'].includes(key)) {
+              return null;
+            }
+
+            // Handle array values
+            if (Array.isArray(value)) {
+              if (value.length === 0) return null;
+              return (
+                <div key={key} className="border-b border-gray-200 pb-3">
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
+                    {key.replace(/_/g, ' ')}
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {value.map((item, index) => (
+                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            // Skip empty values
+            if (!value || value === '') return null;
+
+            return (
+              <div key={key} className="border-b border-gray-200 pb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
+                  {key.replace(/_/g, ' ')}
+                </label>
+                <div className="text-sm text-gray-900 break-words">
+                  {String(value)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
