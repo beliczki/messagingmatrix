@@ -9,6 +9,7 @@ export const useMatrix = () => {
   const [topics, setTopics] = useState([]);
   const [messages, setMessages] = useState([]);
   const [keywords, setKeywords] = useState({});
+  const [assets, setAssets] = useState([]);
   const [messagesByCell, setMessagesByCell] = useState({}); // Fast lookup: "topicKey-audienceKey" -> [messages]
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +46,7 @@ export const useMatrix = () => {
       setTopics(data.topics);
       setMessages(data.messages);
       setKeywords(data.keywords || {});
+      setAssets(data.assets || []);
       setLastSync(new Date());
     } catch (err) {
       console.error('Load error:', err);
@@ -55,7 +57,7 @@ export const useMatrix = () => {
   }, []);
 
   // Save data to sheets
-  const save = useCallback(async (feedData = null, feedFields = null) => {
+  const save = useCallback(async (feedData = null, feedFields = null, assetsData = null) => {
     setIsSaving(true);
     setError(null);
 
@@ -90,7 +92,7 @@ export const useMatrix = () => {
           }
         });
 
-      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields);
+      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -330,6 +332,8 @@ export const useMatrix = () => {
     topics,
     messages,
     keywords,
+    assets,
+    setAssets,
     isLoading,
     isSaving,
     error,

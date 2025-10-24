@@ -24,6 +24,7 @@ export const parseTreeStructure = (structureString) => {
  * @returns {string} The extracted value
  */
 const getValue = (item, source, field) => {
+  if (!field) return 'Unknown';
   const fieldLower = field.toLowerCase().replace('_', '');
 
   if ((source === 'Audiences' || source === 'Audience') && item.type === 'audience') {

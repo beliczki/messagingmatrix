@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon, Check, ChevronDown } from 'lucide-react';
-import { useMatrix } from '../hooks/useMatrix';
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import ClaudeChat from './ClaudeChat';
@@ -12,35 +11,36 @@ import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
 import PageHeader, { getButtonStyle } from './PageHeader';
 
-const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState, setMatrixViewState }) => {
+const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState, setMatrixViewState, matrixData }) => {
   const claudeChatRef = useRef(null);
   const {
-    audiences,
-    topics,
-    messages,
-    keywords,
-    isLoading,
-    isSaving,
-    error,
-    lastSync,
-    load,
-    save,
-    saveKeywords,
-    addAudience,
-    addTopic,
-    addMessage,
-    updateMessage,
-    deleteMessage,
-    moveMessage,
-    copyMessage,
-    updateAudience,
-    updateTopic,
-    deleteAudience,
-    deleteTopic,
-    getMessages,
-    getUrl,
-    getSpreadsheetId
-  } = useMatrix();
+    audiences = [],
+    topics = [],
+    messages = [],
+    keywords = {},
+    assets = [],
+    isLoading = false,
+    isSaving = false,
+    error = null,
+    lastSync = null,
+    load = () => {},
+    save = () => {},
+    saveKeywords = () => {},
+    addAudience = () => {},
+    addTopic = () => {},
+    addMessage = () => {},
+    updateMessage = () => {},
+    deleteMessage = () => {},
+    moveMessage = () => {},
+    copyMessage = () => {},
+    updateAudience = () => {},
+    updateTopic = () => {},
+    deleteAudience = () => {},
+    deleteTopic = () => {},
+    getMessages = () => [],
+    getUrl = () => '',
+    getSpreadsheetId = () => ''
+  } = matrixData || {};
 
   const [editingCell, setEditingCell] = useState(null);
   const [editingHeader, setEditingHeader] = useState(null);
@@ -76,9 +76,13 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   const setAudienceFilter = (value) => setMatrixViewState({ ...matrixViewState, audienceFilter: value });
   const setStatusFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedStatuses: value });
   const setProductFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedProducts: value });
-  const setMatrixZoom = (value) => setMatrixViewState({ ...matrixViewState, matrixZoom: value });
+  const setMatrixZoom = (value) => {
+    setMatrixViewState({ ...matrixViewState, matrixZoom: value });
+  };
   const setMatrixPan = (value) => setMatrixViewState({ ...matrixViewState, matrixPan: value });
-  const setTreeZoom = (value) => setMatrixViewState({ ...matrixViewState, treeZoom: value });
+  const setTreeZoom = (value) => {
+    setMatrixViewState({ ...matrixViewState, treeZoom: value });
+  };
 
   // Tree view controls state
   const [treeConnectorType, setTreeConnectorType] = useState('curved');
@@ -177,10 +181,14 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   // Initialize filters with all options on first load
   useEffect(() => {
     // Only initialize if data has loaded
-    if (audiences.length === 0 && topics.length === 0) return;
+    if (audiences.length === 0 && topics.length === 0) {
+      return;
+    }
 
     // Only initialize if filters are currently empty (first time, no saved state)
-    if (statusFilters.length > 0 || productFilters.length > 0) return;
+    if (statusFilters.length > 0 || productFilters.length > 0) {
+      return;
+    }
 
     // Get all available products
     const allProducts = new Set();
@@ -486,6 +494,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
       'Saving audiences to spreadsheet...',
       'Saving topics to spreadsheet...',
       'Saving messages to spreadsheet...',
+      'Saving assets to spreadsheet...',
       'Finalizing save operation...',
       'Save complete!'
     ];
@@ -499,7 +508,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
 
         // Actually save on step 1 (after "Preparing data")
         if (i === 0) {
-          await save();
+          await save(null, null, assets);
         }
       }
 
@@ -856,7 +865,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
           <div className="flex items-center gap-1 rounded p-0.5"
                style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
             <button
-              onClick={() => setMatrixZoom(prev => Math.max(prev * 0.8, 0.1))}
+              onClick={() => setMatrixZoom(Math.max(matrixZoom * 0.8, 0.1))}
               className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
               title="Zoom Out"
             >
@@ -866,7 +875,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
               {Math.round(matrixZoom * 100)}%
             </span>
             <button
-              onClick={() => setMatrixZoom(prev => Math.min(prev * 1.2, 3))}
+              onClick={() => setMatrixZoom(Math.min(matrixZoom * 1.2, 3))}
               className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
               title="Zoom In"
             >
@@ -924,7 +933,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
             <div className="flex items-center gap-1 rounded p-0.5"
                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
               <button
-                onClick={() => setTreeZoom(prev => Math.max(prev * 0.8, 0.1))}
+                onClick={() => setTreeZoom(Math.max(treeZoom * 0.8, 0.1))}
                 className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
                 title="Zoom Out"
               >
@@ -934,7 +943,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
                 {Math.round(treeZoom * 100)}%
               </span>
               <button
-                onClick={() => setTreeZoom(prev => Math.min(prev * 1.2, 3))}
+                onClick={() => setTreeZoom(Math.min(treeZoom * 1.2, 3))}
                 className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
                 title="Zoom In"
               >
@@ -1395,6 +1404,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
         topics={topics}
         messages={messages}
         keywords={keywords}
+        assets={assets}
         lastSync={lastSync}
         isSaving={isSaving}
         saveProgress={saveProgress}
