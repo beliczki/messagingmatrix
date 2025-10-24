@@ -917,16 +917,18 @@ const TreeView = React.memo(({
             <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
               Layer height:
             </label>
-            <input
-              type="range"
-              min="0.5"
-              max="4"
-              step="0.1"
-              value={layerHeight}
-              onChange={handleLayerHeightChange}
-              className="w-32"
-            />
-            <span className="text-sm text-gray-600 font-mono w-8">{layerHeight.toFixed(1)}x</span>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm">
+              <input
+                type="range"
+                min="0.5"
+                max="4"
+                step="0.1"
+                value={layerHeight}
+                onChange={handleLayerHeightChange}
+                className="w-32"
+              />
+              <span className="text-sm text-gray-600 font-mono w-8">{layerHeight.toFixed(1)}x</span>
+            </div>
           </div>
         </div>
 
