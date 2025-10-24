@@ -264,24 +264,24 @@ const App = () => {
               />
             </div>
           </div>
-        </div>
 
-        {/* State Management Dialog - Rendered at app level */}
-        <StateManagementDialog
-          showStateDialog={showStateDialog}
-          setShowStateDialog={setShowStateDialog}
-          audiences={matrixData?.audiences || []}
-          topics={matrixData?.topics || []}
-          messages={matrixData?.messages || []}
-          keywords={matrixData?.keywords || {}}
-          assets={matrixData?.assets || []}
-          lastSync={matrixData?.lastSync}
-          isSaving={matrixData?.isSaving}
-          saveProgress={matrixStateData.saveProgress}
-          handleSaveWithProgress={matrixStateData.handleSaveWithProgress}
-          feedData={matrixStateData.feedData}
-          downloadFeedCSV={matrixStateData.downloadFeedCSV}
-        />
+          {/* State Management Dialog - Rendered at app level */}
+          <StateManagementDialog
+            showStateDialog={showStateDialog}
+            setShowStateDialog={setShowStateDialog}
+            audiences={matrixData?.audiences || []}
+            topics={matrixData?.topics || []}
+            messages={matrixData?.messages || []}
+            keywords={matrixData?.keywords || {}}
+            assets={matrixData?.assets || []}
+            lastSync={matrixData?.lastSync}
+            isSaving={matrixData?.isSaving}
+            saveProgress={matrixStateData.saveProgress}
+            handleSaveWithProgress={matrixStateData.handleSaveWithProgress}
+            feedData={matrixStateData.feedData}
+            downloadFeedCSV={matrixStateData.downloadFeedCSV}
+          />
+        </div>
       } />
     </Routes>
   );
