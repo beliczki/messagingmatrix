@@ -803,7 +803,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
                 type="text"
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter assets..."
+                placeholder="Filter assets (use AND/OR operators)..."
                 className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
               />
             </div>
