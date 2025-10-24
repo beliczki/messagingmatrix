@@ -47,15 +47,9 @@ const CreativePreview = ({
     }
   };
 
-  // Format title for dynamic ads
+  // Format title - always show filename
   const getTitle = () => {
-    if (isDynamic && creative.messageData) {
-      const msg = creative.messageData;
-      const mcPart = `MC${msg.number}${msg.variant.toUpperCase()}`;
-      const namePart = msg.name || creative.filename;
-      return `${mcPart} | ${namePart}`;
-    }
-    return creative.product || creative.filename;
+    return creative.filename || creative.product || 'Preview';
   };
 
   // Helper function to build full image URLs
