@@ -352,22 +352,35 @@ export const useMatrix = () => {
 
   prevDepsRef.current = { audiences, topics, messages, keywords, assets };
 
-  // Check if arrays have actually changed
+  // Check if arrays have actually changed OR if metadata has changed
   const shouldUpdate = !cachedMatrixResult ||
     cachedMatrixResult.audiences !== audiences ||
     cachedMatrixResult.topics !== topics ||
     cachedMatrixResult.messages !== messages ||
     cachedMatrixResult.keywords !== keywords ||
-    cachedMatrixResult.assets !== assets;
+    cachedMatrixResult.assets !== assets ||
+    cachedMatrixResult.messagesByCell !== messagesByCell ||
+    cachedMatrixResult.isLoading !== isLoading ||
+    cachedMatrixResult.isSaving !== isSaving ||
+    cachedMatrixResult.error !== error ||
+    cachedMatrixResult.lastSync !== lastSync;
 
   if (shouldUpdate) {
-    console.log('🔴 useMatrix UPDATING CACHED RESULT');
+    console.log('🔴 useMatrix UPDATING CACHED RESULT', {
+      audiences: audiences.length,
+      topics: topics.length,
+      messages: messages.length,
+      messagesByCellKeys: Object.keys(messagesByCell).length,
+      isLoading,
+      isSaving
+    });
     cachedMatrixResult = {
       audiences,
       topics,
       messages,
       keywords,
       assets,
+      messagesByCell,
       setAssets,
       isLoading,
       isSaving,
