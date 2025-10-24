@@ -362,7 +362,8 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           body: JSON.stringify({
             tempFilename: upload.tempFilename,
             metadata: upload.metadata,
-            targetDir: 'assets'
+            targetDir: 'assets',
+            originalName: upload.originalName
           })
         });
 
@@ -826,76 +827,171 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
             </div>
             <div className="p-6 overflow-y-auto flex-1">
               <p className="text-sm text-gray-600 mb-4">
-                Review and edit the metadata for each file. Files will be renamed as: <br />
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded">product_platform_size_variant_templateSource.ext</code>
+                Review and edit the metadata for each file. Files will be renamed following the pattern: <br />
+                <code className="text-xs bg-gray-100 px-2 py-1 rounded">Brand_Product_Type_Visual-keyword_Visual-description_Dimensions_Placeholder-name_Cropping-template_Version.format</code>
               </p>
               <div className="space-y-4">
-                {pendingUploads.map((upload, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <p className="font-semibold text-gray-800 mb-3 truncate">{upload.originalName}</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.product}
-                          onChange={(e) => updatePendingMetadata(index, 'product', e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                {pendingUploads.map((upload, index) => {
+                  const generatePreviewFilename = (metadata) => {
+                    const parts = [
+                      (metadata.brand || 'unknown').replace(/\s+/g, '-'),
+                      (metadata.product || 'unknown').replace(/\s+/g, '-'),
+                      (metadata.type || 'unknown').replace(/\s+/g, '-'),
+                      (metadata.visualKeyword || 'unknown').replace(/\s+/g, '-'),
+                      (metadata.visualDescription || 'desc').replace(/\s+/g, '-'),
+                      (metadata.dimensions || '').replace(/\s+/g, ''),
+                      (metadata.placeholderName || 'placeholder').replace(/\s+/g, '-'),
+                      (metadata.croppingTemplate || 'default').replace(/\s+/g, '-'),
+                      `v${metadata.version || '1'}`,
+                    ];
+                    return `${parts.join('_')}.${metadata.format || 'jpg'}`;
+                  };
+
+                  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(upload.metadata.format || '');
+                  const isVideo = upload.metadata.format === 'mp4';
+                  const previewUrl = `/api/assets/temp-preview/${upload.tempFilename}`;
+
+                  return (
+                    <div key={index} className="border rounded-lg p-4">
+                      {/* Header with thumbnail and filename */}
+                      <div className="flex items-start gap-3 mb-3">
+                        {/* Thumbnail */}
+                        <div className="flex-shrink-0 w-20 h-20 rounded overflow-hidden bg-gray-100 flex items-center justify-center">
+                          {isImage && (
+                            <img
+                              src={previewUrl}
+                              alt={upload.originalName}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          {isVideo && (
+                            <video
+                              src={previewUrl}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                          )}
+                          {!isImage && !isVideo && (
+                            <ImageIcon size={32} className="text-gray-400" />
+                          )}
+                        </div>
+                        {/* Filename */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-800 truncate">{upload.originalName}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {upload.metadata.format?.toUpperCase()} {upload.metadata.dimensions && `• ${upload.metadata.dimensions}`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Platform</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.platform}
-                          onChange={(e) => updatePendingMetadata(index, 'platform', e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Brand</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.brand || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'brand', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., Nike, Apple"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.product || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'product', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., Air Max, iPhone"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.type || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'type', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., banner, poster, social"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Visual Keyword</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.visualKeyword || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'visualKeyword', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., product, lifestyle"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Visual Description</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.visualDescription || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'visualDescription', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., hero-shot, close-up"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Dimensions</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.dimensions || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'dimensions', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., 1200x628"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Placeholder Name</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.placeholderName || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'placeholderName', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., main-image"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Cropping Template</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.croppingTemplate || ''}
+                            onChange={(e) => updatePendingMetadata(index, 'croppingTemplate', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., center, top-left"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Version</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.version || '1'}
+                            onChange={(e) => updatePendingMetadata(index, 'version', e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., 1, 2, 3"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Format</label>
+                          <input
+                            type="text"
+                            value={upload.metadata.format || ''}
+                            readOnly
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-gray-50 cursor-not-allowed"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Size</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.size}
-                          onChange={(e) => updatePendingMetadata(index, 'size', e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Variant</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.variant}
-                          onChange={(e) => updatePendingMetadata(index, 'variant', e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Template Source</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.templateSource}
-                          onChange={(e) => updatePendingMetadata(index, 'templateSource', e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Extension</label>
-                        <input
-                          type="text"
-                          value={upload.metadata.ext}
-                          readOnly
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-gray-50 cursor-not-allowed"
-                        />
+                      <div className="mt-3 p-2 bg-blue-50 rounded">
+                        <p className="text-xs text-gray-600 mb-1">Preview filename:</p>
+                        <p className="text-xs font-mono text-blue-800 break-all">{generatePreviewFilename(upload.metadata)}</p>
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <p className="text-xs text-gray-500">
-                        New filename: <span className="font-mono">{`${upload.metadata.product}_${upload.metadata.platform}_${upload.metadata.size}_${upload.metadata.variant}_${upload.metadata.templateSource}.${upload.metadata.ext}`}</span>
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 p-6 border-t">

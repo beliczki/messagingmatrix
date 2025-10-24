@@ -2,6 +2,12 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, AlertCircle, Loader, Trash2 } from 'lucide-react';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
+import mainCss from '../templates/html/main.css?raw';
+import css300x250 from '../templates/html/300x250.css?raw';
+import css300x600 from '../templates/html/300x600.css?raw';
+import css640x360 from '../templates/html/640x360.css?raw';
+import css970x250 from '../templates/html/970x250.css?raw';
+import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const MessageEditorDialog = ({
   editingMessage,
@@ -137,6 +143,18 @@ const MessageEditorDialog = ({
 
   // Generate preview HTML
   const generatePreviewHtml = () => {
+    // CSS map for different sizes
+    const cssMap = {
+      '300x250': css300x250,
+      '300x600': css300x600,
+      '640x360': css640x360,
+      '970x250': css970x250,
+      '1080x1080': css1080x1080
+    };
+
+    // Get the size-specific CSS
+    const sizeCss = cssMap[previewSize] || '';
+
     const templateHtml = `<html id="html">
   <head>
     <title>${editingMessage.name || 'Preview'}</title>
@@ -145,9 +163,9 @@ const MessageEditorDialog = ({
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/src/templates/html/main.css" />
-    <link rel="stylesheet" href="/src/templates/html/${previewSize}.css" />
     <style>
+      ${mainCss}
+      ${sizeCss}
       ${editingMessage.css || ''}
     </style>
   </head>

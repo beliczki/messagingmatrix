@@ -51,15 +51,15 @@ const App = () => {
         console.error('Failed to parse saved matrix view state:', e);
       }
     }
-    // Default state
+    // Default state - filters will be initialized by Matrix component with all available options
     return {
       viewMode: 'matrix',
       matrixZoom: 1,
       matrixPan: { x: 0, y: 0 },
       treeZoom: 1,
       displayMode: 'informative',
-      selectedStatuses: ['ACTIVE', 'INACTIVE', 'PLANNED', 'INPROGRESS', 'ERROR'],
-      selectedProducts: ['SZK', 'HK', 'VAL', 'SZA'],
+      selectedStatuses: [],
+      selectedProducts: [],
       audienceFilter: '',
       topicFilter: ''
     };

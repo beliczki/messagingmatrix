@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { SignJWT, importPKCS8 } from 'jose';
 import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
+import sizeOf from 'image-size';
 
 dotenv.config();
 
@@ -1009,47 +1010,97 @@ const upload = multer({
 });
 
 // Helper to extract metadata from filename
+// Pattern: Brand_Product_Type_Visual_keyword_Visual_description_Dimensions_Placeholder_name_Cropping_template_Version_Format
 function extractMetadata(filename) {
-  const nameWithoutExt = filename.replace(/\.(jpg|jpeg|png|mp4|gif)$/i, '');
+  const nameWithoutExt = filename.replace(/\.(jpg|jpeg|png|mp4|gif|webp|svg)$/i, '');
   const parts = nameWithoutExt.split('_');
 
-  const sizeMatch = nameWithoutExt.match(/(\d+)x(\d+)/);
-  const size = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}` : '';
+  // Extract dimensions (look for patterns like 1200x628, 300x250, etc.)
+  const dimensionsMatch = nameWithoutExt.match(/(\d+)x(\d+)/);
+  const dimensions = dimensionsMatch ? dimensionsMatch[0] : '';
 
+  // Extract version (look for patterns like v1, v2, v10, etc.)
+  const versionMatch = nameWithoutExt.match(/v(\d+)/i);
+  const version = versionMatch ? versionMatch[1] : '1';
+
+  // Match keywords to common values
+  const lowerFilename = filename.toLowerCase();
+  const brands = ['nike', 'adidas', 'puma', 'reebok', 'apple', 'samsung', 'google'];
+  const matchedBrand = brands.find(brand => lowerFilename.includes(brand));
+
+  const types = ['banner', 'poster', 'social', 'video', 'carousel', 'story', 'reel'];
+  const matchedType = types.find(type => lowerFilename.includes(type));
+
+  // Try to intelligently parse the parts
+  let brand = '';
   let product = '';
-  let platform = '';
-  let variant = '';
-  let templateSource = '';
+  let type = '';
+  let visualKeyword = '';
+  let visualDescription = '';
+  let placeholderName = '';
+  let croppingTemplate = '';
 
-  if (parts.length >= 2) {
-    product = parts[0] || '';
-    platform = parts[1] || '';
-  }
-  if (parts.length >= 4) {
-    variant = parts[3] || '';
-  }
-  if (parts.length >= 5) {
-    templateSource = parts[4] || '';
+  if (parts.length >= 9) {
+    // Full pattern match
+    [brand, product, type, visualKeyword, visualDescription, , placeholderName, croppingTemplate] = parts;
+  } else if (parts.length >= 2) {
+    // Partial match - try to extract what we can
+    brand = parts[0] || matchedBrand || '';
+    product = parts[1] || '';
+    type = parts[2] || matchedType || '';
+    visualKeyword = parts[3] || '';
+    visualDescription = parts[4] || '';
+    placeholderName = parts.length > 6 ? parts[parts.length - 3] : '';
+    croppingTemplate = parts.length > 7 ? parts[parts.length - 2] : '';
+  } else {
+    brand = matchedBrand || '';
+    type = matchedType || '';
   }
 
   return {
-    product,
-    platform,
-    size,
-    variant,
-    templateSource,
-    ext: filename.split('.').pop().toLowerCase()
+    brand: brand.replace(/-/g, ' '),
+    product: product.replace(/-/g, ' '),
+    type: type.replace(/-/g, ' '),
+    visualKeyword: visualKeyword.replace(/-/g, ' '),
+    visualDescription: visualDescription.replace(/-/g, ' '),
+    dimensions,
+    placeholderName: placeholderName.replace(/-/g, ' '),
+    croppingTemplate: croppingTemplate.replace(/-/g, ' '),
+    version,
+    format: filename.split('.').pop().toLowerCase()
   };
 }
 
 // Preview metadata for uploaded file
-app.post('/api/assets/preview-metadata', upload.single('file'), (req, res) => {
+app.post('/api/assets/preview-metadata', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const metadata = extractMetadata(req.file.originalname);
+
+    // Auto-detect dimensions for images
+    try {
+      const filePath = path.join(tempDir, req.file.filename);
+      const ext = req.file.originalname.split('.').pop().toLowerCase();
+
+      // Handle images
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+        // Read file as buffer for image-size library
+        const imageBuffer = await fsPromises.readFile(filePath);
+        const dimensions = sizeOf(imageBuffer);
+        if (dimensions && dimensions.width && dimensions.height) {
+          metadata.dimensions = `${dimensions.width}x${dimensions.height}`;
+          console.log(`Detected dimensions: ${metadata.dimensions} for ${req.file.originalname}`);
+        }
+      }
+      // For videos, we'll skip auto-detection for now (requires ffprobe)
+      // User can manually enter dimensions if needed
+    } catch (dimensionError) {
+      console.warn('Could not extract dimensions:', dimensionError.message);
+      // Continue without dimensions - not critical
+    }
 
     res.json({
       originalName: req.file.originalname,
@@ -1065,14 +1116,28 @@ app.post('/api/assets/preview-metadata', upload.single('file'), (req, res) => {
 // Confirm upload and move to final location
 app.post('/api/assets/confirm-upload', async (req, res) => {
   try {
-    const { tempFilename, metadata, targetDir = 'creatives' } = req.body;
+    const { tempFilename, metadata, targetDir = 'creatives', originalName } = req.body;
 
     if (!tempFilename || !metadata) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Construct final filename
-    const finalFilename = `${metadata.product}_${metadata.platform}_${metadata.size}_${metadata.variant}_${metadata.templateSource}.${metadata.ext}`;
+    // Construct final filename using new pattern:
+    // Brand_Product_Type_Visual_keyword_Visual_description_Dimensions_Placeholder_name_Cropping_template_Version_Format
+    const parts = [
+      (metadata.brand || 'unknown').replace(/\s+/g, '-'),
+      (metadata.product || 'unknown').replace(/\s+/g, '-'),
+      (metadata.type || 'unknown').replace(/\s+/g, '-'),
+      (metadata.visualKeyword || 'unknown').replace(/\s+/g, '-'),
+      (metadata.visualDescription || 'desc').replace(/\s+/g, '-'),
+      (metadata.dimensions || '').replace(/\s+/g, ''),
+      (metadata.placeholderName || 'placeholder').replace(/\s+/g, '-'),
+      (metadata.croppingTemplate || 'default').replace(/\s+/g, '-'),
+      `v${metadata.version || '1'}`,
+    ];
+
+    const format = metadata.format || 'jpg';
+    const finalFilename = `${parts.join('_')}.${format}`;
 
     // Determine target directory
     const targetDirectory = targetDir === 'assets' ? assetsDir : creativesDir;
@@ -1086,6 +1151,54 @@ app.post('/api/assets/confirm-upload', async (req, res) => {
     }
 
     await fsPromises.rename(tempPath, finalPath);
+
+    // Update assets.json registry
+    try {
+      const assetsJsonPath = path.join(__dirname, 'assets.json');
+      let assetsRegistry = { assets: [] };
+
+      // Read existing registry
+      if (fs.existsSync(assetsJsonPath)) {
+        const existingData = await fsPromises.readFile(assetsJsonPath, 'utf8');
+        assetsRegistry = JSON.parse(existingData);
+      }
+
+      // Create new asset record
+      const assetRecord = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        filename: finalFilename,
+        originalFilename: originalName || tempFilename,
+        uploadDate: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        metadata: {
+          brand: metadata.brand || '',
+          product: metadata.product || '',
+          type: metadata.type || '',
+          visualKeyword: metadata.visualKeyword || '',
+          visualDescription: metadata.visualDescription || '',
+          dimensions: metadata.dimensions || '',
+          placeholderName: metadata.placeholderName || '',
+          croppingTemplate: metadata.croppingTemplate || '',
+          version: metadata.version || '1',
+          format: metadata.format || format
+        },
+        tags: metadata.tags || [],
+        platforms: metadata.platforms || [],
+        status: 'active',
+        directory: targetDir
+      };
+
+      // Add to registry
+      assetsRegistry.assets.push(assetRecord);
+
+      // Write back to file
+      await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+
+      console.log('Asset added to registry:', assetRecord);
+    } catch (registryError) {
+      console.error('Error updating assets.json:', registryError);
+      // Continue even if registry update fails
+    }
 
     res.json({
       success: true,
@@ -1117,6 +1230,131 @@ app.post('/api/assets/cancel-upload', async (req, res) => {
   } catch (error) {
     console.error('Error canceling upload:', error);
     res.status(500).json({ error: 'Failed to cancel upload' });
+  }
+});
+
+// Serve temporary files for preview
+app.get('/api/assets/temp-preview/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const tempPath = path.join(tempDir, filename);
+
+    // Security check: ensure filename doesn't contain path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    if (!fs.existsSync(tempPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Serve the file
+    res.sendFile(tempPath);
+  } catch (error) {
+    console.error('Error serving temp file:', error);
+    res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+// Get assets registry (assets.json)
+app.get('/api/assets/registry', async (req, res) => {
+  try {
+    const assetsJsonPath = path.join(__dirname, 'assets.json');
+
+    if (!fs.existsSync(assetsJsonPath)) {
+      return res.json({ assets: [] });
+    }
+
+    const data = await fsPromises.readFile(assetsJsonPath, 'utf8');
+    const registry = JSON.parse(data);
+
+    res.json(registry);
+  } catch (error) {
+    console.error('Error reading assets registry:', error);
+    res.status(500).json({ error: 'Failed to read assets registry' });
+  }
+});
+
+// Add/Update asset in registry
+app.post('/api/assets/registry', async (req, res) => {
+  try {
+    const assetRecord = req.body;
+
+    if (!assetRecord.filename) {
+      return res.status(400).json({ error: 'Filename is required' });
+    }
+
+    const assetsJsonPath = path.join(__dirname, 'assets.json');
+    let assetsRegistry = { assets: [] };
+
+    // Read existing registry
+    if (fs.existsSync(assetsJsonPath)) {
+      const existingData = await fsPromises.readFile(assetsJsonPath, 'utf8');
+      assetsRegistry = JSON.parse(existingData);
+    }
+
+    // Check if asset already exists
+    const existingIndex = assetsRegistry.assets.findIndex(a => a.id === assetRecord.id || a.filename === assetRecord.filename);
+
+    if (existingIndex >= 0) {
+      // Update existing record
+      assetRecord.lastModified = new Date().toISOString();
+      assetsRegistry.assets[existingIndex] = assetRecord;
+    } else {
+      // Add new record
+      if (!assetRecord.id) {
+        assetRecord.id = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      }
+      if (!assetRecord.uploadDate) {
+        assetRecord.uploadDate = new Date().toISOString();
+      }
+      assetRecord.lastModified = new Date().toISOString();
+      assetsRegistry.assets.push(assetRecord);
+    }
+
+    // Write back to file
+    await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+
+    res.json({ success: true, asset: assetRecord });
+  } catch (error) {
+    console.error('Error updating assets registry:', error);
+    res.status(500).json({ error: 'Failed to update assets registry' });
+  }
+});
+
+// Delete asset from registry
+app.delete('/api/assets/registry', async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Asset ID is required' });
+    }
+
+    const assetsJsonPath = path.join(__dirname, 'assets.json');
+
+    if (!fs.existsSync(assetsJsonPath)) {
+      return res.status(404).json({ error: 'Registry not found' });
+    }
+
+    const data = await fsPromises.readFile(assetsJsonPath, 'utf8');
+    const assetsRegistry = JSON.parse(data);
+
+    // Remove asset from registry
+    const originalLength = assetsRegistry.assets.length;
+    assetsRegistry.assets = assetsRegistry.assets.filter(a => a.id !== id);
+
+    if (assetsRegistry.assets.length === originalLength) {
+      return res.status(404).json({ error: 'Asset not found in registry' });
+    }
+
+    // Write back to file
+    await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting from assets registry:', error);
+    res.status(500).json({ error: 'Failed to delete from assets registry' });
   }
 });
 

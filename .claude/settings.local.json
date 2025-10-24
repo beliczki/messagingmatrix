@@ -33,7 +33,10 @@
       "Bash(dir \"C:\\Users\\belic\\Claude\\Messaging matrix\\messagingmatrix\\public\\share\" /B)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(dir:*)",
+      "Bash(cd:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

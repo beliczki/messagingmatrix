@@ -12,7 +12,7 @@ import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
 import PageHeader, { getButtonStyle } from './PageHeader';
 
-const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
+const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState, setMatrixViewState }) => {
   const claudeChatRef = useRef(null);
   const {
     audiences,
@@ -50,10 +50,6 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [editingTopic, setEditingTopic] = useState(null);
   const [showStateDialog, setShowStateDialog] = useState(false);
   const [showKeywordEditor, setShowKeywordEditor] = useState(false);
-  const [topicFilter, setTopicFilter] = useState('');
-  const [audienceFilter, setAudienceFilter] = useState('');
-  const [statusFilters, setStatusFilters] = useState([]); // Array of selected statuses to show
-  const [productFilters, setProductFilters] = useState([]); // Array of selected products to show
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [activeTab, setActiveTab] = useState('naming'); // 'naming' or 'content'
@@ -61,11 +57,30 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
-  const [viewMode, setViewMode] = useState('matrix'); // 'matrix', 'feed', or 'tree'
-  const [displayMode, setDisplayMode] = useState('informative'); // 'informative' or 'minimal'
+
+  // Use matrixViewState for persisted values
+  const viewMode = matrixViewState?.viewMode || 'matrix';
+  const displayMode = matrixViewState?.displayMode || 'informative';
+  const topicFilter = matrixViewState?.topicFilter || '';
+  const audienceFilter = matrixViewState?.audienceFilter || '';
+  const statusFilters = matrixViewState?.selectedStatuses || [];
+  const productFilters = matrixViewState?.selectedProducts || [];
+  const matrixZoom = matrixViewState?.matrixZoom || 1;
+  const matrixPan = matrixViewState?.matrixPan || { x: 0, y: 0 };
+  const treeZoom = matrixViewState?.treeZoom || 1;
+
+  // Setter functions that update matrixViewState
+  const setViewMode = (value) => setMatrixViewState({ ...matrixViewState, viewMode: value });
+  const setDisplayMode = (value) => setMatrixViewState({ ...matrixViewState, displayMode: value });
+  const setTopicFilter = (value) => setMatrixViewState({ ...matrixViewState, topicFilter: value });
+  const setAudienceFilter = (value) => setMatrixViewState({ ...matrixViewState, audienceFilter: value });
+  const setStatusFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedStatuses: value });
+  const setProductFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedProducts: value });
+  const setMatrixZoom = (value) => setMatrixViewState({ ...matrixViewState, matrixZoom: value });
+  const setMatrixPan = (value) => setMatrixViewState({ ...matrixViewState, matrixPan: value });
+  const setTreeZoom = (value) => setMatrixViewState({ ...matrixViewState, treeZoom: value });
 
   // Tree view controls state
-  const [treeZoom, setTreeZoom] = useState(1);
   const [treeConnectorType, setTreeConnectorType] = useState('curved');
   const [treeStructure, setTreeStructure] = useState('Product → Strategy → Targeting Type → Audience → Topic → Messages');
 
@@ -74,8 +89,6 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   const [feedPatterns, setFeedPatterns] = useState({});
 
   // Matrix view controls state
-  const [matrixZoom, setMatrixZoom] = useState(1);
-  const [matrixPan, setMatrixPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [spacePressed, setSpacePressed] = useState(false);
@@ -160,6 +173,38 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     };
     loadStructures();
   }, []);
+
+  // Initialize filters with all options on first load
+  useEffect(() => {
+    // Only initialize if data has loaded
+    if (audiences.length === 0 && topics.length === 0) return;
+
+    // Only initialize if filters are currently empty (first time, no saved state)
+    if (statusFilters.length > 0 || productFilters.length > 0) return;
+
+    // Get all available products
+    const allProducts = new Set();
+    audiences.forEach(aud => {
+      if (aud.product) allProducts.add(aud.product);
+    });
+    topics.forEach(topic => {
+      if (topic.product) allProducts.add(topic.product);
+    });
+    const productsArray = Array.from(allProducts).sort();
+
+    // Get all available statuses
+    const allStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED', 'ERROR'];
+
+    // Only initialize if we have options to select
+    if (productsArray.length > 0 || allStatuses.length > 0) {
+      // Update matrixViewState with all options selected
+      setMatrixViewState({
+        ...matrixViewState,
+        selectedProducts: productsArray,
+        selectedStatuses: allStatuses
+      });
+    }
+  }, [audiences, topics, keywords, statusFilters.length, productFilters.length]);
 
   // Sync feedPatterns with feedStructure - ensure all columns have patterns
   useEffect(() => {

@@ -1,14 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { buildTree, parseTreeStructure } from '../utils/treeBuilder';
-import {
-  getLevelSpacing,
-  getNodeSizeScale,
-  getMinNodeSpacing,
-  calculateBranchWidth,
-  calculateDescendantsSpan,
-  calculateTreeWidth,
-  calculateTotalHeight
-} from '../utils/treeLayout';
 
 // Persistent state outside component to maintain zoom/pan when switching views
 let persistentTreeState = {
@@ -24,7 +14,6 @@ const TreeView = ({
   topics,
   messages,
   getMessages,
-  statusFilters = [],
   zoom: externalZoom,
   setZoom: externalSetZoom,
   connectorType: externalConnectorType,
@@ -35,8 +24,6 @@ const TreeView = ({
 }) => {
   const [nodePositions, setNodePositions] = useState(persistentTreeState.nodePositions);
   const [dragging, setDragging] = useState(null);
-  const [tempTreeStructure, setTempTreeStructure] = React.useState(treeStructure);
-  const [hasChanges, setHasChanges] = React.useState(false);
 
   // Use external zoom/connector if provided, otherwise use internal state
   const zoom = externalZoom !== undefined ? externalZoom : persistentTreeState.zoom;
@@ -51,55 +38,146 @@ const TreeView = ({
   const svgRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Wrap getMessages to apply status filtering
-  const getFilteredMessages = React.useCallback((topicKey, audienceKey) => {
-    const allMessages = getMessages(topicKey, audienceKey);
-
-    // Filter by status if any status filters are selected
-    if (statusFilters.length === 0) {
-      return allMessages;
-    }
-
-    return allMessages.filter(msg => {
-      const msgStatus = (msg.status || 'PLANNED').toUpperCase();
-      return statusFilters.includes(msgStatus);
+  // Parse tree structure pattern
+  // Example: "Audiences.Product → Audiences.Strategy → Audiences.Targeting_type → Audience.Name → Topic.Name → Messages.Number → Messages.Variant"
+  const parseTreeStructure = (structureString) => {
+    const levels = structureString.split('→').map(s => s.trim());
+    return levels.map(level => {
+      const [source, field] = level.split('.').map(s => s.trim());
+      return { source, field, label: field };
     });
-  }, [getMessages, statusFilters]);
+  };
 
-  // Build tree data using the imported utility with filtered messages
-  const treeData = buildTree(audiences, topics, getFilteredMessages, treeStructure);
+  // Build hierarchical tree structure recursively based on parsed pattern
+  const buildTree = () => {
+    const parsedLevels = parseTreeStructure(treeStructure);
 
-  // Track tree data changes to reset custom node positions
-  const [prevTreeKeys, setPrevTreeKeys] = React.useState(new Set());
+    // Helper to get value from an item based on source and field
+    const getValue = (item, source, field) => {
+      const fieldLower = field.toLowerCase().replace('_', '');
 
-  // Reset node positions when tree structure changes (messages added/removed)
-  React.useEffect(() => {
-    const currentTreeKeys = new Set();
+      if ((source === 'Audiences' || source === 'Audience') && item.type === 'audience') {
+        if (field === 'Name') return item.name;
+        if (field === 'Product') return item.product;
+        if (field === 'Strategy') return item.strategy;
+        if (field === 'Targeting_type' || field === 'Targetingtype') return item.targeting_type;
+        return item[fieldLower] || item[field.toLowerCase()] || `Unknown ${field}`;
+      }
 
-    // Recursively collect all node keys from the tree
-    const collectKeys = (nodes) => {
-      Object.keys(nodes).forEach(key => {
-        currentTreeKeys.add(key);
-        if (nodes[key].children) {
-          collectKeys(nodes[key].children);
-        }
-      });
+      if ((source === 'Topics' || source === 'Topic') && item.type === 'topic') {
+        if (field === 'Name') return item.name;
+        return item[fieldLower] || item[field.toLowerCase()] || `Unknown ${field}`;
+      }
+
+      if ((source === 'Messages' || source === 'Message') && item.type === 'message') {
+        if (field === 'Number') return item.number;
+        if (field === 'Variant') return item.variant;
+        return item[fieldLower] || item[field.toLowerCase()] || `Unknown ${field}`;
+      }
+
+      return `Unknown ${field}`;
     };
 
-    collectKeys(treeData);
+    // Recursive function to build tree at any level
+    const buildRecursiveTree = (items, levelIndex, parentPath = []) => {
+      if (levelIndex >= parsedLevels.length) {
+        return {};
+      }
 
-    // Check if tree structure has changed (keys added or removed)
-    const keysAdded = Array.from(currentTreeKeys).some(key => !prevTreeKeys.has(key));
-    const keysRemoved = Array.from(prevTreeKeys).some(key => !currentTreeKeys.has(key));
+      const currentLevel = parsedLevels[levelIndex];
+      const tree = {};
+      const isLastLevel = levelIndex === parsedLevels.length - 1;
 
-    if (keysAdded || keysRemoved) {
-      // Tree structure changed - clear custom positions to prevent overlap
-      setNodePositions({});
-      persistentTreeState.nodePositions = {};
-    }
+      // Group items by the current level's field value
+      const groups = {};
+      items.forEach((item, itemIndex) => {
+        const value = getValue(item, currentLevel.source, currentLevel.field);
+        const groupKey = isLastLevel && item.type === 'message' ? `${value}:${item.id || itemIndex}` : value;
 
-    setPrevTreeKeys(currentTreeKeys);
-  }, [messages, audiences, topics, treeStructure]);
+        if (!groups[groupKey]) {
+          groups[groupKey] = [];
+        }
+        groups[groupKey].push(item);
+      });
+
+      // Create tree nodes for each group
+      Object.entries(groups).forEach(([groupKey, groupItems]) => {
+        const value = isLastLevel && groupItems[0].type === 'message' ? groupKey.split(':')[0] : groupKey;
+        // Build unique node key that includes parent path to avoid collisions
+        const pathPrefix = parentPath.length > 0 ? parentPath.join('/') + '/' : '';
+        const nodeKey = `${pathPrefix}${currentLevel.source}.${currentLevel.field}:${groupKey}`;
+
+        tree[nodeKey] = {
+          label: currentLevel.label,
+          value: value,
+          source: currentLevel.source,
+          field: currentLevel.field,
+          data: groupItems[0], // Use first item as representative
+          children: {},
+          depth: levelIndex // Store the depth of this node in the tree
+        };
+
+        // Build children if not at last level
+        if (levelIndex < parsedLevels.length - 1) {
+          const nextLevel = parsedLevels[levelIndex + 1];
+          let nextItems = [];
+
+          // Determine items for next level based on next level's source
+          if (nextLevel.source === 'Audiences' || nextLevel.source === 'Audience') {
+            // Next level needs audiences - filter from all audiences based on current path
+            nextItems = audiences.filter(aud => {
+              // Check if this audience matches all levels up to current
+              for (let i = 0; i <= levelIndex; i++) {
+                const level = parsedLevels[i];
+                if (level.source === 'Audiences' || level.source === 'Audience') {
+                  const audValue = getValue({ ...aud, type: 'audience' }, level.source, level.field);
+                  const pathValue = i === levelIndex ? value : parentPath[i];
+                  if (audValue !== pathValue) return false;
+                }
+              }
+              return true;
+            }).map(aud => ({ ...aud, type: 'audience' }));
+
+          } else if (nextLevel.source === 'Topics' || nextLevel.source === 'Topic') {
+            // Next level needs topics - use the audience from current item
+            const currentAudience = groupItems[0].type === 'audience' ? groupItems[0] : null;
+            if (currentAudience) {
+              nextItems = topics.filter(topic => {
+                const msgs = getMessages(topic.key, currentAudience.key);
+                return msgs.length > 0;
+              }).map(topic => ({ ...topic, type: 'topic', audienceKey: currentAudience.key }));
+            }
+
+          } else if (nextLevel.source === 'Messages' || nextLevel.source === 'Message') {
+            // Next level needs messages
+            if (groupItems[0].type === 'message') {
+              // Already have messages, pass them through (for Number → Variant transition)
+              nextItems = groupItems;
+            } else if (groupItems[0].type === 'topic') {
+              // Get messages for this topic
+              const currentTopic = groupItems[0];
+              if (currentTopic.audienceKey) {
+                nextItems = getMessages(currentTopic.key, currentTopic.audienceKey).map(msg => ({ ...msg, type: 'message' }));
+              }
+            }
+          }
+
+          if (nextItems.length > 0) {
+            const newPath = [...parentPath, value];
+            tree[nodeKey].children = buildRecursiveTree(nextItems, levelIndex + 1, newPath);
+          }
+        }
+      });
+
+      return tree;
+    };
+
+    // Start with all audiences
+    const initialItems = audiences.map(aud => ({ ...aud, type: 'audience' }));
+    return buildRecursiveTree(initialItems, 0, []);
+  };
+
+  const treeData = buildTree();
 
   // Handle mouse down - start dragging
   const handleMouseDown = (e, nodeKey, nodeData, defaultX, defaultY) => {
@@ -147,26 +225,14 @@ const TreeView = ({
   // Handle keyboard events for spacebar
   React.useEffect(() => {
     const handleKeyDown = (e) => {
-      // Allow space in input fields, textareas, and contenteditable elements
-      const target = e.target;
-      const isInputField = target.tagName === 'INPUT' ||
-                          target.tagName === 'TEXTAREA' ||
-                          target.isContentEditable;
-
-      if (e.code === 'Space' && !spacePressed && !isInputField) {
+      if (e.code === 'Space' && !spacePressed) {
         e.preventDefault();
         setSpacePressed(true);
       }
     };
 
     const handleKeyUp = (e) => {
-      // Allow space in input fields, textareas, and contenteditable elements
-      const target = e.target;
-      const isInputField = target.tagName === 'INPUT' ||
-                          target.tagName === 'TEXTAREA' ||
-                          target.isContentEditable;
-
-      if (e.code === 'Space' && !isInputField) {
+      if (e.code === 'Space') {
         e.preventDefault();
         setSpacePressed(false);
         setIsPanning(false);
@@ -210,9 +276,7 @@ const TreeView = ({
       // Get dimensions
       const containerWidth = container.clientWidth;
       const svgWidth = svg.width.baseVal.value;
-      const parsedLevels = parseTreeStructure(treeStructure);
-      const levelCount = parsedLevels.length;
-      const svgHeight = calculateTotalHeight(levelCount, 40);
+      const svgHeight = calculateTotalHeight();
 
       // Calculate zoom to fit: use 90% of container to leave some padding
       const zoomToFitWidth = (containerWidth * 0.9) / svgWidth;
@@ -254,51 +318,16 @@ const TreeView = ({
   }, [connectorType]);
 
   // Handle zoom with mouse wheel (only with Space)
-  const handleWheel = React.useCallback((e) => {
+  const handleWheel = (e) => {
     if (spacePressed) {
       e.preventDefault();
-
-      const container = containerRef.current;
-      if (!container) return;
-
-      // Get container viewport dimensions
-      const containerRect = container.getBoundingClientRect();
-      const containerCenterX = containerRect.width / 2;
-      const containerCenterY = containerRect.height / 2;
-
-      // Calculate current center point in SVG coordinates (before zoom)
-      const svgCenterX = (containerCenterX - pan.x) / zoom;
-      const svgCenterY = (containerCenterY - pan.y) / zoom;
 
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.min(Math.max(0.1, zoom * delta), 3);
 
-      // Calculate new pan to keep the center point fixed
-      const newPanX = containerCenterX - svgCenterX * newZoom;
-      const newPanY = containerCenterY - svgCenterY * newZoom;
-
       setZoom(newZoom);
-      setPan({ x: newPanX, y: newPanY });
     }
-  }, [spacePressed, zoom, pan]);
-
-  // Attach wheel listener manually with passive: false to allow preventDefault
-  React.useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [handleWheel]);
-
-  // Update tempTreeStructure when treeStructure prop changes
-  React.useEffect(() => {
-    setTempTreeStructure(treeStructure);
-    setHasChanges(false);
-  }, [treeStructure]);
+  };
 
   // Handle pan start
   const handlePanStart = (e) => {
@@ -306,8 +335,8 @@ const TreeView = ({
       e.preventDefault();
       setIsPanning(true);
       setPanStart({
-        x: e.clientX - pan.x,
-        y: e.clientY - pan.y
+        x: e.clientX - pan.x * zoom,
+        y: e.clientY - pan.y * zoom
       });
     }
   };
@@ -315,8 +344,8 @@ const TreeView = ({
   // Handle pan move
   const handlePanMove = (e) => {
     if (isPanning) {
-      const deltaX = e.clientX - panStart.x;
-      const deltaY = e.clientY - panStart.y;
+      const deltaX = (e.clientX - panStart.x) / zoom;
+      const deltaY = (e.clientY - panStart.y) / zoom;
       setPan({
         x: deltaX,
         y: deltaY
@@ -344,21 +373,6 @@ const TreeView = ({
     setNodePositions({});
   };
 
-  const handleInputChange = (e) => {
-    setTempTreeStructure(e.target.value);
-    setHasChanges(e.target.value !== treeStructure);
-  };
-
-  const handleSave = () => {
-    onTreeStructureChange(tempTreeStructure);
-    setHasChanges(false);
-  };
-
-  const handleCancel = () => {
-    setTempTreeStructure(treeStructure);
-    setHasChanges(false);
-  };
-
   // Get position for a node (custom or default)
   const getNodePosition = (nodeKey, nodeData, defaultX, defaultY) => {
     // Only return custom position if it exists for this specific node
@@ -372,27 +386,23 @@ const TreeView = ({
   const DecisionNode = ({ label, value, x, y, nodeKey, nodeData, color = '#6366f1', bgColor = '#e0e7ff', node, levelIndex, isRoot, totalLevels }) => {
     const pos = getNodePosition(nodeKey, nodeData, x, y);
 
-    // Calculate size based on level - use getNodeSizeScale for consistency with connector calculations
+    // Calculate size based on level with smooth transition from 3x (root) to 0.5x (last level)
+    // Formula: interpolate between 3.0 and 0.5 based on level position
     let sizeScale;
-    let heightMultiplier = 1; // For making second-to-last level taller
-    let valueTextSize = 14; // Base text size for value
-
     if (isRoot) {
       sizeScale = 3;
+    } else if (totalLevels > 1) {
+      // Smooth interpolation: scale = maxScale - (maxScale - minScale) * (level / (totalLevels - 1))
+      const maxScale = 3;
+      const minScale = 0.5;
+      const progress = levelIndex / (totalLevels - 1);
+      sizeScale = maxScale - (maxScale - minScale) * progress;
     } else {
-      // Use getNodeSizeScale to ensure consistency with connector attachment calculations
-      sizeScale = getNodeSizeScale(levelIndex, totalLevels);
-
-      // Make second-to-last level (parents of leaves) taller with bigger text
-      // Since getNodeSizeScale already returns 1.5 for this level, we only need a smaller additional multiplier
-      if (levelIndex === totalLevels - 2) {
-        heightMultiplier = 1.67; // 1.5 * 1.67 = 2.5x total height
-        valueTextSize = 32; // Much bigger text for the number
-      }
+      sizeScale = 1;
     }
 
     const width = 140 * sizeScale;
-    const height = 40 * sizeScale * heightMultiplier;
+    const height = 40 * sizeScale;
     const borderRadius = 5 * sizeScale;
 
     // Use status-based coloring if node has children (for Message.Number nodes)
@@ -427,7 +437,7 @@ const TreeView = ({
         {showLabel && (
           <text
             x={pos.x}
-            y={pos.y - (6 * sizeScale)}
+            y={pos.y - 5 * sizeScale}
             textAnchor="middle"
             className="text-xs font-semibold pointer-events-none select-none fill-white"
             style={{ fontSize: `${12 * sizeScale}px` }}
@@ -437,10 +447,10 @@ const TreeView = ({
         )}
         <text
           x={pos.x}
-          y={pos.y + (showLabel ? (10 * sizeScale) : (valueTextSize * sizeScale * 0.35))}
+          y={pos.y + (showLabel ? 10 : 5) * sizeScale}
           textAnchor="middle"
           className="text-sm font-bold pointer-events-none select-none fill-white"
-          style={{ fontSize: `${valueTextSize * sizeScale}px` }}
+          style={{ fontSize: `${14 * sizeScale}px` }}
         >
           {value}
         </text>
@@ -509,31 +519,25 @@ const TreeView = ({
     const statusColor = getStatusColor(message.status);
     const displayVariant = variant || message.variant;
 
-    // Smaller variant cards
-    const cardWidth = 60;
-    const cardHeight = 40;
-    const fontSize = 24;
-
     return (
       <g
         onMouseDown={(e) => handleMouseDown(e, nodeKey, message, x, y)}
         className="transition-opacity hover:opacity-80"
       >
         <rect
-          x={pos.x - cardWidth/2}
-          y={pos.y - cardHeight/2}
-          width={cardWidth}
-          height={cardHeight}
-          rx={8}
+          x={pos.x - 30}
+          y={pos.y - 20}
+          width={60}
+          height={40}
+          rx={6}
           fill={statusColor}
           stroke="none"
         />
         <text
           x={pos.x}
-          y={pos.y + fontSize / 3}
+          y={pos.y + 5}
           textAnchor="middle"
-          className="font-bold fill-white pointer-events-none select-none"
-          style={{ fontSize: `${fontSize}px` }}
+          className="text-2xl font-bold fill-white pointer-events-none select-none"
         >
           {displayVariant}
         </text>
@@ -617,8 +621,37 @@ const TreeView = ({
   const levelCount = parsedLevels.length;
 
   // Layout calculations - dynamic spacing based on tree depth
-  const startY = 40; // Reduced from 80 to move first layer higher
-  const leafSpacing = 65; // Space between leaf nodes (messages)
+  const startY = 80;
+  const leafSpacing = 65; // Space between leaf nodes (messages) - reduced for closer grouping
+
+  // Calculate level spacing: taller at top, shorter at bottom
+  const getLevelSpacing = (levelIndex) => {
+    if (levelCount > 1) {
+      const maxSpacing = 300; // Taller spacing at top
+      const minSpacing = 120; // Shorter spacing at bottom
+      const progress = levelIndex / (levelCount - 1);
+      return maxSpacing - (maxSpacing - minSpacing) * progress;
+    }
+    return 180; // Default if only one level
+  };
+
+  // Calculate node size scale for a given level
+  const getNodeSizeScale = (levelIndex) => {
+    if (levelCount > 1) {
+      const maxScale = 3;
+      const minScale = 0.5;
+      const progress = levelIndex / (levelCount - 1);
+      return maxScale - (maxScale - minScale) * progress;
+    }
+    return 1;
+  };
+
+  // Calculate minimum spacing based on node size at this level
+  const getMinNodeSpacing = (levelIndex) => {
+    const scale = getNodeSizeScale(levelIndex);
+    const baseWidth = 140 * scale;
+    return baseWidth + 20; // Node width + small gap
+  };
 
   // Color palette for different levels using secondary colors
   const secondaryColor1 = lookAndFeel.secondaryColor1 || '#eb4c79';
@@ -634,10 +667,94 @@ const TreeView = ({
     { color: secondaryColor3, bgColor: secondaryColor3 + '20' },
   ];
 
-  // Calculate dimensions using imported utilities
-  const svgWidth = calculateTreeWidth(treeData, levelCount, leafSpacing);
-  const totalHeight = calculateTotalHeight(levelCount, startY);
-  const svgHeight = containerHeight > 0 ? containerHeight : Math.max(1200, totalHeight);
+  // Calculate width of a branch recursively from bottom up
+  const calculateBranchWidth = (node) => {
+    const children = Object.values(node.children || {});
+    const nodeDepth = node.depth !== undefined ? node.depth : 0;
+
+    // Debug logging
+    console.log(`[calculateBranchWidth] Depth ${nodeDepth} | Field: ${node.field} | Value: "${node.value}" | Children: ${children.length} | levelCount: ${levelCount}`);
+
+    // If no children (leaf node or early termination), return leaf spacing
+    if (children.length === 0) {
+      // Check if this is an actual leaf node (at the last level) or early termination
+      const isActualLeaf = nodeDepth >= levelCount - 1;
+      console.log(`  → No children. nodeDepth: ${nodeDepth}, levelCount-1: ${levelCount - 1}, isActualLeaf: ${isActualLeaf}`);
+
+      if (isActualLeaf) {
+        // This is a real leaf node at the last level
+        console.log(`  → Returning leafSpacing: ${leafSpacing}`);
+        return leafSpacing;
+      } else {
+        // This is an early-terminating node - needs phantom spacing
+        const levelsRemaining = (levelCount - 1) - nodeDepth;
+        const phantomWidth = leafSpacing * (levelsRemaining + 1);
+        console.log(`  → Early termination. levelsRemaining: ${levelsRemaining}, phantomWidth: ${phantomWidth}`);
+        return phantomWidth;
+      }
+    }
+
+    // Calculate total width of all children
+    const totalWidth = children.reduce((sum, child) => {
+      return sum + calculateBranchWidth(child);
+    }, 0);
+
+    // Get minimum spacing for this level based on scaled node size
+    const minSpacing = getMinNodeSpacing(nodeDepth);
+    const finalWidth = Math.max(totalWidth, minSpacing);
+
+    console.log(`  → Has children. totalWidth: ${totalWidth}, minSpacing: ${minSpacing}, finalWidth: ${finalWidth}`);
+    return finalWidth;
+  };
+
+  // Calculate the actual X-span (min and max X) of all descendants for centering
+  const calculateDescendantsSpan = (node, startX) => {
+    const children = Object.values(node.children || {});
+
+    if (children.length === 0) {
+      // Leaf node - span is just the branch width
+      const width = calculateBranchWidth(node);
+      return { minX: startX, maxX: startX + width };
+    }
+
+    let currentX = startX;
+    let overallMinX = Infinity;
+    let overallMaxX = -Infinity;
+
+    children.forEach(child => {
+      const childWidth = calculateBranchWidth(child);
+      const childSpan = calculateDescendantsSpan(child, currentX);
+
+      overallMinX = Math.min(overallMinX, childSpan.minX);
+      overallMaxX = Math.max(overallMaxX, childSpan.maxX);
+
+      currentX += childWidth;
+    });
+
+    return { minX: overallMinX, maxX: overallMaxX };
+  };
+
+  // Calculate total SVG width
+  const calculateTreeWidth = () => {
+    let totalWidth = 0;
+    Object.values(treeData).forEach(node => {
+      totalWidth += calculateBranchWidth(node);
+    });
+    const margin = 400; // Left and right margins (200px each)
+    return Math.max(3000, totalWidth + margin);
+  };
+
+  const svgWidth = calculateTreeWidth();
+  // Calculate total height using cumulative variable spacing
+  const calculateTotalHeight = () => {
+    let totalHeight = startY;
+    for (let i = 0; i <= levelCount; i++) {
+      totalHeight += getLevelSpacing(i);
+    }
+    return totalHeight + 100; // Add bottom margin
+  };
+  // Use calculated available height, ensuring it's enough for content
+  const svgHeight = containerHeight > 0 ? containerHeight : Math.max(1200, calculateTotalHeight());
 
   // Calculate total tree width to determine root X position
   const treeStartX = 200; // Left margin
@@ -652,7 +769,7 @@ const TreeView = ({
     // Calculate cumulative Y position using variable spacing
     let cumulativeY = startY;
     for (let i = 0; i <= levelIndex; i++) {
-      cumulativeY += getLevelSpacing(i, levelCount);
+      cumulativeY += getLevelSpacing(i);
     }
     const currentY = cumulativeY;
     const colors = levelColors[levelIndex % levelColors.length];
@@ -663,7 +780,7 @@ const TreeView = ({
     const nodeInfo = [];
 
     entries.forEach(([key, node], index) => {
-      const branchWidth = calculateBranchWidth(node, levelCount, leafSpacing);
+      const branchWidth = calculateBranchWidth(node);
       const minX = currentX;
       const maxX = currentX + branchWidth;
 
@@ -674,7 +791,7 @@ const TreeView = ({
       const nodeData = node.data || node.value;
 
       // Calculate the actual span of descendants to center parent over them
-      const descendantsSpan = calculateDescendantsSpan(node, minX, levelCount, leafSpacing);
+      const descendantsSpan = calculateDescendantsSpan(node, minX);
 
       nodeInfo.push({
         key,
@@ -705,20 +822,24 @@ const TreeView = ({
       const defaultNodeX = (descendantsSpan.minX + descendantsSpan.maxX) / 2;
       const nodePos = getNodePosition(nodeKey, nodeData, defaultNodeX, currentY);
 
+      // Log node position and metadata
+      const hasChildren = node.children && Object.keys(node.children).length > 0;
+      const childCount = hasChildren ? Object.keys(node.children).length : 0;
+      console.log(
+        `Level ${levelIndex} | ${node.field}: "${node.value}" | ` +
+        `X: ${Math.round(nodePos.x)} | Y: ${Math.round(nodePos.y)} | ` +
+        `Children: ${childCount} | BranchWidth: ${Math.round(branchWidth)} | ` +
+        `DescSpan: ${Math.round(descendantsSpan.minX)}-${Math.round(descendantsSpan.maxX)}`
+      );
+
       // Render connector from parent - connectors rendered first for proper z-order
       if (parentX !== undefined && parentY !== undefined) {
         // Calculate connector attachment points based on node scaling
-        const parentScale = levelIndex > 0 ? getNodeSizeScale(levelIndex - 1, levelCount) : 3; // parent node scale
-        const currentScale = isLastLevel ? 0.5 : getNodeSizeScale(levelIndex, levelCount); // current node scale
+        const parentScale = levelIndex > 0 ? getNodeSizeScale(levelIndex - 1) : 3; // parent node scale
+        const currentScale = isLastLevel ? 0.5 : getNodeSizeScale(levelIndex); // current node scale
 
-        // Check if parent is at second-to-last level (has heightMultiplier)
-        // Since getNodeSizeScale already returns 1.5 for second-to-last, we use 1.67 multiplier
-        const parentHeightMultiplier = (levelIndex - 1) === levelCount - 2 ? 1.67 : 1;
-        // Current node only gets heightMultiplier if it's at second-to-last level AND not last level
-        const currentHeightMultiplier = (levelIndex === levelCount - 2 && !isLastLevel) ? 1.67 : 1;
-
-        const parentHeight = levelIndex > 0 ? 40 * parentScale * parentHeightMultiplier : 200; // root is 200px tall
-        const currentHeight = isLastLevel ? 40 : 40 * currentScale * currentHeightMultiplier;
+        const parentHeight = levelIndex > 0 ? 40 * parentScale : 150; // root is 150px tall
+        const currentHeight = isLastLevel ? 40 : 40 * currentScale;
 
         connectors.push(
           <Connector
@@ -789,6 +910,30 @@ const TreeView = ({
     return [...connectors, ...nodesElements];
   };
 
+  const [tempTreeStructure, setTempTreeStructure] = React.useState(treeStructure);
+  const [hasChanges, setHasChanges] = React.useState(false);
+
+  // Update tempTreeStructure when treeStructure prop changes
+  React.useEffect(() => {
+    setTempTreeStructure(treeStructure);
+    setHasChanges(false);
+  }, [treeStructure]);
+
+  const handleInputChange = (e) => {
+    setTempTreeStructure(e.target.value);
+    setHasChanges(e.target.value !== treeStructure);
+  };
+
+  const handleSave = () => {
+    onTreeStructureChange(tempTreeStructure);
+    setHasChanges(false);
+  };
+
+  const handleCancel = () => {
+    setTempTreeStructure(treeStructure);
+    setHasChanges(false);
+  };
+
   return (
     <div className="w-full h-full bg-white rounded-lg shadow select-none flex flex-col overflow-hidden">
       <div
@@ -801,12 +946,13 @@ const TreeView = ({
         onMouseDown={handlePanStart}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
         style={{
           minHeight: 0
         }}
       >
         {/* Tree structure input overlay */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '90%' }}>
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '50%' }}>
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Tree structure:
           </label>
@@ -848,36 +994,21 @@ const TreeView = ({
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
             {/* Root node - 3x bigger and blue */}
-            <g
-              onMouseDown={(e) => handleMouseDown(e, '__root__', { type: 'root' }, startX, startY)}
-              className="transition-opacity hover:opacity-80"
-            >
+            <g>
               <rect
-                x={(() => {
-                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.x - 360;
-                })()}
-                y={(() => {
-                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.y - 100;
-                })()}
+                x={startX - 360}
+                y={startY - 75}
                 width={720}
-                height={200}
+                height={150}
                 rx={24}
                 fill="#2563eb"
                 stroke="none"
               />
               <text
-                x={(() => {
-                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.x;
-                })()}
-                y={(() => {
-                  const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.y + 15;
-                })()}
+                x={startX}
+                y={startY + 15}
                 textAnchor="middle"
-                className="fill-white select-none pointer-events-none"
+                className="fill-white select-none"
                 style={{ fontSize: '48px', fontWeight: 'bold' }}
               >
                 Decision tree
@@ -885,13 +1016,7 @@ const TreeView = ({
             </g>
 
             {/* Recursively render tree levels */}
-            {renderTreeLevel(treeData, 0, (() => {
-              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-              return pos.x;
-            })(), (() => {
-              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-              return pos.y;
-            })(), treeStartX)}
+            {renderTreeLevel(treeData, 0, startX, startY, treeStartX)}
           </g>
         </svg>
       </div>

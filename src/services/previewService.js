@@ -21,7 +21,7 @@ export const getPreviewById = async (previewId) => {
 };
 
 // Create new preview from selected asset IDs
-export const createPreview = async (assetIds, title = '', baseColor = '#2870ed') => {
+export const createPreview = async (assetIds, creatives = [], title = '', baseColor = '#2870ed', templateData = {}) => {
   try {
     console.log('previewService: Creating preview with', assetIds.length, 'assets');
     console.log('previewService: API URL:', `${API_BASE_URL}/shares`);
@@ -33,8 +33,10 @@ export const createPreview = async (assetIds, title = '', baseColor = '#2870ed')
       },
       body: JSON.stringify({
         assetIds,
+        creatives,
         title: title || `Preview ${new Date().toLocaleDateString()}`,
-        baseColor
+        baseColor,
+        templateData
       })
     });
 
@@ -83,7 +85,7 @@ export const addComment = async (previewId, author, text) => {
 };
 
 // Generate public URL for preview
-export const getPublicUrl = (previewId) => {
+export const _unused_getPublicUrl = (previewId) => {
   const baseUrl = window.location.origin;
   return `${baseUrl}/share/${previewId}`;
 };
