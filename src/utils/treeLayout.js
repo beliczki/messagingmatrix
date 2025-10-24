@@ -8,16 +8,18 @@
  * Taller spacing at top levels, shorter at bottom
  * @param {number} levelIndex - Current level index
  * @param {number} levelCount - Total number of levels
+ * @param {number} multiplier - Layer height multiplier (default 1.0)
  * @returns {number} Spacing in pixels
  */
-export const getLevelSpacing = (levelIndex, levelCount) => {
+export const getLevelSpacing = (levelIndex, levelCount, multiplier = 1.0) => {
   if (levelCount > 1) {
     const maxSpacing = 300; // Taller spacing at top
     const minSpacing = 120; // Shorter spacing at bottom
     const progress = levelIndex / (levelCount - 1);
-    return maxSpacing - (maxSpacing - minSpacing) * progress;
+    const baseSpacing = maxSpacing - (maxSpacing - minSpacing) * progress;
+    return baseSpacing * multiplier;
   }
-  return 180; // Default if only one level
+  return 180 * multiplier; // Default if only one level
 };
 
 /**
@@ -149,12 +151,13 @@ export const calculateTreeWidth = (treeData, levelCount, leafSpacing) => {
  * Calculate total tree height using cumulative variable spacing
  * @param {number} levelCount - Total number of levels
  * @param {number} startY - Starting Y position
+ * @param {number} multiplier - Layer height multiplier (default 1.0)
  * @returns {number} Total height in pixels
  */
-export const calculateTotalHeight = (levelCount, startY) => {
+export const calculateTotalHeight = (levelCount, startY, multiplier = 1.0) => {
   let totalHeight = startY;
   for (let i = 0; i <= levelCount; i++) {
-    totalHeight += getLevelSpacing(i, levelCount);
+    totalHeight += getLevelSpacing(i, levelCount, multiplier);
   }
   return totalHeight + 100; // Add bottom margin
 };

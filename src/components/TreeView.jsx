@@ -16,10 +16,12 @@ let persistentTreeState = {
   pan: { x: 0, y: 0 },
   nodePositions: {},
   connectorType: 'curved',
-  initialized: false
+  layerHeight: 1.0, // Layer height multiplier (0.5 to 2.0)
+  initialized: false,
+  prevTreeKeys: new Set() // Persist tree keys to detect actual structure changes
 };
 
-const TreeView = ({
+const TreeView = React.memo(({
   audiences,
   topics,
   messages,
@@ -33,10 +35,17 @@ const TreeView = ({
   onTreeStructureChange,
   lookAndFeel = {}
 }) => {
+  console.log('🟣 TreeView component render', {
+    audiencesLength: audiences?.length,
+    topicsLength: topics?.length,
+    messagesLength: messages?.length,
+    zoom: externalZoom
+  });
   const [nodePositions, setNodePositions] = useState(persistentTreeState.nodePositions);
   const [dragging, setDragging] = useState(null);
   const [tempTreeStructure, setTempTreeStructure] = React.useState(treeStructure);
   const [hasChanges, setHasChanges] = React.useState(false);
+  const [layerHeight, setLayerHeight] = useState(persistentTreeState.layerHeight);
 
   // Use external zoom/connector if provided, otherwise use internal state
   const zoom = externalZoom !== undefined ? externalZoom : persistentTreeState.zoom;
@@ -50,6 +59,19 @@ const TreeView = ({
   const [containerHeight, setContainerHeight] = useState(0);
   const svgRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Track dependency changes for debugging
+  const getMessagesRef = React.useRef(getMessages);
+  const statusFiltersRef = React.useRef(statusFilters);
+
+  if (getMessagesRef.current !== getMessages) {
+    console.log('🟠 TreeView: getMessages changed');
+    getMessagesRef.current = getMessages;
+  }
+  if (statusFiltersRef.current !== statusFilters) {
+    console.log('🟠 TreeView: statusFilters changed');
+    statusFiltersRef.current = statusFilters;
+  }
 
   // Wrap getMessages to apply status filtering
   const getFilteredMessages = React.useCallback((topicKey, audienceKey) => {
@@ -66,14 +88,43 @@ const TreeView = ({
     });
   }, [getMessages, statusFilters]);
 
-  // Build tree data using the imported utility with filtered messages
-  const treeData = buildTree(audiences, topics, getFilteredMessages, treeStructure);
+  // Track treeData dependency changes
+  const audiencesRef = React.useRef(audiences);
+  const topicsRef = React.useRef(topics);
+  const getFilteredMessagesRef = React.useRef(getFilteredMessages);
+  const treeStructureRef = React.useRef(treeStructure);
 
-  // Track tree data changes to reset custom node positions
-  const [prevTreeKeys, setPrevTreeKeys] = React.useState(new Set());
+  if (audiencesRef.current !== audiences) {
+    console.log('🔴 TreeView: audiences reference changed');
+    audiencesRef.current = audiences;
+  }
+  if (topicsRef.current !== topics) {
+    console.log('🔴 TreeView: topics reference changed');
+    topicsRef.current = topics;
+  }
+  if (getFilteredMessagesRef.current !== getFilteredMessages) {
+    console.log('🔴 TreeView: getFilteredMessages reference changed');
+    getFilteredMessagesRef.current = getFilteredMessages;
+  }
+  if (treeStructureRef.current !== treeStructure) {
+    console.log('🔴 TreeView: treeStructure reference changed');
+    treeStructureRef.current = treeStructure;
+  }
+
+  // Build tree data using the imported utility with filtered messages
+  // Memoize to prevent rebuilding on every render - only rebuild when inputs change
+  const treeData = React.useMemo(() => {
+    console.log('🟣 TreeView: buildTree called', {
+      audiencesLength: audiences?.length,
+      topicsLength: topics?.length,
+      treeStructure
+    });
+    return buildTree(audiences, topics, getFilteredMessages, treeStructure);
+  }, [audiences, topics, getFilteredMessages, treeStructure]);
 
   // Reset node positions when tree structure changes (messages added/removed)
   React.useEffect(() => {
+    console.log('🟣 TreeView: Reset positions useEffect fired');
     const currentTreeKeys = new Set();
 
     // Recursively collect all node keys from the tree
@@ -89,16 +140,35 @@ const TreeView = ({
     collectKeys(treeData);
 
     // Check if tree structure has changed (keys added or removed)
-    const keysAdded = Array.from(currentTreeKeys).some(key => !prevTreeKeys.has(key));
-    const keysRemoved = Array.from(prevTreeKeys).some(key => !currentTreeKeys.has(key));
+    const keysAdded = Array.from(currentTreeKeys).some(key => !persistentTreeState.prevTreeKeys.has(key));
+    const keysRemoved = Array.from(persistentTreeState.prevTreeKeys).some(key => !currentTreeKeys.has(key));
 
-    if (keysAdded || keysRemoved) {
+    const currentKeysArray = Array.from(currentTreeKeys);
+    console.log('🟣 TreeView: Comparison', {
+      currentTreeKeysSize: currentTreeKeys.size,
+      prevTreeKeysSize: persistentTreeState.prevTreeKeys.size,
+      keysAdded,
+      keysRemoved,
+      sampleCurrentKeys: currentKeysArray.slice(0, 3),
+      samplePrevKeys: Array.from(persistentTreeState.prevTreeKeys).slice(0, 3)
+    });
+
+    if (currentTreeKeys.size <= 3) {
+      console.log('🟣 TreeView: All current keys:', currentKeysArray);
+    }
+
+    // Only clear positions if keys were actually added or removed, not on zoom
+    if ((keysAdded || keysRemoved) && currentTreeKeys.size > 0) {
+      console.log('🟣 TreeView: Tree structure changed, clearing node positions');
       // Tree structure changed - clear custom positions to prevent overlap
       setNodePositions({});
       persistentTreeState.nodePositions = {};
+    } else if (keysAdded || keysRemoved) {
+      console.log('🟣 TreeView: Ignoring spurious tree structure change (zoom only)');
     }
 
-    setPrevTreeKeys(currentTreeKeys);
+    // Update persistent prevTreeKeys
+    persistentTreeState.prevTreeKeys = currentTreeKeys;
   }, [messages, audiences, topics, treeStructure]);
 
   // Handle mouse down - start dragging
@@ -212,7 +282,7 @@ const TreeView = ({
       const svgWidth = svg.width.baseVal.value;
       const parsedLevels = parseTreeStructure(treeStructure);
       const levelCount = parsedLevels.length;
-      const svgHeight = calculateTotalHeight(levelCount, 40);
+      const svgHeight = calculateTotalHeight(levelCount, 40, layerHeight);
 
       // Calculate zoom to fit: use 90% of container to leave some padding
       const zoomToFitWidth = (containerWidth * 0.9) / svgWidth;
@@ -357,6 +427,12 @@ const TreeView = ({
   const handleCancel = () => {
     setTempTreeStructure(treeStructure);
     setHasChanges(false);
+  };
+
+  const handleLayerHeightChange = (e) => {
+    const newHeight = parseFloat(e.target.value);
+    setLayerHeight(newHeight);
+    persistentTreeState.layerHeight = newHeight;
   };
 
   // Get position for a node (custom or default)
@@ -636,7 +712,7 @@ const TreeView = ({
 
   // Calculate dimensions using imported utilities
   const svgWidth = calculateTreeWidth(treeData, levelCount, leafSpacing);
-  const totalHeight = calculateTotalHeight(levelCount, startY);
+  const totalHeight = calculateTotalHeight(levelCount, startY, layerHeight);
   const svgHeight = containerHeight > 0 ? containerHeight : Math.max(1200, totalHeight);
 
   // Calculate total tree width to determine root X position
@@ -652,7 +728,7 @@ const TreeView = ({
     // Calculate cumulative Y position using variable spacing
     let cumulativeY = startY;
     for (let i = 0; i <= levelIndex; i++) {
-      cumulativeY += getLevelSpacing(i, levelCount);
+      cumulativeY += getLevelSpacing(i, levelCount, layerHeight);
     }
     const currentY = cumulativeY;
     const colors = levelColors[levelIndex % levelColors.length];
@@ -806,33 +882,52 @@ const TreeView = ({
         }}
       >
         {/* Tree structure input overlay */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2" style={{ width: '90%' }}>
-          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-            Tree structure:
-          </label>
-          <input
-            type="text"
-            value={tempTreeStructure}
-            onChange={handleInputChange}
-            className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
-            placeholder="e.g., Product → Strategy → Targeting Type → Audience → Topic → Messages"
-          />
-          {hasChanges && (
-            <>
-              <button
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm"
-              >
-                Save
-              </button>
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 shadow-sm"
-              >
-                Cancel
-              </button>
-            </>
-          )}
+        <div className="absolute top-4 left-4 z-10" style={{ width: '90%' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Tree structure:
+            </label>
+            <input
+              type="text"
+              value={tempTreeStructure}
+              onChange={handleInputChange}
+              className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+              placeholder="e.g., Product → Strategy → Targeting Type → Audience → Topic → Messages"
+            />
+            {hasChanges && (
+              <>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 shadow-sm"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Layer height slider */}
+          <div className="flex items-center gap-3 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300" style={{ width: 'fit-content' }}>
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Layer height:
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={layerHeight}
+              onChange={handleLayerHeightChange}
+              className="w-32"
+            />
+            <span className="text-sm text-gray-600 font-mono w-8">{layerHeight.toFixed(1)}x</span>
+          </div>
         </div>
 
         <svg
@@ -897,6 +992,18 @@ const TreeView = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if arrays/zoom actually changed by reference
+  return (
+    prevProps.audiences === nextProps.audiences &&
+    prevProps.topics === nextProps.topics &&
+    prevProps.messages === nextProps.messages &&
+    prevProps.getMessages === nextProps.getMessages &&
+    prevProps.statusFilters === nextProps.statusFilters &&
+    prevProps.zoom === nextProps.zoom &&
+    prevProps.treeStructure === nextProps.treeStructure &&
+    prevProps.connectorType === nextProps.connectorType
+  );
+});
 
 export default TreeView;
