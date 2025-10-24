@@ -11,12 +11,63 @@ import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
 import PageHeader, { getButtonStyle } from './PageHeader';
 
+// Module-level persistent refs to survive component re-renders/remounts
+const EMPTY_ARRAY = [];
+const persistentMatrixRefs = {
+  audiences: EMPTY_ARRAY,
+  topics: EMPTY_ARRAY,
+  messages: EMPTY_ARRAY,
+  statusFilters: EMPTY_ARRAY,
+  productFilters: EMPTY_ARRAY,
+  // Dep tracking
+  prevAudiences: null,
+  prevAudienceFilter: null,
+  prevProductFilters: null,
+  prevFilteredAudiences: null,
+  prevFilteredTopics: null,
+  // Cached filtered arrays
+  cachedFilteredAudiences: EMPTY_ARRAY,
+  cachedFilteredAudiencesDeps: { audiences: null, audienceFilter: null, productFilters: null },
+  cachedFilteredTopics: EMPTY_ARRAY,
+  cachedFilteredTopicsDeps: { topics: null, topicFilter: null, productFilters: null }
+};
+
 const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState, setMatrixViewState, matrixData }) => {
   const claudeChatRef = useRef(null);
+
+  // Detect mount/unmount
+  useEffect(() => {
+    console.log('🟢🟢🟢 Matrix MOUNTED');
+    return () => console.log('🔴🔴🔴 Matrix UNMOUNTED');
+  }, []);
+
+  // Update module-level refs when data changes
+  if (matrixData?.audiences && persistentMatrixRefs.audiences !== matrixData.audiences) {
+    console.log('🟡 Matrix: Updating module-level audiences ref');
+    persistentMatrixRefs.audiences = matrixData.audiences;
+  }
+  if (matrixData?.topics && persistentMatrixRefs.topics !== matrixData.topics) {
+    console.log('🟡 Matrix: Updating module-level topics ref');
+    persistentMatrixRefs.topics = matrixData.topics;
+  }
+  if (matrixData?.messages && persistentMatrixRefs.messages !== matrixData.messages) {
+    console.log('🟡 Matrix: Updating module-level messages ref');
+    persistentMatrixRefs.messages = matrixData.messages;
+  }
+
+  // Use module-level refs (these are ALWAYS the same reference)
+  const audiences = persistentMatrixRefs.audiences;
+  const topics = persistentMatrixRefs.topics;
+  const messages = persistentMatrixRefs.messages;
+
+  console.log('🔵 Matrix component render', {
+    audiencesLen: audiences?.length,
+    topicsLen: topics?.length,
+    messagesLen: messages?.length
+  });
+
+  // Destructure other values
   const {
-    audiences = [],
-    topics = [],
-    messages = [],
     keywords = {},
     assets = [],
     isLoading = false,
@@ -58,15 +109,28 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
 
-  // Use matrixViewState for persisted values
+  // Use matrixViewState for persisted values - memoize arrays with stable references
   const viewMode = matrixViewState?.viewMode || 'matrix';
   const displayMode = matrixViewState?.displayMode || 'informative';
   const topicFilter = matrixViewState?.topicFilter || '';
   const audienceFilter = matrixViewState?.audienceFilter || '';
-  const statusFilters = matrixViewState?.selectedStatuses || [];
-  const productFilters = matrixViewState?.selectedProducts || [];
+
+  // Update module-level filter refs when they change
+  const currentStatuses = matrixViewState?.selectedStatuses || EMPTY_ARRAY;
+  if (JSON.stringify(persistentMatrixRefs.statusFilters) !== JSON.stringify(currentStatuses)) {
+    console.log('🟠 statusFilters updating');
+    persistentMatrixRefs.statusFilters = currentStatuses;
+  }
+  const statusFilters = persistentMatrixRefs.statusFilters;
+
+  const currentProducts = matrixViewState?.selectedProducts || EMPTY_ARRAY;
+  if (JSON.stringify(persistentMatrixRefs.productFilters) !== JSON.stringify(currentProducts)) {
+    console.log('🟠 productFilters updating');
+    persistentMatrixRefs.productFilters = currentProducts;
+  }
+  const productFilters = persistentMatrixRefs.productFilters;
   const matrixZoom = matrixViewState?.matrixZoom || 1;
-  const matrixPan = matrixViewState?.matrixPan || { x: 0, y: 0 };
+  const matrixPan = useMemo(() => matrixViewState?.matrixPan || { x: 0, y: 0 }, [matrixViewState?.matrixPan]);
   const treeZoom = matrixViewState?.treeZoom || 1;
 
   // Setter functions that update matrixViewState
@@ -77,20 +141,48 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   const setStatusFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedStatuses: value });
   const setProductFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedProducts: value });
   const setMatrixZoom = (value) => {
+    console.log('🔷 setMatrixZoom called with:', value);
     setMatrixViewState({ ...matrixViewState, matrixZoom: value });
   };
   const setMatrixPan = (value) => setMatrixViewState({ ...matrixViewState, matrixPan: value });
   const setTreeZoom = (value) => {
+    console.log('🔷 setTreeZoom called with:', value);
     setMatrixViewState({ ...matrixViewState, treeZoom: value });
   };
 
   // Tree view controls state
   const [treeConnectorType, setTreeConnectorType] = useState('curved');
-  const [treeStructure, setTreeStructure] = useState('Product → Strategy → Targeting Type → Audience → Topic → Messages');
+  const [treeStructure, setTreeStructure] = useState(() => {
+    // Initialize from settings synchronously to prevent oscillation
+    try {
+      const config = settings.getAll();
+      return config.treeStructure || 'Audiences.Product → Audiences.Strategy → Audiences.Targeting_type → Audiences.Name → Topics.Name → Messages.Number → Messages.Variant';
+    } catch (e) {
+      console.warn('Could not load tree structure from settings on init:', e);
+      return 'Audiences.Product → Audiences.Strategy → Audiences.Targeting_type → Audiences.Name → Topics.Name → Messages.Number → Messages.Variant';
+    }
+  });
 
   // Feed view controls state
-  const [feedStructure, setFeedStructure] = useState('PMMID, Name, Headline, Copy1, Audience, Topic, Status');
-  const [feedPatterns, setFeedPatterns] = useState({});
+  const [feedStructure, setFeedStructure] = useState(() => {
+    // Initialize from settings synchronously to prevent oscillation
+    try {
+      const config = settings.getAll();
+      return config.feedStructure || 'PMMID, Name, Headline, Copy1, Audience, Topic, Status';
+    } catch (e) {
+      console.warn('Could not load feed structure from settings on init:', e);
+      return 'PMMID, Name, Headline, Copy1, Audience, Topic, Status';
+    }
+  });
+  const [feedPatterns, setFeedPatterns] = useState(() => {
+    // Initialize from settings synchronously
+    try {
+      const config = settings.getAll();
+      return config.patterns?.feed || {};
+    } catch (e) {
+      return {};
+    }
+  });
 
   // Matrix view controls state
   const [isPanning, setIsPanning] = useState(false);
@@ -178,15 +270,29 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
     loadStructures();
   }, []);
 
+  // Log treeStructure changes to debug oscillation
+  useEffect(() => {
+    console.log('🔶 treeStructure changed:', treeStructure);
+  }, [treeStructure]);
+
   // Initialize filters with all options on first load
   useEffect(() => {
+    console.log('🟡 Filter init useEffect fired', {
+      audiencesLength: audiences.length,
+      topicsLength: topics.length,
+      statusFiltersLength: statusFilters.length,
+      productFiltersLength: productFilters.length
+    });
+
     // Only initialize if data has loaded
     if (audiences.length === 0 && topics.length === 0) {
+      console.log('🟡 Skipping: no data loaded yet');
       return;
     }
 
     // Only initialize if filters are currently empty (first time, no saved state)
     if (statusFilters.length > 0 || productFilters.length > 0) {
+      console.log('🟡 Skipping: filters already initialized');
       return;
     }
 
@@ -205,6 +311,7 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
 
     // Only initialize if we have options to select
     if (productsArray.length > 0 || allStatuses.length > 0) {
+      console.log('🟡 CALLING setMatrixViewState to initialize filters');
       // Update matrixViewState with all options selected
       setMatrixViewState({
         ...matrixViewState,
@@ -474,18 +581,58 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
     return Array.from(products).sort();
   }, [audiences, topics]);
 
-  // Filter audiences and topics (status filter removed - now applied to messages)
-  const filteredAudiences = audiences.filter(aud => {
-    const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || ''), audienceFilter);
-    const matchesProduct = productFilters.length === 0 || (aud.product && productFilters.includes(aud.product));
-    return matchesText && matchesProduct;
-  });
+  // Track deps for filteredAudiences using module-level refs
+  if (persistentMatrixRefs.prevAudiences !== audiences) {
+    console.log('🟣 audiences dep changed', {
+      prev: persistentMatrixRefs.prevAudiences,
+      current: audiences,
+      same: persistentMatrixRefs.prevAudiences === audiences,
+      prevIsArray: Array.isArray(persistentMatrixRefs.prevAudiences),
+      currentIsArray: Array.isArray(audiences)
+    });
+  }
+  if (persistentMatrixRefs.prevAudienceFilter !== audienceFilter) console.log('🟣 audienceFilter dep changed');
+  if (persistentMatrixRefs.prevProductFilters !== productFilters) console.log('🟣 productFilters dep changed');
 
-  const filteredTopics = topics.filter(topic => {
-    const matchesText = matchesFilter(topic.name + ' ' + topic.key, topicFilter);
-    const matchesProduct = productFilters.length === 0 || (topic.product && productFilters.includes(topic.product));
-    return matchesText && matchesProduct;
-  });
+  persistentMatrixRefs.prevAudiences = audiences;
+  persistentMatrixRefs.prevAudienceFilter = audienceFilter;
+  persistentMatrixRefs.prevProductFilters = productFilters;
+
+  // Filter audiences and topics using module-level caching (bypasses React hooks)
+  // Check if we need to recompute filteredAudiences
+  const deps = persistentMatrixRefs.cachedFilteredAudiencesDeps;
+  if (deps.audiences !== audiences || deps.audienceFilter !== audienceFilter || deps.productFilters !== productFilters) {
+    console.log('🟣 filteredAudiences RECOMPUTING (module-level cache miss)');
+    persistentMatrixRefs.cachedFilteredAudiences = audiences.filter(aud => {
+      const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || ''), audienceFilter);
+      const matchesProduct = productFilters.length === 0 || (aud.product && productFilters.includes(aud.product));
+      return matchesText && matchesProduct;
+    });
+    persistentMatrixRefs.cachedFilteredAudiencesDeps = { audiences, audienceFilter, productFilters };
+  }
+  const filteredAudiences = persistentMatrixRefs.cachedFilteredAudiences;
+
+  // Check if we need to recompute filteredTopics
+  const topicDeps = persistentMatrixRefs.cachedFilteredTopicsDeps;
+  if (topicDeps.topics !== topics || topicDeps.topicFilter !== topicFilter || topicDeps.productFilters !== productFilters) {
+    console.log('🟣 filteredTopics RECOMPUTING (module-level cache miss)');
+    persistentMatrixRefs.cachedFilteredTopics = topics.filter(topic => {
+      const matchesText = matchesFilter(topic.name + ' ' + topic.key, topicFilter);
+      const matchesProduct = productFilters.length === 0 || (topic.product && productFilters.includes(topic.product));
+      return matchesText && matchesProduct;
+    });
+    persistentMatrixRefs.cachedFilteredTopicsDeps = { topics, topicFilter, productFilters };
+  }
+  const filteredTopics = persistentMatrixRefs.cachedFilteredTopics;
+
+  // Track filtered array changes using module-level refs
+  const filteredAudiencesChanged = persistentMatrixRefs.prevFilteredAudiences !== filteredAudiences;
+  const filteredTopicsChanged = persistentMatrixRefs.prevFilteredTopics !== filteredTopics;
+  if (filteredAudiencesChanged || filteredTopicsChanged) {
+    console.log('🟣 Filtered arrays changed', { filteredAudiencesChanged, filteredTopicsChanged });
+  }
+  persistentMatrixRefs.prevFilteredAudiences = filteredAudiences;
+  persistentMatrixRefs.prevFilteredTopics = filteredTopics;
 
   // Save with progress tracking
   const handleSaveWithProgress = async () => {

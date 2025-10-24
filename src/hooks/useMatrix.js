@@ -1,7 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import sheets from '../services/sheets';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
+
+// Module-level cache to persist across hook calls
+let cachedMatrixResult = null;
 
 export const useMatrix = () => {
   // State
@@ -327,33 +330,68 @@ export const useMatrix = () => {
     }
   }, []);
 
-  return {
-    audiences,
-    topics,
-    messages,
-    keywords,
-    assets,
-    setAssets,
-    isLoading,
-    isSaving,
-    error,
-    lastSync,
-    load,
-    save,
-    saveKeywords,
-    addAudience,
-    addTopic,
-    addMessage,
-    updateMessage,
-    deleteMessage,
-    moveMessage,
-    copyMessage,
-    updateAudience,
-    updateTopic,
-    deleteAudience,
-    deleteTopic,
-    getMessages,
-    getUrl: () => sheets.getUrl(),
-    getSpreadsheetId: () => sheets.spreadsheetId
+  // Track reference changes for debugging
+  const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets });
+  const depsChanged = {
+    audiences: prevDepsRef.current.audiences !== audiences,
+    topics: prevDepsRef.current.topics !== topics,
+    messages: prevDepsRef.current.messages !== messages,
+    keywords: prevDepsRef.current.keywords !== keywords,
+    assets: prevDepsRef.current.assets !== assets
   };
+
+  // Log every time the hook runs
+  console.log('🟡 useMatrix hook render', {
+    audiencesChanged: depsChanged.audiences,
+    topicsChanged: depsChanged.topics,
+    messagesChanged: depsChanged.messages,
+    audiencesRef: audiences,
+    topicsRef: topics,
+    messagesRef: messages
+  });
+
+  prevDepsRef.current = { audiences, topics, messages, keywords, assets };
+
+  // Check if arrays have actually changed
+  const shouldUpdate = !cachedMatrixResult ||
+    cachedMatrixResult.audiences !== audiences ||
+    cachedMatrixResult.topics !== topics ||
+    cachedMatrixResult.messages !== messages ||
+    cachedMatrixResult.keywords !== keywords ||
+    cachedMatrixResult.assets !== assets;
+
+  if (shouldUpdate) {
+    console.log('🔴 useMatrix UPDATING CACHED RESULT');
+    cachedMatrixResult = {
+      audiences,
+      topics,
+      messages,
+      keywords,
+      assets,
+      setAssets,
+      isLoading,
+      isSaving,
+      error,
+      lastSync,
+      load,
+      save,
+      saveKeywords,
+      addAudience,
+      addTopic,
+      addMessage,
+      updateMessage,
+      deleteMessage,
+      moveMessage,
+      copyMessage,
+      updateAudience,
+      updateTopic,
+      deleteAudience,
+      deleteTopic,
+      getMessages,
+      getUrl: () => sheets.getUrl(),
+      getSpreadsheetId: () => sheets.spreadsheetId
+    };
+  }
+
+  return cachedMatrixResult;
 };
