@@ -9,6 +9,27 @@
 
 ---
 
+## 🚨 CRITICAL DOCUMENTATION 🚨
+
+**⚠️ BEFORE DEBUGGING PERFORMANCE ISSUES, READ THIS:**
+
+### [React Component Remounting Performance Fix](./REACT_PERFORMANCE_REMOUNT_FIX.md)
+
+**If you see:**
+- Component "reloading" or "rebuilding" on every interaction
+- Laggy, unresponsive UI during zoom, filter, or state changes
+- Component UNMOUNT → MOUNT in console logs
+
+**Read the guide above FIRST!** This issue has happened **3 times** and cost **3+ hours each time**.
+
+Quick fix checklist:
+- [ ] Check if component is defined inside another component's render
+- [ ] Check for dynamic `key` props
+- [ ] Add module-level caching instead of React hooks
+- [ ] Use inline JSX instead of component functions
+
+---
+
 ## 🎯 Overview
 
 **Messaging Matrix** is a powerful web application designed for marketing teams to manage, organize, and optimize messaging campaigns across multiple audiences and topics. It provides a visual matrix interface, decision tree visualization, and AI-powered content generation capabilities.
