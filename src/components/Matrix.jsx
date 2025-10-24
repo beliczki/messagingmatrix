@@ -1215,12 +1215,11 @@ const Matrix = ({
             // Reload the page to fetch fresh data from spreadsheet
             window.location.reload();
           }}
-          className="flex items-center gap-2 px-3 py-2 text-white rounded hover:opacity-90 transition-opacity"
+          className="p-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
           title="Clear cache and reload data"
         >
-          <RefreshCw size={16} />
-          Reload
+          <RefreshCw size={20} />
         </button>
       </PageHeader>
 
