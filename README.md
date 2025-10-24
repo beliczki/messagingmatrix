@@ -13,20 +13,24 @@
 
 **⚠️ BEFORE DEBUGGING PERFORMANCE ISSUES, READ THIS:**
 
-### [React Component Remounting Performance Fix](./REACT_PERFORMANCE_REMOUNT_FIX.md)
+### Performance Issue Documentation
+
+**This issue has happened 3 times and cost 3+ hours each time!**
 
 **If you see:**
 - Component "reloading" or "rebuilding" on every interaction
 - Laggy, unresponsive UI during zoom, filter, or state changes
 - Component UNMOUNT → MOUNT in console logs
 
-**Read the guide above FIRST!** This issue has happened **3 times** and cost **3+ hours each time**.
+**Choose your guide:**
 
-Quick fix checklist:
-- [ ] Check if component is defined inside another component's render
-- [ ] Check for dynamic `key` props
-- [ ] Add module-level caching instead of React hooks
-- [ ] Use inline JSX instead of component functions
+1. **[QUICK FIX (5 min)](./QUICK_FIX_REMOUNT.md)** ⚡ - Step-by-step visual guide
+2. **[FULL DOCUMENTATION (15 min)](./REACT_PERFORMANCE_REMOUNT_FIX.md)** 📚 - Deep dive with examples
+
+**Quick checklist:**
+- [ ] Component defined inside another component's render?
+- [ ] Dynamic `key` props?
+- [ ] Need module-level caching instead of React hooks?
 
 ---
 
