@@ -913,14 +913,14 @@ const TreeView = React.memo(({
           </div>
 
           {/* Layer height slider */}
-          <div className="flex items-center gap-3 bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-300" style={{ width: 'fit-content' }}>
+          <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
               Layer height:
             </label>
             <input
               type="range"
               min="0.5"
-              max="2"
+              max="4"
               step="0.1"
               value={layerHeight}
               onChange={handleLayerHeightChange}
