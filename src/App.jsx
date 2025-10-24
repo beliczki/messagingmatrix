@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
-import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
+import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package, AlertCircle } from 'lucide-react';
 import Matrix from './components/Matrix';
 import CreativeLibrary from './components/CreativeLibrary';
 import Assets from './components/Assets';
@@ -11,6 +11,7 @@ import Users from './components/Users';
 import Settings from './components/Settings';
 import Login from './components/Login';
 import PreviewView from './components/PreviewView';
+import StateManagementDialog from './components/StateManagementDialog';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
 import settings from './services/settings';
@@ -26,6 +27,13 @@ const App = () => {
   const { currentUser, loading, logout } = useAuth();
   const [currentModule, setCurrentModule] = useState('matrix');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showStateDialog, setShowStateDialog] = useState(false);
+  const [matrixStateData, setMatrixStateData] = useState({
+    feedData: [],
+    downloadFeedCSV: null,
+    handleSaveWithProgress: null,
+    saveProgress: null
+  });
   const [lookAndFeel, setLookAndFeel] = useState({
     logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
     headerColor: '#2870ed',
@@ -201,6 +209,20 @@ const App = () => {
               })}
             </nav>
 
+            {/* State Management Button */}
+            <div className="border-t p-4">
+              <button
+                onClick={() => {
+                  setShowStateDialog(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <AlertCircle size={20} />
+                <span>Matrix State</span>
+              </button>
+            </div>
+
             {/* User Info & Logout */}
             <div className="border-t p-4">
               <div className="flex items-center gap-3 px-4 py-2 mb-2 text-gray-700">
@@ -238,10 +260,28 @@ const App = () => {
                 lookAndFeel={lookAndFeel}
                 matrixViewState={matrixViewState}
                 setMatrixViewState={setMatrixViewState}
+                onStateDataReady={currentModule === 'matrix' ? setMatrixStateData : undefined}
               />
             </div>
           </div>
         </div>
+
+        {/* State Management Dialog - Rendered at app level */}
+        <StateManagementDialog
+          showStateDialog={showStateDialog}
+          setShowStateDialog={setShowStateDialog}
+          audiences={matrixData?.audiences || []}
+          topics={matrixData?.topics || []}
+          messages={matrixData?.messages || []}
+          keywords={matrixData?.keywords || {}}
+          assets={matrixData?.assets || []}
+          lastSync={matrixData?.lastSync}
+          isSaving={matrixData?.isSaving}
+          saveProgress={matrixStateData.saveProgress}
+          handleSaveWithProgress={matrixStateData.handleSaveWithProgress}
+          feedData={matrixStateData.feedData}
+          downloadFeedCSV={matrixStateData.downloadFeedCSV}
+        />
       } />
     </Routes>
   );

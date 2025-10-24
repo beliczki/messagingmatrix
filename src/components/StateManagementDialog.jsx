@@ -23,6 +23,7 @@ const StateManagementDialog = ({
   topics,
   messages,
   keywords,
+  assets,
   lastSync,
   isSaving,
   saveProgress,
@@ -85,6 +86,7 @@ const StateManagementDialog = ({
     { id: 'audiences', label: 'Audiences', count: audiences.length },
     { id: 'topics', label: 'Topics', count: topics.length },
     { id: 'messages', label: 'Messages', count: completeMessages.length },
+    { id: 'assets', label: 'Assets', count: assets?.length || 0 },
     { id: 'feed', label: 'Feed', count: feedData?.length || 0 },
     { id: 'keywords', label: 'Keywords', count: keywordsCount }
   ];
@@ -140,6 +142,12 @@ const StateManagementDialog = ({
           {activeTab === 'messages' && (
             <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
               {JSON.stringify(completeMessages, null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'assets' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(assets || [], null, 2)}
             </pre>
           )}
 

@@ -1,0 +1,120 @@
+{
+  "shareId": "mgy5illlhn3ovnb5ods",
+  "assetIds": [
+    "LTP_fb_1080x1080_A_banner_2.jpg",
+    "ERSTE_yes2loans_kampany_cubeside3b_640x360.png",
+    "mc149-a-640x360"
+  ],
+  "assets": [
+    {
+      "id": "mc149-a-640x360",
+      "filename": "MC149_a_640x360.html",
+      "extension": "html",
+      "url": null,
+      "product": "lányom tégy álmaidért ebldidőben is",
+      "size": "640x360",
+      "variant": "a",
+      "date": "2025-10-19",
+      "platforms": [],
+      "tags": [
+        "Social Video",
+        "dynamic",
+        "message",
+        "mc149",
+        "va"
+      ],
+      "isDynamic": true,
+      "messageData": {
+        "id": 1,
+        "poms_id": "68d3ac6eb5f1572f6d69f314",
+        "name": "lányom tégy álmaidért ebldidőben is",
+        "number": 149,
+        "variant": "a",
+        "audience": "wlafternoon",
+        "topic": "elethelyzet_NA_NA_delben",
+        "version": 3,
+        "pmmid": "p_adform-s_pro-a_wlafternoon-m_149-t_elethelyzet_NA_NA_delben-v_a-n_3",
+        "status": "ACTIVE",
+        "start_date": "2025-10-08",
+        "end_date": "2025-12-31",
+        "template": "html",
+        "template_variant_classes": "animated  turkiz ",
+        "headline": "Személyi Kölcsön",
+        "copy1": "Ebédszünetben még az álmaidért is tehetsz.",
+        "copy2": "THM: 10,8% - 19,5%",
+        "disclaimer": "",
+        "headline_style": "font-size:1.15rem;",
+        "copy1_style": "font-size:0.9rem;",
+        "copy2_style": "font-size:1.1rem;",
+        "disclaimer_style": "",
+        "css": "",
+        "image1": "no_delben_cselekszik.jpg",
+        "image2": "empty.png",
+        "image3": "empty.png",
+        "image4": "empty.png",
+        "image5": "EBH_Logo_screen_white.svg",
+        "image6": "hasznald-fel-szabadon-barmire.svg",
+        "flash": "",
+        "cta": "Érdekel",
+        "cta_style": "",
+        "landingUrl": "https://szemelyikolcson.erstebank.hu/",
+        "comment": "",
+        "utm_campaign": "25!1!loan!szemelyikolcson!personalloan!hu!ebh!mID25-00035!longterm!...!v11",
+        "utm_source": "adform",
+        "utm_medium": "display",
+        "utm_content": "banner",
+        "utm_term": "con!adform!wlafternoon!...!hu!149a",
+        "utm_cd26": "p_adform-s_pro-a_wlafternoon-m_149-t_elethelyzet_NA_NA_delben-v_a-n_3",
+        "final_trafficked_url": "https://szemelyikolcson.erstebank.hu/?utm_campaign=25!1!loan!szemelyikolcson!personalloan!hu!ebh!mID25-00035!longterm!...!v11&utm_source=adform&utm_medium=display&utm_content=banner&utm_term=con!adform!wlafternoon!...!hu!149a&utm_cd26=p_adform-s_pro-a_wlafternoon-m_149-t_elethelyzet_NA_NA_delben-v_a-n_3"
+      },
+      "bannerSize": {
+        "width": 640,
+        "height": 360,
+        "name": "Social Video"
+      },
+      "staticPath": "/share/mgy5illlhn3ovnb5ods/MC149_a_640x360_3/index.html",
+      "folderName": "MC149_a_640x360_3",
+      "isLocalFolderReview": true,
+      "reviewType": "static-local"
+    },
+    {
+      "filename": "LTP_fb_1080x1080_A_banner_2.jpg",
+      "product": "fb",
+      "size": "1080x1080",
+      "date": null,
+      "platforms": [
+        "Facebook",
+        "Display"
+      ],
+      "tags": [
+        "LTP"
+      ],
+      "variant": "A",
+      "extension": "jpg",
+      "path": "/src/creatives/LTP_fb_1080x1080_A_banner_2.jpg",
+      "url": "/src/creatives/LTP_fb_1080x1080_A_banner_2.jpg",
+      "id": "LTP_fb_1080x1080_A_banner_2.jpg",
+      "modifiedTime": 1760403320755
+    },
+    {
+      "filename": "ERSTE_yes2loans_kampany_cubeside3b_640x360.png",
+      "product": "yes2loans",
+      "size": "640x360",
+      "date": null,
+      "platforms": [],
+      "tags": [
+        "Cube"
+      ],
+      "variant": null,
+      "extension": "png",
+      "path": "/src/creatives/ERSTE_yes2loans_kampany_cubeside3b_640x360.png",
+      "url": "/src/creatives/ERSTE_yes2loans_kampany_cubeside3b_640x360.png",
+      "id": "ERSTE_yes2loans_kampany_cubeside3b_640x360.png",
+      "modifiedTime": 1759846038420
+    }
+  ],
+  "title": "Preview 10/19/2025",
+  "baseColor": "#711c7a",
+  "createdAt": "2025-10-19T20:20:43.358Z",
+  "comments": []
+}

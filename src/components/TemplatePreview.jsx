@@ -12,16 +12,38 @@ const TemplatePreview = ({
   className = '',
   templateConfig = null
 }) => {
-  // Helper function to build full image URL
+  // Helper function to build full image URL using template.json path-messagingmatrix parameter
   const buildImageUrl = (imageKey, filename) => {
     if (!filename) return '';
     // If filename already starts with http:// or https://, use it as-is
     if (filename.startsWith('http://') || filename.startsWith('https://')) {
       return filename;
     }
-    // Get image base URLs from settings
+
+    // Map image keys to placeholder names in template.json
+    const placeholderMap = {
+      'image1': 'background_image_1',
+      'image2': 'background_image_2',
+      'image3': 'background_image_3',
+      'image4': 'background_image_4',
+      'image5': 'brand_image_1',
+      'image6': 'sticker_image_1',
+      'video1': 'background_video_1'
+    };
+
+    // Get the placeholder name for this image key
+    const placeholderName = placeholderMap[imageKey.toLowerCase()];
+
+    // Try to get path from template config first
+    if (templateConfig && placeholderName && templateConfig.placeholders) {
+      const placeholder = templateConfig.placeholders[placeholderName];
+      if (placeholder && placeholder['path-messagingmatrix']) {
+        return placeholder['path-messagingmatrix'] + filename;
+      }
+    }
+
+    // Fallback to settings imageBaseUrls if template config doesn't have the path
     const imageBaseUrls = settings.getImageBaseUrls();
-    // Otherwise, prepend the base URL
     return (imageBaseUrls[imageKey] || '') + filename;
   };
 

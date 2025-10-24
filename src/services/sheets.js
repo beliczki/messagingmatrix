@@ -196,23 +196,25 @@ class SheetsService {
 
   // Load all data
   async loadAll() {
-    const [audiences, topics, messages, keywords] = await Promise.all([
+    const [audiences, topics, messages, keywords, assets] = await Promise.all([
       this.read('Audiences'),
       this.read('Topics'),
       this.read('Messages'),
-      this.read('Keywords')
+      this.read('Keywords'),
+      this.read('Assets')
     ]);
 
     return {
       audiences: this.parseAudiences(audiences),
       topics: this.parseTopics(topics),
       messages: this.parseMessages(messages),
-      keywords: this.parseKeywords(keywords)
+      keywords: this.parseKeywords(keywords),
+      assets: this.parseAssets(assets)
     };
   }
 
   // Save all data
-  async saveAll(audiences, topics, messages, feedData = null, feedFields = null) {
+  async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null) {
     const audienceRows = [
       ['ID', 'Name', 'Order', 'Status', 'Product', 'Strategy', 'Buying_platform', 'Data_source', 'Targeting_type', 'Device', 'Tag', 'Key', 'Comment', 'Campaign_name', 'Campaign_ID', 'Lineitem_name', 'Lineitem_ID'],
       ...audiences.map(a => [
@@ -320,6 +322,32 @@ class SheetsService {
         )
       ];
       promises.push(this.write('Feed', feedRows));
+    }
+
+    // Include assets if provided
+    if (assetsData && assetsData.length > 0) {
+      const assetsRows = [
+        ['ID', 'Brand', 'Product', 'Type', 'Visual_keyword', 'Visual_description', 'Placeholder_name', 'Version', 'File_format', 'File_driveID', 'File_name', 'File_size', 'File_date', 'File_dimensions', 'File_DirectLink', 'File_thumbnail'],
+        ...assetsData.map(asset => [
+          asset.ID || '',
+          asset.Brand || '',
+          asset.Product || '',
+          asset.Type || '',
+          asset.Visual_keyword || '',
+          asset.Visual_description || '',
+          asset.Placeholder_name || '',
+          asset.Version || '',
+          asset.File_format || '',
+          asset.File_driveID || '',
+          asset.File_name || '',
+          asset.File_size || '',
+          asset.File_date || '',
+          asset.File_dimensions || '',
+          asset.File_DirectLink || '',
+          asset.File_thumbnail || ''
+        ])
+      ];
+      promises.push(this.write('Assets', assetsRows));
     }
 
     await Promise.all(promises);
@@ -489,6 +517,37 @@ class SheetsService {
     });
 
     return keywords;
+  }
+
+  // Parse assets from spreadsheet
+  parseAssets(rows) {
+    if (!rows || rows.length < 2) return [];
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1)
+      .filter(row => row.length > 0 && row.some(cell => cell))
+      .map(row => {
+        return {
+          ID: this.getValue(row, columnMap, 'ID'),
+          Brand: this.getValue(row, columnMap, 'Brand'),
+          Product: this.getValue(row, columnMap, 'Product'),
+          Type: this.getValue(row, columnMap, 'Type'),
+          Visual_keyword: this.getValue(row, columnMap, 'Visual_keyword'),
+          Visual_description: this.getValue(row, columnMap, 'Visual_description'),
+          Placeholder_name: this.getValue(row, columnMap, 'Placeholder_name'),
+          Version: this.getValue(row, columnMap, 'Version'),
+          File_format: this.getValue(row, columnMap, 'File_format'),
+          File_driveID: this.getValue(row, columnMap, 'File_driveID'),
+          File_name: this.getValue(row, columnMap, 'File_name'),
+          File_size: this.getValue(row, columnMap, 'File_size'),
+          File_date: this.getValue(row, columnMap, 'File_date'),
+          File_dimensions: this.getValue(row, columnMap, 'File_dimensions'),
+          File_DirectLink: this.getValue(row, columnMap, 'File_DirectLink'),
+          File_thumbnail: this.getValue(row, columnMap, 'File_thumbnail')
+        };
+      });
   }
 
   // Save keywords

@@ -51,6 +51,7 @@ export const extractMetadata = (filename) => {
 
 // Process loaded assets from import.meta.glob results
 // Note: import.meta.glob() must be called with string literals in the component
+// Note: Still used by CreativeLibrary.jsx (not migrated to Drive yet)
 export const processAssets = async (assetModules) => {
   try {
     const assetList = Object.entries(assetModules).map(([path, url]) => {
@@ -115,36 +116,45 @@ export const processAssets = async (assetModules) => {
 
 // Filter assets based on search text with AND/OR operators
 export const filterAssets = (assets, filterText) => {
-  if (!filterText.trim()) return assets;
+  // Safety checks
+  if (!assets || !Array.isArray(assets)) return [];
+  if (!filterText || !filterText.trim()) return assets;
 
   return assets.filter(asset => {
-    // Build searchable text including dynamic message data if available
-    const searchableFields = [
-      asset.filename,
-      asset.product,
-      asset.size,
-      asset.date,
-      ...asset.platforms,
-      ...asset.tags,
-      asset.variant
-    ];
+    if (!asset) return false;
+    // Build searchable text from ALL fields of the asset object
+    const searchableFields = [];
 
-    // Add message data fields for dynamic creatives
-    if (asset.isDynamic && asset.messageData) {
-      const msg = asset.messageData;
-      searchableFields.push(
-        msg.headline,
-        msg.copy,
-        msg.advertiser,
-        msg.name,
-        msg.cta,
-        msg.legalline,
-        msg.number,
-        msg.variant
-      );
-    }
+    // Iterate through all properties of the asset
+    Object.keys(asset).forEach(key => {
+      const value = asset[key];
 
-    const searchableText = searchableFields.filter(Boolean).join(' ').toLowerCase();
+      // Skip non-searchable fields
+      if (key === 'url' || key === 'thumbnail' || key === 'id' || key === 'source') {
+        return;
+      }
+
+      // Handle different value types
+      if (value === null || value === undefined) {
+        return;
+      } else if (Array.isArray(value)) {
+        // Add all array elements
+        searchableFields.push(...value.filter(v => v !== null && v !== undefined));
+      } else if (typeof value === 'string' || typeof value === 'number') {
+        searchableFields.push(String(value));
+      } else if (typeof value === 'object') {
+        // Handle nested objects (like messageData)
+        Object.values(value).forEach(nestedValue => {
+          if (nestedValue !== null && nestedValue !== undefined) {
+            if (typeof nestedValue === 'string' || typeof nestedValue === 'number') {
+              searchableFields.push(String(nestedValue));
+            }
+          }
+        });
+      }
+    });
+
+    const searchableText = searchableFields.join(' ').toLowerCase();
 
     const filterLower = filterText.toLowerCase();
 

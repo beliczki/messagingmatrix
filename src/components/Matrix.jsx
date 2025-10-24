@@ -5,7 +5,6 @@ import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePat
 import ClaudeChat from './ClaudeChat';
 import TreeView from './TreeView';
 import KeywordEditor from './KeywordEditor';
-import StateManagementDialog from './StateManagementDialog';
 import MessageEditorDialog from './MessageEditorDialog';
 import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
@@ -32,7 +31,15 @@ const persistentMatrixRefs = {
   cachedFilteredTopicsDeps: { topics: null, topicFilter: null, productFilters: null }
 };
 
-const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState, setMatrixViewState, matrixData }) => {
+const Matrix = ({
+  onMenuToggle,
+  currentModuleName,
+  lookAndFeel,
+  matrixViewState,
+  setMatrixViewState,
+  matrixData,
+  onStateDataReady
+}) => {
   const claudeChatRef = useRef(null);
 
   // Detect mount/unmount
@@ -99,7 +106,6 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   const [editingMessage, setEditingMessage] = useState(null);
   const [editingAudience, setEditingAudience] = useState(null);
   const [editingTopic, setEditingTopic] = useState(null);
-  const [showStateDialog, setShowStateDialog] = useState(false);
   const [showKeywordEditor, setShowKeywordEditor] = useState(false);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -633,6 +639,18 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
   }
   persistentMatrixRefs.prevFilteredAudiences = filteredAudiences;
   persistentMatrixRefs.prevFilteredTopics = filteredTopics;
+
+  // Send state data to App when it changes
+  useEffect(() => {
+    if (onStateDataReady) {
+      onStateDataReady({
+        feedData,
+        downloadFeedCSV,
+        handleSaveWithProgress,
+        saveProgress
+      });
+    }
+  }, [feedData, saveProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save with progress tracking
   const handleSaveWithProgress = async () => {
@@ -1186,12 +1204,23 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
         </div>
 
         <button
-          onClick={() => setShowStateDialog(true)}
+          onClick={() => {
+            // Clear localStorage except authentication
+            const currentUser = localStorage.getItem('current_user');
+            const appUsers = localStorage.getItem('app_users');
+            localStorage.clear();
+            // Restore authentication data
+            if (currentUser) localStorage.setItem('current_user', currentUser);
+            if (appUsers) localStorage.setItem('app_users', appUsers);
+            // Reload the page to fetch fresh data from spreadsheet
+            window.location.reload();
+          }}
           className="flex items-center gap-2 px-3 py-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
+          title="Clear cache and reload data"
         >
-          <AlertCircle size={16} />
-          State
+          <RefreshCw size={16} />
+          Reload
         </button>
       </PageHeader>
 
@@ -1541,24 +1570,6 @@ const Matrix = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixViewState,
           </div>
         )}
       </div>
-
-
-      {/* State Dialog */}
-      <StateManagementDialog
-        showStateDialog={showStateDialog}
-        setShowStateDialog={setShowStateDialog}
-        audiences={audiences}
-        topics={topics}
-        messages={messages}
-        keywords={keywords}
-        assets={assets}
-        lastSync={lastSync}
-        isSaving={isSaving}
-        saveProgress={saveProgress}
-        handleSaveWithProgress={handleSaveWithProgress}
-        feedData={feedData}
-        downloadFeedCSV={downloadFeedCSV}
-      />
 
       {/* Message Edit Dialog with Tabs */}
       <MessageEditorDialog

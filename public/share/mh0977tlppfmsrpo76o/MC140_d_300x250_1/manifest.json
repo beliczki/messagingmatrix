@@ -1,0 +1,15 @@
+{
+    "version": "1.0",
+    "title": "MC140_d_1 - Kedvezőbb SZK kamatért, utald ide",
+    "description": "optional string",
+    "width": "300",
+    "height": "250",
+    "events": {
+        "enabled": 0,
+        "list": {}
+    },
+    "clicktags": {
+        "clickTAG": "https://erstebank.hu/"
+    },
+    "source": "index.html"
+}

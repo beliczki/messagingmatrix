@@ -36,7 +36,10 @@
       "Bash(git push:*)",
       "Bash(dir:*)",
       "Bash(cd:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git checkout:*)",
+      "Bash(pm2 stop:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,8 @@
+{
+  "type": "email_account",
+  "project_id": "messagingmatrix",
+  "client_email": "agent.erste@messagingmatrix.ai",
+  "pass": "756Eu5yo&",
+  "host": "messagingmatrix.ai",
+  "port": "993"
+}

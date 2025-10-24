@@ -83,7 +83,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image1",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/background/",
             "path-google": "DRM_Asset:Erste/"
@@ -92,7 +92,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image2",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/background/",
             "path-google": "DRM_Asset:Erste/"
@@ -101,7 +101,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image3",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/background/",
             "path-google": "DRM_Asset:Erste/"
@@ -110,7 +110,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image4",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/background/",
             "path-google": "DRM_Asset:Erste/"
@@ -119,7 +119,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image5",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/brand",
             "path-google": "DRM_Asset:Erste/"
@@ -128,7 +128,7 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image6",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/sticker/",
             "path-google": "DRM_Asset:Erste/"

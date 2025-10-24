@@ -9,6 +9,7 @@ import { SignJWT, importPKCS8 } from 'jose';
 import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
 import sizeOf from 'image-size';
+import driveStorage from './src/services/driveStorage.js';
 
 dotenv.config();
 
@@ -1393,9 +1394,305 @@ app.get('/api/assets/stats', async (req, res) => {
 });
 
 // Start server with proper error handling
+
+// ========================================
+// Google Drive Storage Integration
+// ========================================
+
+// Initialize Drive Storage
+async function initializeDriveStorage() {
+  try {
+    const configPath = path.join(__dirname, 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+    if (config.googleDrive && config.googleDrive.enabled) {
+      const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
+      const fullPath = path.join(__dirname, serviceAccountPath);
+
+      await driveStorage.initialize(
+        fullPath,
+        config.googleDrive.assetsFolderId,
+        config.googleDrive.creativesFolderId
+      );
+
+      console.log('✓ Google Drive storage initialized');
+    } else {
+      console.log('⚠ Google Drive storage disabled in config');
+    }
+  } catch (error) {
+    console.error('✗ Failed to initialize Google Drive storage:', error.message);
+  }
+}
+
+// Upload file to Google Drive
+app.post('/api/drive/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { folderType = 'assets', metadata } = req.body;
+    const parsedMetadata = metadata ? JSON.parse(metadata) : {};
+
+    // Read file data
+    const fileData = fs.readFileSync(req.file.path);
+
+    // Upload to Drive
+    const result = await driveStorage.uploadFile(
+      fileData,
+      req.file.originalname,
+      req.file.mimetype,
+      folderType,
+      parsedMetadata
+    );
+
+    // Clean up temp file
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      success: true,
+      file: result
+    });
+  } catch (error) {
+    console.error('Error uploading to Drive:', error);
+    res.status(500).json({ error: 'Failed to upload to Drive' });
+  }
+});
+
+// List files from Google Drive
+app.get('/api/drive/files', async (req, res) => {
+  try {
+    const { folderType = 'assets', pageSize = 100, pageToken, orderBy } = req.query;
+
+    const result = await driveStorage.listFiles(folderType, {
+      pageSize: parseInt(pageSize),
+      pageToken,
+      orderBy
+    });
+
+    // Debug: Check if metadata is in the response
+    if (result.files && result.files.length > 0) {
+      console.log('📤 Sending to client - first file:', {
+        name: result.files[0].name,
+        hasImageMeta: !!result.files[0].imageMediaMetadata,
+        imageMeta: result.files[0].imageMediaMetadata
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error listing Drive files:', error);
+    res.status(500).json({ error: 'Failed to list Drive files' });
+  }
+});
+
+// Get file metadata from Google Drive
+app.get('/api/drive/files/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const metadata = await driveStorage.getFileMetadata(fileId);
+
+    res.json(metadata);
+  } catch (error) {
+    console.error('Error getting file metadata:', error);
+    res.status(500).json({ error: 'Failed to get file metadata' });
+  }
+});
+
+// Download file from Google Drive
+app.get('/api/drive/download/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    // Get file metadata first
+    const metadata = await driveStorage.getFileMetadata(fileId);
+
+    // Download file
+    const fileData = await driveStorage.downloadFile(fileId);
+
+    // Set headers
+    res.setHeader('Content-Type', metadata.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${metadata.name}"`);
+    res.setHeader('Content-Length', fileData.length);
+
+    // Send file
+    res.send(fileData);
+  } catch (error) {
+    console.error('Error downloading from Drive:', error);
+    res.status(500).json({ error: 'Failed to download from Drive' });
+  }
+});
+
+// Delete file from Google Drive
+app.delete('/api/drive/files/:fileId', async (req, res) => {
+  try {
+    const { fileId} = req.params;
+    await driveStorage.deleteFile(fileId);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting file from Drive:', error);
+    res.status(500).json({ error: 'Failed to delete file from Drive' });
+  }
+});
+
+// Update file metadata in Google Drive
+app.patch('/api/drive/files/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { metadata } = req.body;
+
+    const updated = await driveStorage.updateFileMetadata(fileId, metadata);
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating file metadata:', error);
+    res.status(500).json({ error: 'Failed to update file metadata' });
+  }
+});
+
+// Search files in Google Drive
+app.get('/api/drive/search', async (req, res) => {
+  try {
+    const { q: searchTerm, folderType = 'assets' } = req.query;
+
+    if (!searchTerm) {
+      return res.status(400).json({ error: 'Search term required' });
+    }
+
+    const results = await driveStorage.searchFiles(searchTerm, folderType);
+
+    res.json({ files: results });
+  } catch (error) {
+    console.error('Error searching Drive files:', error);
+    res.status(500).json({ error: 'Failed to search Drive files' });
+  }
+});
+
+// Move file to different folder
+app.post('/api/drive/files/:fileId/move', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { folderType } = req.body;
+
+    const updated = await driveStorage.moveFile(fileId, folderType);
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error moving file:', error);
+    res.status(500).json({ error: 'Failed to move file' });
+  }
+});
+
+// Get storage quota
+app.get('/api/drive/quota', async (req, res) => {
+  try {
+    const quota = await driveStorage.getStorageQuota();
+
+    res.json(quota);
+  } catch (error) {
+    console.error('Error getting storage quota:', error);
+    res.status(500).json({ error: 'Failed to get storage quota' });
+  }
+});
+
+// Batch upload files to Google Drive
+app.post('/api/drive/upload-batch', upload.array('files'), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const { folderType = 'assets', metadata } = req.body;
+    const parsedMetadata = metadata ? JSON.parse(metadata) : {};
+
+    const files = req.files.map(file => ({
+      fileData: fs.readFileSync(file.path),
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      metadata: parsedMetadata
+    }));
+
+    // Upload to Drive
+    const results = await driveStorage.uploadMultipleFiles(files, folderType);
+
+    // Clean up temp files
+    req.files.forEach(file => {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (e) {
+        console.error('Error deleting temp file:', e);
+      }
+    });
+
+    res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('Error batch uploading to Drive:', error);
+    res.status(500).json({ error: 'Failed to batch upload to Drive' });
+  }
+});
+
+// Proxy endpoint to serve Drive files (supports both file IDs and filenames)
+app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
+  try {
+    const { fileIdOrName } = req.params;
+
+    // Ensure Drive storage is initialized
+    driveStorage.ensureInitialized();
+
+    let fileId = fileIdOrName;
+
+    // Check if the parameter looks like a filename (has a file extension)
+    const hasExtension = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|pdf|zip|psd)$/i.test(fileIdOrName);
+
+    if (hasExtension) {
+      // This is a filename - search for it in Drive
+      console.log(`Searching for file by name: ${fileIdOrName}`);
+
+      // Search in both assets and creatives folders
+      let files = await driveStorage.searchFiles(fileIdOrName, 'assets');
+
+      if (files.length === 0) {
+        // Try creatives folder if not found in assets
+        files = await driveStorage.searchFiles(fileIdOrName, 'creatives');
+      }
+
+      if (files.length === 0) {
+        console.error(`File not found: ${fileIdOrName}`);
+        return res.status(404).json({ error: `File not found: ${fileIdOrName}` });
+      }
+
+      // Use the first matching file
+      fileId = files[0].id;
+      console.log(`Found file: ${files[0].name} (ID: ${fileId})`);
+    }
+
+    // Download file from Drive
+    const fileData = await driveStorage.downloadFile(fileId);
+
+    // Get file metadata to set proper content type
+    const metadata = await driveStorage.getFileMetadata(fileId);
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', metadata.mimeType || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+    // Send the file data
+    res.send(fileData);
+  } catch (error) {
+    console.error('Error proxying Drive file:', error);
+    res.status(500).json({ error: 'Failed to proxy Drive file' });
+  }
+});
+
 const server = app.listen(PORT, () => {
   console.log(`\n✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ Make sure VITE_ANTHROPIC_API_KEY is set in your .env file\n`);
+  // Initialize Google Drive storage
+  initializeDriveStorage().catch(console.error);
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n✗ ERROR: Port ${PORT} is already in use!`);
