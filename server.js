@@ -10,6 +10,7 @@ import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
 import sizeOf from 'image-size';
 import driveStorage from './src/services/driveStorage.js';
+import { applyTextFormattingSpans } from './utils/textFormatter.js';
 
 dotenv.config();
 
@@ -269,6 +270,135 @@ app.post('/api/config', (req, res) => {
   }
 });
 
+// Add text formatting rule
+app.post('/api/textformatting', async (req, res) => {
+  try {
+    const { text_original, text_formatted, formatting_scope } = req.body;
+
+    if (!text_original || !text_formatted) {
+      return res.status(400).json({ error: 'text_original and text_formatted are required' });
+    }
+
+    // Get spreadsheet ID from config
+    const configPath = path.join(__dirname, 'config.json');
+    const configData = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(configData);
+    const spreadsheetId = config.spreadsheetId;
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'Spreadsheet ID not configured' });
+    }
+
+    // Initialize Google Sheets client
+    const auth = await getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Read current textformats sheet
+    const getResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'textformats!A:D'
+    });
+
+    const currentData = getResponse.data.values || [];
+
+    // Find next ID
+    let nextId = 1;
+    if (currentData.length > 1) {
+      const ids = currentData.slice(1).map(row => parseInt(row[0]) || 0);
+      nextId = Math.max(...ids) + 1;
+    }
+
+    // Create new row
+    const newRow = [
+      nextId.toString(),
+      text_original,
+      text_formatted,
+      formatting_scope || ''
+    ];
+
+    // Append new row
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'textformats!A:D',
+      valueInputOption: 'RAW',
+      resource: {
+        values: [newRow]
+      }
+    });
+
+    res.json({ success: true, id: nextId });
+  } catch (error) {
+    console.error('Error adding text formatting:', error);
+    res.status(500).json({ error: 'Failed to add text formatting', details: error.message });
+  }
+});
+
+// Add multiple text formatting rules (batch)
+app.post('/api/textformatting/batch', async (req, res) => {
+  try {
+    const { rules } = req.body;
+
+    if (!rules || !Array.isArray(rules) || rules.length === 0) {
+      return res.status(400).json({ error: 'rules array is required' });
+    }
+
+    // Get spreadsheet ID from config
+    const configPath = path.join(__dirname, 'config.json');
+    const configData = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(configData);
+    const spreadsheetId = config.spreadsheetId;
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'Spreadsheet ID not configured' });
+    }
+
+    // Initialize Google Sheets client
+    const auth = await getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Read current textformats sheet
+    const getResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'textformats!A:D'
+    });
+
+    const currentData = getResponse.data.values || [];
+
+    // Find next ID
+    let nextId = 1;
+    if (currentData.length > 1) {
+      const ids = currentData.slice(1).map(row => parseInt(row[0]) || 0);
+      nextId = Math.max(...ids) + 1;
+    }
+
+    // Create new rows for all rules
+    const newRows = rules.map(rule => {
+      const row = [
+        (nextId++).toString(),
+        rule.text_original,
+        rule.text_formatted,
+        rule.formatting_scope || ''
+      ];
+      return row;
+    });
+
+    // Append all rows at once
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'textformats!A:D',
+      valueInputOption: 'RAW',
+      resource: {
+        values: newRows
+      }
+    });
+
+    res.json({ success: true, count: newRows.length });
+  } catch (error) {
+    console.error('Error adding text formatting rules:', error);
+    res.status(500).json({ error: 'Failed to add text formatting rules', details: error.message });
+  }
+});
+
 app.post('/api/claude', async (req, res) => {
   try {
     const { messages, model = 'claude-3-5-sonnet-20241022', max_tokens = 4096 } = req.body;
@@ -335,9 +465,12 @@ app.get('/api/shares/:shareId', (req, res) => {
 });
 
 // Helper function to populate template with message data
-function populateTemplate(html, messageData, templateConfig, imageBaseUrls) {
+function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size = '', textFormatting = []) {
   if (!messageData || !html) return html;
   let result = html;
+
+  // Text fields that should get span-based formatting
+  const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
 
   if (templateConfig && templateConfig.placeholders) {
     Object.keys(templateConfig.placeholders).forEach(placeholderName => {
@@ -348,6 +481,11 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls) {
       if (binding) {
         const fieldName = binding.replace(/^message\./i, '').toLowerCase();
         value = messageData[fieldName] || value;
+
+        // Apply span-based text formatting for text fields
+        if (textFields.includes(fieldName) && value && textFormatting && textFormatting.length > 0) {
+          value = applyTextFormattingSpans(value, textFormatting);
+        }
 
         // Build full image URL if this is an image field
         if (config.type === 'image' && value && imageBaseUrls) {
@@ -362,13 +500,18 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls) {
     });
   }
 
+  // Add size class to body tag for CSS-based text formatting
+  if (size) {
+    result = result.replace(/<body([^>]*)>/i, `<body$1 class="size-${size}">`);
+  }
+
   return result;
 }
 
 // Create new share
 app.post('/api/shares', async (req, res) => {
   try {
-    const { assetIds, creatives = [], title, baseColor, templateData = {} } = req.body;
+    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [] } = req.body;
 
     // Load config to get image base URLs
     const configPath = path.join(__dirname, 'config.json');
@@ -412,12 +555,14 @@ app.post('/api/shares', async (req, res) => {
           // Save CSS file
           fs.writeFileSync(path.join(adDir, 'styles.css'), combinedCss, 'utf8');
 
-          // Populate template with message data
+          // Populate template with message data (with text formatting)
           let populatedHtml = populateTemplate(
             templateData.templateHtml,
             creative.messageData,
             templateData.templateConfig,
-            imageBaseUrls
+            imageBaseUrls,
+            dimensions,
+            textFormatting
           );
 
           // Extract and copy images to local folder

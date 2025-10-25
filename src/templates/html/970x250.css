@@ -351,7 +351,6 @@ background-size: 193%;
 /* text format helpers  */
 /* -----------------------------------------*/
 
-.sizebr.br970x250 {
-    display:inline-block;
-} 
+.sizebr.br970x250 { display:inline-block;} 
+.size-970x250 .text-970x250 {display: inline;}
 

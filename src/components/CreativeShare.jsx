@@ -19,7 +19,8 @@ const CreativeShare = ({
   templateHtml = '',
   templateConfig = null,
   templateCss = null,
-  templateName = 'html'
+  templateName = 'html',
+  textFormatting = []
 }) => {
   if (!isOpen) return null;
 
@@ -36,7 +37,8 @@ const CreativeShare = ({
             templateConfig,
             templateCss,
             templateName
-          }
+          },
+          textFormatting
         );
         setGeneratedShareUrl(result.url);
       } catch (error) {

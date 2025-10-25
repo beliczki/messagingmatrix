@@ -1,5 +1,6 @@
 import React from 'react';
 import settings from '../services/settings';
+import { applyTextFormattingSpans } from '../utils/textFormatter';
 import mainCss from '../templates/html/main.css?raw';
 import css300x250 from '../templates/html/300x250.css?raw';
 import css300x600 from '../templates/html/300x600.css?raw';
@@ -16,7 +17,8 @@ const TemplatePreview = ({
   message,
   previewSize = '300x250',
   className = '',
-  templateConfig = null
+  templateConfig = null,
+  textFormatting = []
 }) => {
   // Helper function to build full image URL using template.json path-messagingmatrix parameter
   const buildImageUrl = (imageKey, filename) => {
@@ -99,13 +101,29 @@ const TemplatePreview = ({
           // Support both "message.Headline" and just "Headline" formats
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
 
-          // Map all message fields including style and CSS
+          // Text fields that should get span-based formatting
+          const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+
+          // Map all message fields including style and CSS with span-formatted text
           const fieldMap = {
-            'headline': msg.headline,
-            'copy1': msg.copy1,
-            'copy2': msg.copy2,
-            'flash': msg.flash,
-            'cta': msg.cta,
+            'headline': textFields.includes('headline') && msg.headline
+              ? applyTextFormattingSpans(msg.headline, textFormatting)
+              : msg.headline,
+            'copy1': textFields.includes('copy1') && msg.copy1
+              ? applyTextFormattingSpans(msg.copy1, textFormatting)
+              : msg.copy1,
+            'copy2': textFields.includes('copy2') && msg.copy2
+              ? applyTextFormattingSpans(msg.copy2, textFormatting)
+              : msg.copy2,
+            'flash': textFields.includes('flash') && msg.flash
+              ? applyTextFormattingSpans(msg.flash, textFormatting)
+              : msg.flash,
+            'cta': textFields.includes('cta') && msg.cta
+              ? applyTextFormattingSpans(msg.cta, textFormatting)
+              : msg.cta,
+            'disclaimer': textFields.includes('disclaimer') && msg.disclaimer
+              ? applyTextFormattingSpans(msg.disclaimer, textFormatting)
+              : msg.disclaimer,
             'image1': msg.image1,
             'image2': msg.image2,
             'image3': msg.image3,
@@ -144,6 +162,9 @@ const TemplatePreview = ({
     result = result
       .replace(/\{\{[^}]+\}\}/g, '')
       .replace(/\[\[[^\]]+\]\]/g, '');
+
+    // Add size class to body tag for CSS-based text formatting
+    result = result.replace(/<body([^>]*)>/i, `<body$1 class="size-${previewSize}">`);
 
     return result;
   };

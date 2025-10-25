@@ -14,6 +14,7 @@ export const useMatrix = () => {
   const [keywords, setKeywords] = useState({});
   const [assets, setAssets] = useState([]);
   const [creatives, setCreatives] = useState([]);
+  const [textFormatting, setTextFormatting] = useState([]);
   const [messagesByCell, setMessagesByCell] = useState({}); // Fast lookup: "topicKey-audienceKey" -> [messages]
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,6 +53,7 @@ export const useMatrix = () => {
       setKeywords(data.keywords || {});
       setAssets(data.assets || []);
       setCreatives(data.creatives || []);
+      setTextFormatting(data.textFormatting || []);
       setLastSync(new Date());
     } catch (err) {
       console.error('Load error:', err);
@@ -333,14 +335,15 @@ export const useMatrix = () => {
   }, []);
 
   // Track reference changes for debugging
-  const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets, creatives });
+  const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets, creatives, textFormatting });
   const depsChanged = {
     audiences: prevDepsRef.current.audiences !== audiences,
     topics: prevDepsRef.current.topics !== topics,
     messages: prevDepsRef.current.messages !== messages,
     keywords: prevDepsRef.current.keywords !== keywords,
     assets: prevDepsRef.current.assets !== assets,
-    creatives: prevDepsRef.current.creatives !== creatives
+    creatives: prevDepsRef.current.creatives !== creatives,
+    textFormatting: prevDepsRef.current.textFormatting !== textFormatting
   };
 
   // Log every time the hook runs
@@ -355,7 +358,7 @@ export const useMatrix = () => {
     creativesRef: creatives
   });
 
-  prevDepsRef.current = { audiences, topics, messages, keywords, assets, creatives };
+  prevDepsRef.current = { audiences, topics, messages, keywords, assets, creatives, textFormatting };
 
   // Check if arrays have actually changed OR if metadata has changed
   const shouldUpdate = !cachedMatrixResult ||
@@ -365,6 +368,7 @@ export const useMatrix = () => {
     cachedMatrixResult.keywords !== keywords ||
     cachedMatrixResult.assets !== assets ||
     cachedMatrixResult.creatives !== creatives ||
+    cachedMatrixResult.textFormatting !== textFormatting ||
     cachedMatrixResult.messagesByCell !== messagesByCell ||
     cachedMatrixResult.isLoading !== isLoading ||
     cachedMatrixResult.isSaving !== isSaving ||
@@ -388,6 +392,7 @@ export const useMatrix = () => {
       keywords,
       assets,
       creatives,
+      textFormatting,
       messagesByCell,
       setAssets,
       setCreatives,

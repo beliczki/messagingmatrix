@@ -700,6 +700,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         templateConfig={templateConfig}
         templateCss={templateCss}
         templateName="html"
+        textFormatting={matrixData?.textFormatting || []}
       />
 
       {/* Sync Progress Overlay */}

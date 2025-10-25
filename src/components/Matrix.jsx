@@ -77,6 +77,7 @@ const Matrix = ({
   const {
     keywords = {},
     assets = [],
+    textFormatting = [],
     isLoading = false,
     isSaving = false,
     error = null,
@@ -1580,6 +1581,7 @@ const Matrix = ({
         updateMessage={updateMessage}
         deleteMessage={deleteMessage}
         keywords={keywords}
+        textFormatting={textFormatting}
         previewSize={previewSize}
         setPreviewSize={setPreviewSize}
         activeTab={activeTab}

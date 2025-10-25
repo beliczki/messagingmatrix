@@ -21,7 +21,7 @@ export const getPreviewById = async (previewId) => {
 };
 
 // Create new preview from selected asset IDs
-export const createPreview = async (assetIds, creatives = [], title = '', baseColor = '#2870ed', templateData = {}) => {
+export const createPreview = async (assetIds, creatives = [], title = '', baseColor = '#2870ed', templateData = {}, textFormatting = []) => {
   try {
     console.log('previewService: Creating preview with', assetIds.length, 'assets');
     console.log('previewService: API URL:', `${API_BASE_URL}/shares`);
@@ -36,7 +36,8 @@ export const createPreview = async (assetIds, creatives = [], title = '', baseCo
         creatives,
         title: title || `Preview ${new Date().toLocaleDateString()}`,
         baseColor,
-        templateData
+        templateData,
+        textFormatting
       })
     });
 

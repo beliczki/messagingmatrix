@@ -64,7 +64,7 @@
               </div>
               <div id="copyWrapper2">
                 <!-- copy_text_2 -->
-                <p class="thm copy_style_2" style="{{copy_style_2}}">{{copy_text_2}}</b></p>
+                <p class="thm copy_text_2 copy_style_2" style="{{copy_style_2}}">{{copy_text_2}}</b></p>
               </div>
               <div id="buttonWrapper">
                 <span class="cta_text_1 cta_style_1" style="{{cta_style_1}}" data="{{cta_text_1}}">{{cta_text_1}}</span>
@@ -85,5 +85,9 @@
     </div>
     <!-- extra css to finetune -->
     <style type="text/css">{{css_styles}}</style>
+    <script>
+        const ad = document.querySelector('#adContainer');
+        document.body.classList.add("size-" + ad.offsetWidth + "x" + ad.offsetHeight);
+    </script>
   </body>
 </html>

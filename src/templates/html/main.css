@@ -752,9 +752,10 @@ main,
 /* text format helpers  */
 /* -----------------------------------------*/
 
-.sizebr {
-    display: none;
-}
+.sizebr { display: none;}
+
+span[class^="text-"] {display: none;}
+body #textContainer .text-allSizes {display: inline;}
 
 
 

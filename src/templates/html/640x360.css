@@ -114,7 +114,6 @@ background-size: 193%;
 /* text format helpers  */
 /* -----------------------------------------*/
 
-.sizebr.br640x360 {
-    display:inline-block;
-}
+.sizebr.br640x360 { display:inline-block;}
+.size-640x360 .text-640x360 {display: inline;}
 

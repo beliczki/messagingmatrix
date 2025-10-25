@@ -275,6 +275,7 @@ const App = () => {
             keywords={matrixData?.keywords || {}}
             assets={matrixData?.assets || []}
             creatives={matrixData?.creatives || []}
+            textFormatting={matrixData?.textFormatting || []}
             lastSync={matrixData?.lastSync}
             isSaving={matrixData?.isSaving}
             saveProgress={matrixStateData.saveProgress}

@@ -25,6 +25,7 @@ const StateManagementDialog = ({
   keywords,
   assets,
   creatives,
+  textFormatting = [],
   lastSync,
   isSaving,
   saveProgress,
@@ -90,7 +91,8 @@ const StateManagementDialog = ({
     { id: 'assets', label: 'Assets', count: assets?.length || 0 },
     { id: 'creatives', label: 'Creatives', count: creatives?.length || 0 },
     { id: 'feed', label: 'Feed', count: feedData?.length || 0 },
-    { id: 'keywords', label: 'Keywords', count: keywordsCount }
+    { id: 'keywords', label: 'Keywords', count: keywordsCount },
+    { id: 'textFormatting', label: 'Text Formatting', count: textFormatting?.length || 0 }
   ];
 
   return (
@@ -168,6 +170,12 @@ const StateManagementDialog = ({
           {activeTab === 'keywords' && (
             <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
               {JSON.stringify(keywords, null, 2)}
+            </pre>
+          )}
+
+          {activeTab === 'textFormatting' && (
+            <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
+              {JSON.stringify(textFormatting || [], null, 2)}
             </pre>
           )}
         </div>

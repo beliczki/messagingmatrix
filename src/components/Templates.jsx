@@ -136,6 +136,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
           onClose={handleCloseEditor}
           onSave={loadTemplates}
           messages={matrixData?.messages || []}
+          textFormatting={matrixData?.textFormatting || []}
         />
       )}
     </div>
@@ -143,7 +144,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
 };
 
 // Template Editor Dialog Component
-const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps }) => {
+const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps, textFormatting = [] }) => {
   // Ref for Claude Chat
   const claudeChatRef = useRef(null);
 
@@ -621,6 +622,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
             message={selectedMessage}
             previewSize={previewSize}
             templateConfig={templateConfig}
+            textFormatting={textFormatting}
             className="inline-block"
           />
         ) : (

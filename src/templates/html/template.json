@@ -28,7 +28,7 @@
         },
         "template_variant_class": {
             "type": "tag",
-            "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker",
+            "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage",
             "default": "",
             "binding-messagingmatrix": "Template_variant_classes"
         },

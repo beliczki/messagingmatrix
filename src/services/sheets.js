@@ -196,13 +196,14 @@ class SheetsService {
 
   // Load all data
   async loadAll() {
-    const [audiences, topics, messages, keywords, assets, creatives] = await Promise.all([
+    const [audiences, topics, messages, keywords, assets, creatives, textFormatting] = await Promise.all([
       this.read('Audiences'),
       this.read('Topics'),
       this.read('Messages'),
       this.read('Keywords'),
       this.read('Assets'),
-      this.read('Creatives')
+      this.read('Creatives'),
+      this.read('textformats')
     ]);
 
     return {
@@ -211,7 +212,8 @@ class SheetsService {
       messages: this.parseMessages(messages),
       keywords: this.parseKeywords(keywords),
       assets: this.parseAssets(assets),
-      creatives: this.parseCreatives(creatives)
+      creatives: this.parseCreatives(creatives),
+      textFormatting: this.parseTextFormatting(textFormatting)
     };
   }
 
@@ -613,6 +615,32 @@ class SheetsService {
           Is_Dynamic: this.getValue(row, columnMap, 'Is_Dynamic')
         };
       });
+  }
+
+  // Parse text formatting rules from spreadsheet
+  parseTextFormatting(rows) {
+    if (!rows || rows.length < 2) return [];
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1)
+      .filter(row => row.length > 0 && row.some(cell => cell))
+      .map(row => {
+        const scopeStr = this.getValue(row, columnMap, 'Formatting_Scope');
+        // Parse scope: empty = all sizes, comma-separated = specific sizes
+        const scope = scopeStr
+          ? scopeStr.split(',').map(s => s.trim()).filter(s => s)
+          : []; // Empty array means all sizes
+
+        return {
+          id: this.getValue(row, columnMap, 'ID'),
+          text_original: this.getValue(row, columnMap, 'Text_original'),
+          text_formatted: this.getValue(row, columnMap, 'Text_formatted'),
+          formatting_scope: scope
+        };
+      })
+      .filter(rule => rule.text_original); // Only include rules with original text
   }
 
   // Save keywords

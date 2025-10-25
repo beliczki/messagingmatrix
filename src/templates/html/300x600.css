@@ -150,9 +150,8 @@ body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;
 /* -----------------------------------------*/
 /* text format helpers  */
 /* -----------------------------------------*/
-.sizebr.br300x600 {
-    display: inline-block;
-}
+.sizebr.br300x600 {display: inline-block;}
+.size-300x600 .text-300x600{display: inline;}
 
 
 

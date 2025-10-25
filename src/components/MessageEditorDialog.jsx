@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, AlertCircle, Loader, Trash2 } from 'lucide-react';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
+import { applyTextFormattingSpans } from '../utils/textFormatter';
 import mainCss from '../templates/html/main.css?raw';
 import css300x250 from '../templates/html/300x250.css?raw';
 import css300x600 from '../templates/html/300x600.css?raw';
@@ -18,6 +19,7 @@ const MessageEditorDialog = ({
   updateMessage,
   deleteMessage,
   keywords,
+  textFormatting = [],
   previewSize,
   setPreviewSize,
   activeTab,
@@ -49,6 +51,112 @@ const MessageEditorDialog = ({
   const [templateHtml, setTemplateHtml] = useState('');
   const [variantClassOptions, setVariantClassOptions] = useState([]);
   const [availableDimensions, setAvailableDimensions] = useState([]);
+
+  // Skip animation state (persisted to localStorage)
+  const [skipAnimation, setSkipAnimation] = useState(() => {
+    const saved = localStorage.getItem('messageEditor_skipAnimation');
+    return saved === 'true';
+  });
+
+  // Persist skipAnimation to localStorage
+  useEffect(() => {
+    localStorage.setItem('messageEditor_skipAnimation', skipAnimation);
+  }, [skipAnimation]);
+
+  // Track which formatting scope is selected for each field
+  const [selectedFormattingScopes, setSelectedFormattingScopes] = useState({
+    headline: 'default',
+    copy1: 'default',
+    copy2: 'default',
+    flash: 'default',
+    cta: 'default',
+    disclaimer: 'default'
+  });
+
+  // Text formatting data structure - stores formatted variants
+  const [textFormattingData, setTextFormattingData] = useState({
+    headline: {},
+    copy1: {},
+    copy2: {},
+    flash: {},
+    cta: {},
+    disclaimer: {}
+  });
+
+  // Track which fields are in "add mode" (showing scope buttons)
+  const [formattingAddMode, setFormattingAddMode] = useState({
+    headline: false,
+    copy1: false,
+    copy2: false,
+    flash: false,
+    cta: false,
+    disclaimer: false
+  });
+
+  // Track edited values per field and scope
+  const [editedFormattingValues, setEditedFormattingValues] = useState({});
+
+  // Track which field/scope is currently saving
+  const [savingFormatting, setSavingFormatting] = useState({ fieldName: null, scope: null });
+
+  // Get formatting rules for a specific text
+  const getFormattingRulesForText = (text) => {
+    if (!text || !textFormatting || textFormatting.length === 0) return [];
+    return textFormatting.filter(rule => rule.text_original === text);
+  };
+
+  // Get all available scopes for a field - always show all scopes when formatting exists
+  const getAvailableScopes = (fieldName) => {
+    const text = editingMessage?.[fieldName];
+    const rules = getFormattingRulesForText(text);
+
+    // If no formatting rules, return empty (don't show scopes)
+    if (rules.length === 0) return [];
+
+    // Always return all scopes when formatting exists
+    return ['default', '300x250', '300x600', '640x360', '970x250', '1080x1080', 'allSizes'];
+  };
+
+  // Check if a specific scope has custom formatting (different from default)
+  const scopeHasCustomFormatting = (fieldName, scope) => {
+    if (scope === 'default') return false;
+
+    const text = editingMessage?.[fieldName];
+    const rules = getFormattingRulesForText(text);
+
+    if (scope === 'allSizes') {
+      return rules.some(rule => !rule.formatting_scope || rule.formatting_scope.length === 0);
+    }
+
+    return rules.some(rule => rule.formatting_scope && rule.formatting_scope.includes(scope));
+  };
+
+  // Get the formatted text for a specific scope
+  const getFormattedTextForScope = (fieldName, scope) => {
+    const text = editingMessage?.[fieldName];
+    if (!text) return '';
+    if (scope === 'default') return text;
+
+    const rules = getFormattingRulesForText(text);
+
+    if (scope === 'allSizes') {
+      const allSizesRule = rules.find(rule => !rule.formatting_scope || rule.formatting_scope.length === 0);
+      return allSizesRule ? allSizesRule.text_formatted : text;
+    }
+
+    const scopeRule = rules.find(rule =>
+      rule.formatting_scope && rule.formatting_scope.includes(scope)
+    );
+    return scopeRule ? scopeRule.text_formatted : text;
+  };
+
+  // Toggle add mode for a field
+  const toggleAddMode = (fieldName) => {
+    setFormattingAddMode(prev => ({
+      ...prev,
+      [fieldName]: !prev[fieldName]
+    }));
+  };
 
   // Load templates list
   useEffect(() => {
@@ -237,20 +345,38 @@ const MessageEditorDialog = ({
           // Convert binding to message field name (e.g., "message.Headline" -> "headline")
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
 
-          // Map message fields to values (including style fields)
+          // Text fields that should get span-based formatting
+          const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+
+          // Map message fields to values (including style fields and span-formatted text)
           const fieldMap = {
-            'headline': editingMessage.headline,
-            'copy1': editingMessage.copy1,
-            'copy2': editingMessage.copy2,
-            'flash': editingMessage.flash,
-            'cta': editingMessage.cta,
+            'headline': textFields.includes('headline') && editingMessage.headline
+              ? applyTextFormattingSpans(editingMessage.headline, textFormatting)
+              : editingMessage.headline,
+            'copy1': textFields.includes('copy1') && editingMessage.copy1
+              ? applyTextFormattingSpans(editingMessage.copy1, textFormatting)
+              : editingMessage.copy1,
+            'copy2': textFields.includes('copy2') && editingMessage.copy2
+              ? applyTextFormattingSpans(editingMessage.copy2, textFormatting)
+              : editingMessage.copy2,
+            'flash': textFields.includes('flash') && editingMessage.flash
+              ? applyTextFormattingSpans(editingMessage.flash, textFormatting)
+              : editingMessage.flash,
+            'cta': textFields.includes('cta') && editingMessage.cta
+              ? applyTextFormattingSpans(editingMessage.cta, textFormatting)
+              : editingMessage.cta,
+            'disclaimer': textFields.includes('disclaimer') && editingMessage.disclaimer
+              ? applyTextFormattingSpans(editingMessage.disclaimer, textFormatting)
+              : editingMessage.disclaimer,
             'image1': editingMessage.image1,
             'image2': editingMessage.image2,
             'image3': editingMessage.image3,
             'image4': editingMessage.image4,
             'image5': editingMessage.image5,
             'image6': editingMessage.image6,
-            'template_variant_classes': editingMessage.template_variant_classes,
+            'template_variant_classes': skipAnimation
+              ? (editingMessage.template_variant_classes || '').replace(/\banimated\b/g, '').trim()
+              : editingMessage.template_variant_classes,
             // Style fields
             'headline_style': editingMessage.headline_style,
             'copy1_style': editingMessage.copy1_style,
@@ -292,6 +418,9 @@ const MessageEditorDialog = ({
     // Clean up any remaining placeholders
     html = html.replace(/\{\{[^}]+\}\}/g, '');
     html = html.replace(/\[\[[^\]]+\]\]/g, '');
+
+    // Add size class to body tag for CSS-based text formatting
+    html = html.replace(/<body([^>]*)>/i, `<body$1 class="size-${previewSize}">`);
 
     return html;
   };
@@ -341,6 +470,173 @@ const MessageEditorDialog = ({
   // Determine if preview should be on side or top based on width
   const [width, height] = previewSize.split('x').map(Number);
   const isWide = width > 600; // Wide sizes go to top
+
+  // Render text input field with formatting info
+  const renderTextInputWithFormatting = (fieldName, label, inputType = 'input', rows = 3) => {
+    const availableScopes = getAvailableScopes(fieldName);
+    const hasFormatting = availableScopes.length > 1; // More than just 'default'
+    const selectedScope = selectedFormattingScopes[fieldName];
+    const defaultText = editingMessage?.[fieldName] || '';
+
+    // Get the saved formatted text for this scope
+    const savedFormattedText = selectedScope === 'default'
+      ? defaultText
+      : getFormattedTextForScope(fieldName, selectedScope);
+
+    // Check if there's an edited value for this field/scope
+    const editKey = `${fieldName}:${selectedScope}`;
+    const hasEditedValue = editedFormattingValues[editKey] !== undefined;
+    const currentValue = hasEditedValue ? editedFormattingValues[editKey] : savedFormattedText;
+
+    // Check if the current edited value differs from saved
+    const hasChanges = hasEditedValue && editedFormattingValues[editKey] !== savedFormattedText;
+
+    // Also check if non-default scope differs from default (for new formatting)
+    const differsFromDefault = selectedScope !== 'default' && currentValue !== defaultText;
+    const shouldShowSave = hasChanges || (hasEditedValue && differsFromDefault && !scopeHasCustomFormatting(fieldName, selectedScope));
+
+    const handleValueChange = (value) => {
+      if (selectedScope === 'default') {
+        // Update the default message value
+        setEditingMessage({ ...editingMessage, [fieldName]: value });
+      } else {
+        // Track edited value for this field/scope
+        setEditedFormattingValues(prev => ({
+          ...prev,
+          [editKey]: value
+        }));
+      }
+    };
+
+    const handleSaveFormatting = async () => {
+      const text_original = defaultText;
+      const text_formatted = currentValue;
+
+      // Determine formatting_scope
+      let formatting_scope = '';
+      if (selectedScope === 'allSizes') {
+        formatting_scope = ''; // Empty string means all sizes
+      } else if (selectedScope !== 'default') {
+        formatting_scope = selectedScope;
+      }
+
+      // Set saving state
+      setSavingFormatting({ fieldName, scope: selectedScope });
+
+      try {
+        const response = await fetch('/api/textformatting', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text_original,
+            text_formatted,
+            formatting_scope
+          })
+        });
+
+        if (response.ok) {
+          // Clear the edited value
+          setEditedFormattingValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[editKey];
+            return newValues;
+          });
+
+          // Reload the page to refresh data
+          window.location.reload();
+        } else {
+          const error = await response.json();
+          alert(`Failed to save formatting: ${error.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Error saving formatting:', error);
+        alert(`Error saving formatting: ${error.message}`);
+      } finally {
+        setSavingFormatting({ fieldName: null, scope: null });
+      }
+    };
+
+    const InputComponent = inputType === 'textarea' ? 'textarea' : 'input';
+    const isSaving = savingFormatting.fieldName === fieldName && savingFormatting.scope === selectedScope;
+
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-sm font-medium text-gray-700">{label}</label>
+          <div className="flex gap-1">
+            {(hasFormatting || formattingAddMode[fieldName]) ? (
+              <>
+                {['1080x1080', '970x250', '640x360', '300x600', '300x250', 'allSizes', 'default'].map(scope => {
+                  const hasCustom = scopeHasCustomFormatting(fieldName, scope);
+                  const isDefault = scope === 'default';
+                  return (
+                    <button
+                      key={scope}
+                      onClick={() => setSelectedFormattingScopes(prev => ({ ...prev, [fieldName]: scope }))}
+                      className={`px-2 py-0.5 rounded text-xs ${
+                        selectedScope === scope
+                          ? 'bg-blue-600 text-white opacity-100'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      } ${isDefault || hasCustom ? 'opacity-100' : 'opacity-25'}`}
+                    >
+                      {scope}
+                    </button>
+                  );
+                })}
+              </>
+            ) : (
+              <button
+                onClick={() => toggleAddMode(fieldName)}
+                className="px-2 py-0.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 font-bold"
+                title="Add formatting"
+              >
+                +
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="relative">
+          <InputComponent
+            type={inputType === 'input' ? 'text' : undefined}
+            value={currentValue}
+            onChange={(e) => handleValueChange(e.target.value)}
+            rows={inputType === 'textarea' ? rows : undefined}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+            disabled={selectedScope !== 'default' && isSaving}
+          />
+          {selectedScope !== 'default' && shouldShowSave && (
+            <button
+              onClick={handleSaveFormatting}
+              disabled={isSaving}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              style={inputType === 'textarea' ? { top: '20px', transform: 'none' } : {}}
+            >
+              {isSaving ? (
+                <>
+                  <Loader size={12} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Formatting'
+              )}
+            </button>
+          )}
+          {isGeneratingContent && (
+            <div className={`absolute right-3 ${inputType === 'textarea' ? 'top-3' : 'top-1/2 transform -translate-y-1/2'}`}>
+              <Loader size={16} className="animate-spin text-purple-600" />
+            </div>
+          )}
+        </div>
+        {selectedScope !== 'default' && !shouldShowSave && (
+          <div className="mt-1 text-xs text-blue-600">
+            Editing formatted variant for {selectedScope}. Default text remains unchanged.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -659,6 +955,23 @@ const MessageEditorDialog = ({
                         end_date: editingMessage.end_date,
                         template: editingMessage.template
                       });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateMessage(editingMessage.id, {
+                        name: editingMessage.name,
+                        number: editingMessage.number,
+                        variant: editingMessage.variant,
+                        status: editingMessage.status,
+                        poms_id: editingMessage.poms_id,
+                        start_date: editingMessage.start_date,
+                        end_date: editingMessage.end_date,
+                        template: editingMessage.template
+                      });
                       setEditingMessage(null);
                     }}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -678,7 +991,18 @@ const MessageEditorDialog = ({
                   {/* Preview - Top position for wide sizes */}
                   {isWide && (
                     <div className="border border-gray-300 rounded bg-gray-50 p-4">
-                      <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium text-gray-700">Preview</div>
+                        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={skipAnimation}
+                            onChange={(e) => setSkipAnimation(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>skip animation</span>
+                        </label>
+                      </div>
                       <div className="flex justify-center">
                         {editingMessage.template ? (
                           <iframe
@@ -783,101 +1107,17 @@ const MessageEditorDialog = ({
                       )}
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Headline</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={editingMessage.headline || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, headline: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                        />
-                        {isGeneratingContent && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <Loader size={16} className="animate-spin text-purple-600" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {renderTextInputWithFormatting('headline', 'Headline', 'input')}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 1</label>
-                      <div className="relative">
-                        <textarea
-                          value={editingMessage.copy1 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, copy1: e.target.value })}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                        />
-                        {isGeneratingContent && (
-                          <div className="absolute right-3 top-3">
-                            <Loader size={16} className="animate-spin text-purple-600" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {renderTextInputWithFormatting('copy1', 'Copy 1', 'textarea', 3)}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 2</label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={editingMessage.copy2 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, copy2: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                        />
-                        {isGeneratingContent && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <Loader size={16} className="animate-spin text-purple-600" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {renderTextInputWithFormatting('copy2', 'Copy 2', 'input')}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Disclaimer</label>
-                      <textarea
-                        value={editingMessage.disclaimer || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, disclaimer: e.target.value })}
-                        rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Legal disclaimer text"
-                      />
-                    </div>
+                    {renderTextInputWithFormatting('disclaimer', 'Disclaimer', 'textarea', 2)}
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Flash</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={editingMessage.flash || ''}
-                            onChange={(e) => setEditingMessage({ ...editingMessage, flash: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                          />
-                          {isGeneratingContent && (
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                              <Loader size={16} className="animate-spin text-purple-600" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">CTA</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={editingMessage.cta || ''}
-                            onChange={(e) => setEditingMessage({ ...editingMessage, cta: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                          />
-                          {isGeneratingContent && (
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                              <Loader size={16} className="animate-spin text-purple-600" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      {renderTextInputWithFormatting('flash', 'Flash', 'input')}
+                      {renderTextInputWithFormatting('cta', 'CTA', 'input')}
                     </div>
 
                     <div>
@@ -974,7 +1214,18 @@ const MessageEditorDialog = ({
                   {!isWide && (
                     <div className="w-[40%]">
                       <div className="border border-gray-300 rounded bg-gray-50 p-4">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-sm font-medium text-gray-700">Preview</div>
+                          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={skipAnimation}
+                              onChange={(e) => setSkipAnimation(e.target.checked)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>skip animation</span>
+                          </label>
+                        </div>
                         {editingMessage.template ? (
                           <iframe
                             key={`${editingMessage.id}-${previewSize}`}
@@ -1028,6 +1279,31 @@ const MessageEditorDialog = ({
                     className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
                   >
                     Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateMessage(editingMessage.id, {
+                        headline: editingMessage.headline,
+                        copy1: editingMessage.copy1,
+                        copy2: editingMessage.copy2,
+                        disclaimer: editingMessage.disclaimer,
+                        flash: editingMessage.flash,
+                        cta: editingMessage.cta,
+                        landingUrl: editingMessage.landingUrl,
+                        template: editingMessage.template,
+                        template_variant_classes: editingMessage.template_variant_classes,
+                        image1: editingMessage.image1,
+                        image2: editingMessage.image2,
+                        image3: editingMessage.image3,
+                        image4: editingMessage.image4,
+                        image5: editingMessage.image5,
+                        image6: editingMessage.image6,
+                        comment: editingMessage.comment
+                      });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save
                   </button>
                   <button
                     onClick={() => {
@@ -1233,6 +1509,22 @@ const MessageEditorDialog = ({
                         cta_style: editingMessage.cta_style,
                         css: editingMessage.css
                       });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateMessage(editingMessage.id, {
+                        headline_style: editingMessage.headline_style,
+                        copy1_style: editingMessage.copy1_style,
+                        copy2_style: editingMessage.copy2_style,
+                        disclaimer_style: editingMessage.disclaimer_style,
+                        flash_style: editingMessage.flash_style,
+                        cta_style: editingMessage.cta_style,
+                        css: editingMessage.css
+                      });
                       setEditingMessage(null);
                     }}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -1351,7 +1643,22 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      // Save and close
+                      updateMessage(editingMessage.id, {
+                        utm_campaign: editingMessage.utm_campaign,
+                        utm_source: editingMessage.utm_source,
+                        utm_medium: editingMessage.utm_medium,
+                        utm_content: editingMessage.utm_content,
+                        utm_term: editingMessage.utm_term,
+                        utm_cd26: editingMessage.utm_cd26,
+                        final_trafficked_url: editingMessage.final_trafficked_url
+                      });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
                       updateMessage(editingMessage.id, {
                         utm_campaign: editingMessage.utm_campaign,
                         utm_source: editingMessage.utm_source,

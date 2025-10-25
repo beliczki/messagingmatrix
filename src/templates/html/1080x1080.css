@@ -39,6 +39,5 @@ body #cardContainer {
 /* text format helpers  */
 /* -----------------------------------------*/
 
-.sizebr.br1080x1080 {
-    display: inline-block;
-} 
+.sizebr.br1080x1080 {display: inline-block;} 
+.size-1080x1080 .text-1080x1080 {display: inline;}
