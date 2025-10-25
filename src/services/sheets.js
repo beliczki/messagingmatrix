@@ -196,12 +196,13 @@ class SheetsService {
 
   // Load all data
   async loadAll() {
-    const [audiences, topics, messages, keywords, assets] = await Promise.all([
+    const [audiences, topics, messages, keywords, assets, creatives] = await Promise.all([
       this.read('Audiences'),
       this.read('Topics'),
       this.read('Messages'),
       this.read('Keywords'),
-      this.read('Assets')
+      this.read('Assets'),
+      this.read('Creatives')
     ]);
 
     return {
@@ -209,12 +210,13 @@ class SheetsService {
       topics: this.parseTopics(topics),
       messages: this.parseMessages(messages),
       keywords: this.parseKeywords(keywords),
-      assets: this.parseAssets(assets)
+      assets: this.parseAssets(assets),
+      creatives: this.parseCreatives(creatives)
     };
   }
 
   // Save all data
-  async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null) {
+  async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null, creativesData = null) {
     const audienceRows = [
       ['ID', 'Name', 'Order', 'Status', 'Product', 'Strategy', 'Buying_platform', 'Data_source', 'Targeting_type', 'Device', 'Tag', 'Key', 'Comment', 'Campaign_name', 'Campaign_ID', 'Lineitem_name', 'Lineitem_ID'],
       ...audiences.map(a => [
@@ -349,6 +351,34 @@ class SheetsService {
         ])
       ];
       promises.push(this.write('Assets', assetsRows));
+    }
+
+    // Include creatives if provided
+    if (creativesData && creativesData.length > 0) {
+      const creativesRows = [
+        ['ID', 'Brand', 'Product', 'Type', 'Visual_keyword', 'Visual_description', 'MC_Number', 'MC_Variant', 'Version', 'File_format', 'File_driveID', 'File_name', 'File_size', 'File_date', 'File_dimensions', 'File_DirectLink', 'File_thumbnail', 'Is_Dynamic'],
+        ...creativesData.map(creative => [
+          creative.ID || '',
+          creative.Brand || '',
+          creative.Product || '',
+          creative.Type || '',
+          creative.Visual_keyword || '',
+          creative.Visual_description || '',
+          creative.MC_Number || '',
+          creative.MC_Variant || '',
+          creative.Version || '',
+          creative.File_format || '',
+          creative.File_driveID || '',
+          creative.File_name || '',
+          creative.File_size || '',
+          creative.File_date || '',
+          creative.File_dimensions || '',
+          creative.File_DirectLink || '',
+          creative.File_thumbnail || '',
+          creative.Is_Dynamic || ''
+        ])
+      ];
+      promises.push(this.write('Creatives', creativesRows));
     }
 
     await Promise.all(promises);
@@ -548,6 +578,39 @@ class SheetsService {
           File_dimensions: this.getValue(row, columnMap, 'File_dimensions'),
           File_DirectLink: this.getValue(row, columnMap, 'File_DirectLink'),
           File_thumbnail: this.getValue(row, columnMap, 'File_thumbnail')
+        };
+      });
+  }
+
+  // Parse creatives from spreadsheet
+  parseCreatives(rows) {
+    if (!rows || rows.length < 2) return [];
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1)
+      .filter(row => row.length > 0 && row.some(cell => cell))
+      .map(row => {
+        return {
+          ID: this.getValue(row, columnMap, 'ID'),
+          Brand: this.getValue(row, columnMap, 'Brand'),
+          Product: this.getValue(row, columnMap, 'Product'),
+          Type: this.getValue(row, columnMap, 'Type'),
+          Visual_keyword: this.getValue(row, columnMap, 'Visual_keyword'),
+          Visual_description: this.getValue(row, columnMap, 'Visual_description'),
+          MC_Number: this.getValue(row, columnMap, 'MC_Number'),
+          MC_Variant: this.getValue(row, columnMap, 'MC_Variant'),
+          Version: this.getValue(row, columnMap, 'Version'),
+          File_format: this.getValue(row, columnMap, 'File_format'),
+          File_driveID: this.getValue(row, columnMap, 'File_driveID'),
+          File_name: this.getValue(row, columnMap, 'File_name'),
+          File_size: this.getValue(row, columnMap, 'File_size'),
+          File_date: this.getValue(row, columnMap, 'File_date'),
+          File_dimensions: this.getValue(row, columnMap, 'File_dimensions'),
+          File_DirectLink: this.getValue(row, columnMap, 'File_DirectLink'),
+          File_thumbnail: this.getValue(row, columnMap, 'File_thumbnail'),
+          Is_Dynamic: this.getValue(row, columnMap, 'Is_Dynamic')
         };
       });
   }
