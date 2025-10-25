@@ -61,8 +61,31 @@ const CreativeLibraryMasonryView = ({
               const itemIndex = currentLoadingItem.index;
               const isVideo = item.extension === 'mp4';
               const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(item.extension);
+              const isHtml = item.extension === 'html';
 
-              console.log(`🎯 Rendering hidden loader for item #${itemIndex}: ${item.filename} (${isVideo ? 'video' : isImage ? 'image' : 'unknown'})`);
+              console.log(`🎯 Rendering hidden loader for item #${itemIndex}: ${item.filename} (${isVideo ? 'video' : isImage ? 'image' : isHtml ? 'html' : 'unknown'})`);
+
+              // HTML creatives don't need preloading - calculate height from banner size
+              if (isHtml && item.bannerSize) {
+                console.log(`✅ HTML creative detected, using banner size: ${item.bannerSize.width}x${item.bannerSize.height}`);
+                const fakeEvent = {
+                  target: {
+                    naturalWidth: item.bannerSize.width,
+                    naturalHeight: item.bannerSize.height,
+                    videoWidth: item.bannerSize.width,
+                    videoHeight: item.bannerSize.height
+                  }
+                };
+                setTimeout(() => handleImageLoaded(item, itemIndex, fakeEvent), 0);
+                return null;
+              }
+
+              // Skip non-media files
+              if (!isImage && !isVideo && !isHtml) {
+                console.warn(`⚠️ Skipping non-media file #${itemIndex}: ${item.filename} (${item.extension})`);
+                setTimeout(() => setNextItemIndex(itemIndex + 1), 0);
+                return null;
+              }
 
               return (
                 <div key={`loader-${itemIndex}`} style={{position: 'absolute', left: '-9999px', width: '200px'}}>

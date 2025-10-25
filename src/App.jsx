@@ -274,6 +274,7 @@ const App = () => {
             messages={matrixData?.messages || []}
             keywords={matrixData?.keywords || {}}
             assets={matrixData?.assets || []}
+            creatives={matrixData?.creatives || []}
             lastSync={matrixData?.lastSync}
             isSaving={matrixData?.isSaving}
             saveProgress={matrixStateData.saveProgress}

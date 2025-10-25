@@ -13,7 +13,10 @@ const AssetsMasonryView = ({
   currentLoadingItem,
   loadingImageRef,
   handleImageLoaded,
-  setNextItemIndex
+  setNextItemIndex,
+  getItemId = (item) => item.id || item.ID,
+  getItemExtension = (item) => item.extension || item.File_format,
+  getItemUrl = (item) => item.url || item.File_DirectLink || item.File_thumbnail
 }) => {
   return (
     <div className="relative">
@@ -29,13 +32,23 @@ const AssetsMasonryView = ({
           <div key={columnIndex} className="flex-1 flex flex-col gap-4">
             {/* Render already-loaded items in this column */}
             {(columnItems[columnIndex] || []).map(asset => {
+              const itemId = getItemId(asset);
               const isOutsideRange = asset.originalIndex < loadedStart || asset.originalIndex >= loadedEnd;
-              const savedHeight = itemPositions.current.get(asset.id)?.height || 300;
+              const savedHeight = itemPositions.current.get(itemId)?.height || 300;
+
+              // Transform asset to include expected properties for AssetItem
+              const transformedAsset = {
+                ...asset,
+                id: itemId,
+                url: getItemUrl(asset),
+                filename: asset.File_name || asset.filename,
+                extension: getItemExtension(asset)
+              };
 
               return (
                 <AssetItem
-                  key={asset.id}
-                  asset={asset}
+                  key={itemId}
+                  asset={transformedAsset}
                   onSelect={onSelectAsset}
                   isOutsideRange={isOutsideRange}
                   savedHeight={savedHeight}
@@ -47,40 +60,65 @@ const AssetsMasonryView = ({
             {currentLoadingItem && columnIndex === 0 && (() => {
               const item = currentLoadingItem.item;
               const itemIndex = currentLoadingItem.index;
-              const isVideo = item.extension === 'mp4';
-              const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(item.extension?.toLowerCase());
+              const extension = getItemExtension(item);
+              const url = getItemUrl(item);
+              const isVideo = extension === 'mp4';
+              const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension?.toLowerCase());
 
-              // Skip non-image/non-video files
-              if (!isImage && !isVideo) {
-                console.warn(`⚠️ Skipping non-media file #${itemIndex}: ${item.filename} (${item.extension})`);
+              // Skip if no valid URL
+              if (!url) {
+                console.warn(`⚠️ Skipping item with no URL #${itemIndex}: ${item.File_name || item.filename}`);
                 setTimeout(() => setNextItemIndex(itemIndex + 1), 0);
                 return null;
               }
+
+              // Skip non-image/non-video files
+              if (!isImage && !isVideo) {
+                console.warn(`⚠️ Skipping non-media file #${itemIndex}: ${item.File_name || item.filename} (${extension})`);
+                setTimeout(() => setNextItemIndex(itemIndex + 1), 0);
+                return null;
+              }
+
+              console.log(`🔄 Loading image for #${itemIndex}: ${item.File_name || item.filename}, URL: ${url?.substring(0, 100)}...`);
 
               return (
                 <div key={`loader-${itemIndex}`} style={{position: 'absolute', left: '-9999px', width: '200px'}}>
                   {isImage && (
                     <img
-                      src={item.url}
+                      src={url}
                       alt="loading"
                       onLoad={(e) => {
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ onError fired for ${item.filename}`, e);
-                        setNextItemIndex(itemIndex + 1);
+                        console.error(`❌ onError fired for ${item.File_name || item.filename}`, e);
+                        // Still add the item to the grid with a default height, even if image fails
+                        const fakeEvent = {
+                          target: {
+                            naturalWidth: 300,
+                            naturalHeight: 200
+                          }
+                        };
+                        handleImageLoaded(item, itemIndex, fakeEvent);
                       }}
                     />
                   )}
                   {isVideo && (
                     <video
-                      src={item.url}
+                      src={url}
                       onLoadedMetadata={(e) => {
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ onError fired for ${item.filename}`, e);
-                        setNextItemIndex(itemIndex + 1);
+                        console.error(`❌ onError fired for ${item.File_name || item.filename}`, e);
+                        // Still add the item to the grid with a default height, even if video fails
+                        const fakeEvent = {
+                          target: {
+                            videoWidth: 640,
+                            videoHeight: 360
+                          }
+                        };
+                        handleImageLoaded(item, itemIndex, fakeEvent);
                       }}
                       preload="metadata"
                     />

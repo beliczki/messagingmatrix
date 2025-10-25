@@ -10,7 +10,7 @@
     "emailUid": 2,
     "id": "task-1760565965086-0",
     "createdAt": "2025-10-15T22:06:05.086Z",
-    "bucket": "production"
+    "bucket": "review"
   },
   {
     "title": "Create real estate social cards for Vállalkozói számla",
@@ -23,7 +23,7 @@
     "emailUid": null,
     "id": "task-1760565965086-1",
     "createdAt": "2025-10-15T22:06:05.086Z",
-    "bucket": "production"
+    "bucket": "review"
   },
   {
     "title": "Fix badge overlap issue in HK gamertech creative",
@@ -35,6 +35,7 @@
     "status": "completed",
     "emailUid": null,
     "id": "task-1760565965086-2",
-    "createdAt": "2025-10-15T22:06:05.086Z"
+    "createdAt": "2025-10-15T22:06:05.086Z",
+    "bucket": "review"
   }
 ]

@@ -74,8 +74,21 @@ const CreativeLibraryItem = ({
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
           value = msg[fieldName] || value;
 
-          if (config.type === 'image' && value) {
-            value = buildImageUrl(fieldName, value);
+          // Use path-messagingmatrix for images and videos
+          if ((config.type === 'image' || config.type === 'video') && value) {
+            const pathPrefix = config['path-messagingmatrix'] || '';
+            // If value is already a full URL, use it as-is
+            if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+              // If it starts with /, it's a relative path, so prepend the path prefix
+              if (value.startsWith('/') && !pathPrefix) {
+                value = value; // Keep as-is
+              } else if (!value.startsWith('http')) {
+                value = pathPrefix + value;
+              }
+            } else {
+              // It's a file ID or filename, prepend the path
+              value = pathPrefix + value;
+            }
           }
         }
 

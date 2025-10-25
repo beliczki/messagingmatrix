@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Image as ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import CreativeShare from './CreativeShare';
 import CreativePreview from './CreativePreview';
 import CreativeLibraryMasonryView from './CreativeLibraryMasonryView';
 import CreativeLibraryListView from './CreativeLibraryListView';
 import CreativeLibraryUploadDialogs from './CreativeLibraryUploadDialogs';
-import { processAssets, filterAssets } from '../utils/assetUtils';
+import MediaLibraryBase from './MediaLibraryBase';
+import { processAssets } from '../utils/assetUtils';
+import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
 import templateHtmlRaw from '../templates/html/index.html?raw';
 import templateConfigUrl from '../templates/html/template.json?url';
 import mainCss from '../templates/html/main.css?raw';
@@ -18,14 +20,11 @@ import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const [creatives, setCreatives] = useState([]);
-  const [viewMode, setViewMode] = useState('grid4'); // 'grid3' or 'grid4' or 'list'
-  const [filterText, setFilterText] = useState('');
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({});
   const [pendingUploads, setPendingUploads] = useState([]);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
-  const [selectedCreative, setSelectedCreative] = useState(null);
   const [selectorMode, setSelectorMode] = useState(false);
   const [selectedCreativeIds, setSelectedCreativeIds] = useState(new Set());
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -36,64 +35,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [templateHtml, setTemplateHtml] = useState('');
   const [templateConfig, setTemplateConfig] = useState(null);
   const [templateCss, setTemplateCss] = useState(null);
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [driveEnabled, setDriveEnabled] = useState(false);
+  const [loadingDrive, setLoadingDrive] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
+  const [hasAutoSynced, setHasAutoSynced] = useState(false);
 
-  // Virtual scrolling configuration
-  const loadChunkSize = 16;
-  const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 4;
-
-  // Virtual scrolling state
-  const [totalVisible, setTotalVisible] = useState(loadChunkSize);
-  const [loadedStart, setLoadedStart] = useState(0);
-  const [loadedEnd, setLoadedEnd] = useState(loadChunkSize);
-  const scrollContainerRef = useRef(null);
-  const isUpdatingWindow = useRef(false);
-  const lastUpdateTime = useRef(0);
-  const itemPositions = useRef(new Map());
-  const itemColumnAssignments = useRef(new Map());
-  const gridRef = useRef(null);
-  const columnRefs = useRef([]);
-  const chunkBoundaries = useRef(new Map());
-
-  // Sequential masonry loading state
-  const initializeColumns = (count) => {
-    const cols = {};
-    for (let i = 0; i < count; i++) {
-      cols[i] = [];
-    }
-    return cols;
-  };
-
-  const initializeHeights = (count) => {
-    const heights = {};
-    for (let i = 0; i < count; i++) {
-      heights[i] = 0;
-    }
-    return heights;
-  };
-
-  const [columnItems, setColumnItems] = useState(() => initializeColumns(columnCount));
-  const [columnHeights, setColumnHeights] = useState(() => initializeHeights(columnCount));
-  const [nextItemIndex, setNextItemIndex] = useState(0);
-  const loadingItemRef = useRef(null);
-  const loadingImageRef = useRef(null);
-  const processedDynamicItems = useRef(new Set());
-  const processedRegularItems = useRef(new Set());
-  const columnItemsRef = useRef(columnItems);
-  const columnHeightsRef = useRef(columnHeights);
-
-  // Keep refs in sync
-  useEffect(() => {
-    columnItemsRef.current = columnItems;
-  }, [columnItems]);
-
-  useEffect(() => {
-    columnHeightsRef.current = columnHeights;
-  }, [columnHeights]);
-
-  useEffect(() => {
-    loadCreatives();
-  }, [matrixData?.messages]);
+  // MC Template supported banner sizes (from src/templates/html/*.css)
+  const bannerSizes = [
+    { width: 300, height: 250, name: 'Medium Rectangle' },
+    { width: 300, height: 600, name: 'Half Page' },
+    { width: 970, height: 250, name: 'Billboard' },
+    { width: 1080, height: 1080, name: 'Social Square' },
+    { width: 640, height: 360, name: 'Social Video' }
+  ];
 
   // Load template HTML and config
   useEffect(() => {
@@ -125,18 +79,188 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     loadTemplate();
   }, []);
 
-  // MC Template supported banner sizes (from src/templates/html/*.css)
-  const bannerSizes = [
-    { width: 300, height: 250, name: 'Medium Rectangle' },
-    { width: 300, height: 600, name: 'Half Page' },
-    { width: 970, height: 250, name: 'Billboard' },
-    { width: 1080, height: 1080, name: 'Social Square' },
-    { width: 640, height: 360, name: 'Social Video' }
-  ];
+  // Check Drive on mount
+  useEffect(() => {
+    isDriveEnabled().then(enabled => {
+      setDriveEnabled(enabled);
+    });
+  }, []);
 
+  // Auto-sync with Drive on mount if enabled (only once)
+  useEffect(() => {
+    if (driveEnabled && matrixData && !hasAutoSynced) {
+      setHasAutoSynced(true);
+      syncWithDrive();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveEnabled, matrixData, hasAutoSynced]);
+
+  // Sync with Google Drive
+  const syncWithDrive = async () => {
+    try {
+      // Check if Drive is enabled
+      setSyncProgress({ type: 'loading', message: 'Checking Google Drive connection...' });
+      const driveIsEnabled = await isDriveEnabled();
+      setDriveEnabled(driveIsEnabled);
+
+      if (!driveIsEnabled) {
+        console.warn('Google Drive is not enabled. Please configure Drive in config.json');
+        setSyncProgress({
+          type: 'error',
+          message: 'Google Drive is not enabled. Please configure Drive in config.json'
+        });
+        return;
+      }
+
+      setLoadingDrive(true);
+      setSyncProgress({ type: 'loading', message: 'Loading creatives from Drive...' });
+
+      // Load all files from Drive
+      const driveData = await loadDriveAssets('creatives', { pageSize: 1000 });
+      const driveFiles = driveData.files;
+
+      // Get current spreadsheet File_driveIDs from matrixData.creatives
+      const spreadsheetCreatives = matrixData?.creatives || [];
+      const spreadsheetDriveIds = new Set(
+        spreadsheetCreatives.map(creative => creative.File_driveID).filter(id => id)
+      );
+
+      // Find new creatives (in Drive but not in spreadsheet)
+      const newCreatives = driveFiles.filter(file => !spreadsheetDriveIds.has(file.id));
+
+      // Find deleted creatives (in spreadsheet but not in Drive)
+      const driveDriveIds = new Set(driveFiles.map(file => file.id));
+      const deletedCreatives = spreadsheetCreatives.filter(
+        creative => creative.File_driveID && !driveDriveIds.has(creative.File_driveID)
+      );
+
+      console.log(`🔄 Sync results: ${newCreatives.length} new, ${deletedCreatives.length} deleted`);
+
+      // If no changes, just inform user
+      if (newCreatives.length === 0 && deletedCreatives.length === 0) {
+        setSyncProgress({
+          type: 'success',
+          message: 'Spreadsheet is up to date with Google Drive. No changes found.'
+        });
+        setLoadingDrive(false);
+        setTimeout(() => setSyncProgress(null), 3000);
+        return;
+      }
+
+      setSyncProgress({ type: 'loading', message: 'Updating spreadsheet...' });
+
+      // Update spreadsheet with changes
+      let updatedCreatives = [...spreadsheetCreatives];
+
+      // Remove deleted creatives
+      if (deletedCreatives.length > 0) {
+        const deletedIds = new Set(deletedCreatives.map(c => c.File_driveID));
+        updatedCreatives = updatedCreatives.filter(creative => !deletedIds.has(creative.File_driveID));
+      }
+
+      // Add new creatives with incremental IDs
+      if (newCreatives.length > 0) {
+        const maxId = Math.max(0, ...updatedCreatives.map(c => parseInt(c.ID) || 0));
+        const parsedNewCreatives = newCreatives.map((file, index) => {
+          const parsedData = parseDriveAssetData(file);
+
+          // Check if this is an HTML creative
+          const isHtml = parsedData.extension === 'html';
+          let bannerSize = null;
+          if (isHtml) {
+            const sizeMatch = file.name.match(/(\d+)x(\d+)/);
+            if (sizeMatch) {
+              bannerSize = {
+                width: parseInt(sizeMatch[1]),
+                height: parseInt(sizeMatch[2])
+              };
+            }
+          }
+
+          return {
+            ID: maxId + index + 1,
+            Brand: parsedData.Brand || '',
+            Product: parsedData.Product || '',
+            Copy_keyword: '',
+            Visual_keyword: parsedData.Visual_keyword || '',
+            Template: '',
+            Version: parsedData.Version || '',
+            File_format: parsedData.extension || '',
+            File_driveID: file.id || '',
+            File_name: parsedData.filename || '',
+            File_size: parsedData.size || '',
+            File_date: parsedData.File_date || '',
+            File_dimensions: parsedData.File_dimensions || (bannerSize ? `${bannerSize.width}x${bannerSize.height}` : ''),
+            File_DirectLink: parsedData.File_DirectLink || '',
+            File_thumbnail: parsedData.thumbnail || '',
+            Comment: ''
+          };
+        });
+
+        updatedCreatives = [...updatedCreatives, ...parsedNewCreatives];
+      }
+
+      // Update spreadsheet
+      matrixData.setCreatives(updatedCreatives);
+
+      // Save to spreadsheet
+      await matrixData.save(null, null, null, updatedCreatives);
+
+      setSyncProgress({
+        type: 'success',
+        message: `Successfully synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives`
+      });
+
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => setSyncProgress(null), 3000);
+
+    } catch (err) {
+      console.error('Drive sync error:', err);
+      setSyncProgress({
+        type: 'error',
+        message: `Failed to sync with Google Drive:\n${err.message}`
+      });
+    } finally {
+      setLoadingDrive(false);
+    }
+  };
+
+  // Load creatives
   const loadCreatives = useCallback(async () => {
     const assetModules = import.meta.glob('/src/creatives/*.*', { eager: true, as: 'url' });
     const creativeList = await processAssets(assetModules);
+
+    // Transform spreadsheet creatives from matrixData.creatives to display format
+    const spreadsheetCreatives = (matrixData?.creatives || []).map(creative => {
+      // Check if this is an HTML creative
+      const isHtml = creative.File_format === 'html';
+      let bannerSize = null;
+      if (isHtml && creative.File_dimensions) {
+        const match = creative.File_dimensions.match(/(\d+)x(\d+)/);
+        if (match) {
+          bannerSize = {
+            width: parseInt(match[1]),
+            height: parseInt(match[2])
+          };
+        }
+      }
+
+      return {
+        id: creative.File_driveID || creative.ID,
+        filename: creative.File_name,
+        extension: creative.File_format,
+        url: creative.File_driveID ? `/api/drive/proxy/${creative.File_driveID}` : creative.File_DirectLink,
+        product: creative.Product || creative.File_name,
+        size: creative.File_dimensions || '',
+        date: creative.File_date || '',
+        platforms: [],
+        tags: [],
+        isDynamic: false,
+        bannerSize: bannerSize,
+        driveId: creative.File_driveID,
+        source: 'drive'
+      };
+    });
 
     // Generate dynamic message creatives for ALL messages if matrixData is available
     if (matrixData?.messages && matrixData.messages.length > 0) {
@@ -144,7 +268,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
       if (activeMessages.length > 0) {
         // Deduplicate messages by number+variant combination
-        // Keep only the first occurrence of each unique number+variant pair
         const uniqueMessages = [];
         const seen = new Set();
 
@@ -183,327 +306,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           allMessageCreatives.push(...messageCreatives);
         });
 
-        setCreatives([...allMessageCreatives, ...creativeList]);
+        setCreatives([...allMessageCreatives, ...spreadsheetCreatives, ...creativeList]);
         return;
       }
     }
 
-    setCreatives(creativeList);
+    setCreatives([...spreadsheetCreatives, ...creativeList]);
   }, [matrixData]);
 
-  // Save current item positions
-  const saveItemPositions = useCallback(() => {
-    if (!gridRef.current) return;
-
-    const items = gridRef.current.querySelectorAll('[data-creative-id]');
-    items.forEach(item => {
-      const id = item.getAttribute('data-creative-id');
-      const rect = item.getBoundingClientRect();
-      itemPositions.current.set(id, {
-        height: rect.height
-      });
-    });
-  }, []);
-
-  // Handle image/video load - add to shortest column and trigger next
-  const handleImageLoaded = useCallback((creative, itemIndex, event) => {
-    // Check if this item has already been processed (by ID only)
-    if (processedRegularItems.current.has(creative.id)) {
-      console.log('⚠️ Item already processed, skipping:', creative.id);
-      setNextItemIndex(itemIndex + 1);
-      return;
-    }
-
-    processedRegularItems.current.add(creative.id);
-
-    const isVideo = creative.extension === 'mp4';
-    const media = event.target;
-    const mediaHeight = isVideo ? media.videoHeight : media.naturalHeight;
-    const mediaWidth = isVideo ? media.videoWidth : media.naturalWidth;
-
-    const currentColumnCount = Object.keys(columnHeights).length;
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
-    const renderedHeight = (mediaHeight / mediaWidth) * columnWidth;
-
-    const heights = Object.values(columnHeights);
-    const shortestCol = heights.indexOf(Math.min(...heights));
-
-    const chunkIndex = Math.floor(itemIndex / loadChunkSize);
-    const itemYStart = columnHeights[shortestCol];
-    const itemYEnd = columnHeights[shortestCol] + renderedHeight;
-
-    const existingBoundary = chunkBoundaries.current.get(chunkIndex);
-    if (existingBoundary) {
-      chunkBoundaries.current.set(chunkIndex, {
-        start: Math.min(existingBoundary.start, itemYStart),
-        end: Math.max(existingBoundary.end, itemYEnd)
-      });
-    } else {
-      chunkBoundaries.current.set(chunkIndex, {
-        start: itemYStart,
-        end: itemYEnd
-      });
-    }
-
-    itemPositions.current.set(creative.id, {
-      height: renderedHeight
-    });
-
-    setColumnItems(prev => {
-      const updated = { ...prev };
-      updated[shortestCol] = [...updated[shortestCol], { ...creative, originalIndex: itemIndex }];
-      return updated;
-    });
-
-    setColumnHeights(prev => ({
-      ...prev,
-      [shortestCol]: prev[shortestCol] + renderedHeight + 16
-    }));
-
-    setNextItemIndex(itemIndex + 1);
-  }, [columnHeights, loadChunkSize]);
-
-  // Scroll-based virtual scrolling
-  const handleScroll = useCallback(() => {
-    const now = Date.now();
-    if (isUpdatingWindow.current && now - lastUpdateTime.current > 500) {
-      isUpdatingWindow.current = false;
-    }
-
-    if (isUpdatingWindow.current || !scrollContainerRef.current) return;
-
-    const container = scrollContainerRef.current;
-    const scrollTop = container.scrollTop;
-    const clientHeight = container.clientHeight;
-
-    const totalItems = filterAssets(creatives, filterText).length;
-    if (totalItems === 0) return;
-
-    if (chunkBoundaries.current.size === 0) {
-      if (loadedStart !== 0 || loadedEnd !== loadChunkSize * 2) {
-        isUpdatingWindow.current = true;
-        lastUpdateTime.current = Date.now();
-        saveItemPositions();
-        setTotalVisible(loadChunkSize * 2);
-        setLoadedStart(0);
-        setLoadedEnd(loadChunkSize * 2);
-        requestAnimationFrame(() => {
-          isUpdatingWindow.current = false;
-        });
-      }
-      return;
-    }
-
-    const viewportStart = scrollTop;
-    const viewportEnd = scrollTop + clientHeight;
-
-    const visibleChunks = [];
-    chunkBoundaries.current.forEach((bounds, chunkIndex) => {
-      if (bounds.end >= viewportStart && bounds.start <= viewportEnd) {
-        visibleChunks.push(chunkIndex);
-      }
-    });
-
-    if (visibleChunks.length === 0) {
-      const maxColHeight = Math.max(...Object.values(columnHeights));
-
-      if (scrollTop > maxColHeight) {
-        return;
-      }
-
-      const targetStart = 0;
-      const targetEnd = Math.min(totalItems, loadChunkSize * 2);
-      const targetVisible = targetEnd;
-
-      if (targetStart !== loadedStart || targetEnd !== loadedEnd) {
-        isUpdatingWindow.current = true;
-        lastUpdateTime.current = Date.now();
-        saveItemPositions();
-        setTotalVisible(targetVisible);
-        setLoadedStart(targetStart);
-        setLoadedEnd(targetEnd);
-        requestAnimationFrame(() => {
-          isUpdatingWindow.current = false;
-        });
-      }
-      return;
-    }
-
-    const minVisibleChunk = Math.min(...visibleChunks);
-    const maxVisibleChunk = Math.max(...visibleChunks);
-
-    const totalChunks = Math.ceil(totalItems / loadChunkSize);
-    const targetStartChunk = Math.max(0, minVisibleChunk - 1);
-    const targetEndChunk = Math.min(totalChunks - 1, maxVisibleChunk + 1);
-
-    const targetStart = targetStartChunk * loadChunkSize;
-    const targetEnd = Math.min(totalItems, (targetEndChunk + 1) * loadChunkSize);
-    const targetVisible = Math.max(targetEnd, loadChunkSize * 2);
-
-    if (targetStart !== loadedStart || targetEnd !== loadedEnd) {
-      isUpdatingWindow.current = true;
-      lastUpdateTime.current = Date.now();
-
-      saveItemPositions();
-
-      setTotalVisible(targetVisible);
-      setLoadedStart(targetStart);
-      setLoadedEnd(targetEnd);
-
-      requestAnimationFrame(() => {
-        isUpdatingWindow.current = false;
-      });
-    }
-  }, [creatives, filterText, loadedStart, loadedEnd, saveItemPositions, loadChunkSize, columnHeights]);
-
-  // Setup scroll listener
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-    };
-  }, [handleScroll]);
-
-  // Reset state when filter changes
-  useEffect(() => {
-    const emptyColumns = initializeColumns(columnCount);
-    const emptyHeights = initializeHeights(columnCount);
-
-    setTotalVisible(loadChunkSize * 2);
-    setLoadedStart(0);
-    setLoadedEnd(loadChunkSize * 2);
-    setColumnItems(emptyColumns);
-    setColumnHeights(emptyHeights);
-    setNextItemIndex(0);
-
-    // Immediately update refs to prevent stale data
-    columnItemsRef.current = emptyColumns;
-    columnHeightsRef.current = emptyHeights;
-
-    chunkBoundaries.current.clear();
-    itemPositions.current.clear();
-    processedDynamicItems.current.clear();
-    processedRegularItems.current.clear();
-
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-  }, [filterText, loadChunkSize, columnCount]);
-
-  // Clear column assignments when view mode changes
-  useEffect(() => {
-    const emptyColumns = initializeColumns(columnCount);
-    const emptyHeights = initializeHeights(columnCount);
-
-    itemColumnAssignments.current.clear();
-    setColumnItems(emptyColumns);
-    setColumnHeights(emptyHeights);
-    setNextItemIndex(0);
-
-    // Immediately update refs to prevent stale data
-    columnItemsRef.current = emptyColumns;
-    columnHeightsRef.current = emptyHeights;
-
-    chunkBoundaries.current.clear();
-    itemPositions.current.clear();
-    processedDynamicItems.current.clear();
-    processedRegularItems.current.clear();
-  }, [viewMode, columnCount]);
-
-  // When loaded range changes, only reload the newly visible items
-  useEffect(() => {
-    if (viewMode === 'grid3' || viewMode === 'grid4') {
-      const currentLoadedIndices = new Set();
-      Object.values(columnItems).flat().forEach(item => {
-        currentLoadedIndices.add(item.originalIndex);
-      });
-
-      let needsReload = false;
-      for (let i = loadedStart; i < loadedEnd; i++) {
-        if (!currentLoadedIndices.has(i)) {
-          needsReload = true;
-          break;
-        }
-      }
-
-      if (needsReload && currentLoadedIndices.size === 0) {
-        setNextItemIndex(loadedStart);
-      }
-    }
-  }, [loadedStart, loadedEnd, viewMode, columnItems]);
-
-  // Auto-add dynamic creatives to columns (they don't need image loading)
-  useEffect(() => {
-    if (viewMode !== 'grid3' && viewMode !== 'grid4') return;
-    if (!gridRef.current) return;
-
-    const allFiltered = filterAssets(creatives, filterText);
-
-    // Find which dynamic items in the loaded range haven't been processed yet
-    const dynamicCreativesToAdd = [];
-    for (let i = loadedStart; i < loadedEnd && i < allFiltered.length; i++) {
-      const creative = allFiltered[i];
-      // Track by ID only, not by ID+index
-      if (creative.isDynamic && !processedDynamicItems.current.has(creative.id)) {
-        dynamicCreativesToAdd.push({ creative, index: i });
-        processedDynamicItems.current.add(creative.id);
-      }
-    }
-
-    if (dynamicCreativesToAdd.length === 0) return;
-
-    console.log('🔄 Adding dynamic creatives to columns:', dynamicCreativesToAdd.map(d => `${d.creative.id} at index ${d.index}`));
-
-    const currentColumnCount = Object.keys(columnHeightsRef.current).length;
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
-
-    // Copy existing column structure
-    const newColumnItems = {};
-    Object.keys(columnItemsRef.current).forEach(key => {
-      newColumnItems[key] = [...columnItemsRef.current[key]];
-    });
-    const workingHeights = { ...columnHeightsRef.current };
-
-    // Add only the new dynamic items
-    dynamicCreativesToAdd.forEach(({ creative, index }) => {
-      const aspectRatio = creative.bannerSize.width / creative.bannerSize.height;
-      const renderedHeight = columnWidth / aspectRatio;
-
-      const heights = Object.values(workingHeights);
-      const shortestCol = heights.indexOf(Math.min(...heights));
-
-      const chunkIndex = Math.floor(index / loadChunkSize);
-      const itemYStart = workingHeights[shortestCol];
-      const itemYEnd = workingHeights[shortestCol] + renderedHeight;
-
-      const existingBoundary = chunkBoundaries.current.get(chunkIndex);
-      if (existingBoundary) {
-        chunkBoundaries.current.set(chunkIndex, {
-          start: Math.min(existingBoundary.start, itemYStart),
-          end: Math.max(existingBoundary.end, itemYEnd)
-        });
-      } else {
-        chunkBoundaries.current.set(chunkIndex, {
-          start: itemYStart,
-          end: itemYEnd
-        });
-      }
-
-      itemPositions.current.set(creative.id, {
-        height: renderedHeight
-      });
-
-      newColumnItems[shortestCol].push({ ...creative, originalIndex: index });
-
-      workingHeights[shortestCol] = workingHeights[shortestCol] + renderedHeight + 16;
-    });
-
-    setColumnItems(newColumnItems);
-    setColumnHeights(workingHeights);
-  }, [loadedStart, loadedEnd, viewMode, creatives, filterText, loadChunkSize]);
+    loadCreatives();
+  }, [loadCreatives]);
 
   const toggleSelectorMode = () => {
     setSelectorMode(!selectorMode);
@@ -517,7 +330,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       setSelectorMode(true);
     }
 
-    // If skipToggle is true (e.g., entering selector mode via long press), don't toggle selection
     if (skipToggle) {
       return;
     }
@@ -598,8 +410,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           throw new Error('Upload confirmation failed');
         }
 
-        const result = await response.json();
-
         setUploadProgress(prev => ({
           ...prev,
           [upload.originalName]: 'completed'
@@ -659,222 +469,201 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     e.preventDefault();
   };
 
-  // Get filtered creatives
-  const allFilteredCreatives = filterAssets(creatives, filterText);
-  const totalCreatives = allFilteredCreatives.length;
-  const visibleItems = allFilteredCreatives.slice(0, totalVisible);
-
-  const filteredCreatives = visibleItems.map((item, index) => ({
-    ...item,
-    isPlaceholder: index < loadedStart || index >= loadedEnd,
-    originalIndex: index
-  }));
-
-  // Get the current item that should be loading
-  const currentLoadingItem = useMemo(() => {
-    if (nextItemIndex < loadedStart || nextItemIndex >= loadedEnd || nextItemIndex >= totalCreatives) {
-      return null;
-    }
-
-    const item = allFilteredCreatives[nextItemIndex];
-
-    if (item?.isDynamic) {
-      const nextNonDynamicIndex = nextItemIndex + 1;
-
-      for (let i = nextNonDynamicIndex; i < loadedEnd && i < totalCreatives; i++) {
-        const nextItem = allFilteredCreatives[i];
-        if (!nextItem?.isDynamic) {
-          return { item: nextItem, index: i };
-        }
-      }
-
-      setTimeout(() => setNextItemIndex(nextNonDynamicIndex), 0);
-      return null;
-    }
-
-    return { item, index: nextItemIndex };
-  }, [nextItemIndex, loadedStart, loadedEnd, totalCreatives, allFilteredCreatives]);
-
-  // Calculate max column height for background container
-  const maxColumnHeight = Math.max(...Object.values(columnHeights));
-  const containerHeight = maxColumnHeight + (typeof window !== 'undefined' ? window.innerHeight * 0.1 : 80);
-
-  const unloadedCount = totalVisible - (loadedEnd - loadedStart);
-  const debugInfo = `Showing ${totalVisible} of ${totalCreatives} (loaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'}) | Next to load: #${nextItemIndex}`;
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader
-        onMenuToggle={onMenuToggle}
-        title={currentModuleName || 'Creative Library'}
+    <>
+      <MediaLibraryBase
+        items={creatives}
         lookAndFeel={lookAndFeel}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        viewModes={[
-          { value: 'grid3', label: '3 Columns' },
-          { value: 'grid4', label: '4 Columns' },
-          { value: 'list', label: 'List View' }
-        ]}
-        titleFilters={
-          <>
-            {/* Filter Input */}
-            <div className="flex items-center gap-2">
-              <Filter size={18} className="text-white" />
-              <input
-                type="text"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter creatives..."
-                className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
-              />
-            </div>
+        currentModuleName={currentModuleName || 'Creative Library'}
+        onMenuToggle={onMenuToggle}
+        getItemId={(creative) => creative.id}
+        getItemExtension={(creative) => creative.extension}
+        getItemUrl={(creative) => creative.url}
+        getItemFilename={(creative) => creative.filename}
 
-            {/* Select Button */}
-            <button
-              onClick={toggleSelectorMode}
-              className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-                selectorMode
-                  ? 'bg-white text-gray-900 hover:bg-white/90'
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
+        // Custom header with selector mode, share, and upload
+        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => {
+          const allFilteredCreatives = creatives; // Will be filtered by MediaLibraryBase
+
+          return (
+            <PageHeader
+              onMenuToggle={onMenuToggle}
+              title={currentModuleName || 'Creative Library'}
+              lookAndFeel={lookAndFeel}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              viewModes={viewModes}
+              titleFilters={
+                <>
+                  {/* Filter Input */}
+                  <div className="flex items-center gap-2">
+                    <Filter size={18} className="text-white" />
+                    <input
+                      type="text"
+                      value={filterText}
+                      onChange={(e) => setFilterText(e.target.value)}
+                      placeholder="Filter creatives..."
+                      className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
+                    />
+                  </div>
+
+                  {/* Select Button */}
+                  <button
+                    onClick={toggleSelectorMode}
+                    className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+                      selectorMode
+                        ? 'bg-white text-gray-900 hover:bg-white/90'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                  >
+                    {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
+                    {selectorMode ? 'Selecting' : 'Select'}
+                  </button>
+
+                  {/* Select All / Deselect All */}
+                  {selectorMode && (
+                    <>
+                      <button
+                        onClick={() => {
+                          // MediaLibraryBase will provide filteredCount, but we need the actual items
+                          // We'll select all current creatives for now
+                          const allIds = new Set(creatives.map(c => c.id));
+                          setSelectedCreativeIds(allIds);
+                        }}
+                        className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                      >
+                        All ({filteredCount})
+                      </button>
+                      <button
+                        onClick={() => setSelectedCreativeIds(new Set())}
+                        className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                      >
+                        None
+                      </button>
+                    </>
+                  )}
+                </>
+              }
             >
-              {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
-              {selectorMode ? 'Selecting' : 'Select'}
-            </button>
-
-            {/* Select All / Deselect All */}
-            {selectorMode && (
-              <>
+              {/* Share Button */}
+              {selectorMode && selectedCreativeIds.size > 0 && (
                 <button
                   onClick={() => {
-                    const allFilteredIds = new Set(allFilteredCreatives.map(creative => creative.id));
-                    setSelectedCreativeIds(allFilteredIds);
+                    const colors = [
+                      lookAndFeel?.headerColor || '#2870ed',
+                      lookAndFeel?.secondaryColor1 || '#eb4c79',
+                      lookAndFeel?.secondaryColor2 || '#02a3a4',
+                      lookAndFeel?.secondaryColor3 || '#711c7a'
+                    ];
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    setSelectedBaseColor(randomColor);
+                    setShowShareDialog(true);
                   }}
-                  className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                  className="relative p-2 text-white rounded hover:opacity-90 transition-opacity"
+                  style={getButtonStyle(lookAndFeel)}
+                  title={`Share ${selectedCreativeIds.size} creative${selectedCreativeIds.size > 1 ? 's' : ''}`}
                 >
-                  All ({totalCreatives})
+                  <Share2 size={20} />
+                  {selectedCreativeIds.size > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {selectedCreativeIds.size}
+                    </span>
+                  )}
                 </button>
-                <button
-                  onClick={() => setSelectedCreativeIds(new Set())}
-                  className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
-                >
-                  None
-                </button>
-              </>
-            )}
-          </>
-        }
-      >
-        {/* Share Button */}
-        {selectorMode && selectedCreativeIds.size > 0 && (
-          <button
-            onClick={() => {
-              const colors = [
-                lookAndFeel?.headerColor || '#2870ed',
-                lookAndFeel?.secondaryColor1 || '#eb4c79',
-                lookAndFeel?.secondaryColor2 || '#02a3a4',
-                lookAndFeel?.secondaryColor3 || '#711c7a'
-              ];
-              const randomColor = colors[Math.floor(Math.random() * colors.length)];
-              setSelectedBaseColor(randomColor);
-              setShowShareDialog(true);
-            }}
-            className="relative p-2 text-white rounded hover:opacity-90 transition-opacity"
-            style={getButtonStyle(lookAndFeel)}
-            title={`Share ${selectedCreativeIds.size} creative${selectedCreativeIds.size > 1 ? 's' : ''}`}
-          >
-            <Share2 size={20} />
-            {selectedCreativeIds.size > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {selectedCreativeIds.size}
-              </span>
-            )}
-          </button>
+              )}
+
+              {/* Sync with Drive Button */}
+              <button
+                onClick={syncWithDrive}
+                className="p-2 text-white rounded hover:opacity-90 transition-opacity"
+                style={getButtonStyle(lookAndFeel)}
+                title="Sync with Google Drive"
+                disabled={loadingDrive}
+              >
+                <RefreshCw size={20} className={loadingDrive ? 'animate-spin' : ''} />
+              </button>
+            </PageHeader>
+          );
+        }}
+
+        // Custom masonry view using CreativeLibraryMasonryView
+        renderMasonryView={({
+          gridRef,
+          columnItems,
+          columnCount,
+          containerHeight,
+          loadedStart,
+          loadedEnd,
+          itemPositions,
+          onSelectItem,
+          currentLoadingItem,
+          loadingImageRef,
+          handleImageLoaded,
+          setNextItemIndex
+        }) => (
+          <CreativeLibraryMasonryView
+            gridRef={gridRef}
+            columnItems={columnItems}
+            columnCount={columnCount}
+            containerHeight={containerHeight}
+            loadedStart={loadedStart}
+            loadedEnd={loadedEnd}
+            itemPositions={itemPositions}
+            selectorMode={selectorMode}
+            selectedCreativeIds={selectedCreativeIds}
+            onToggleSelection={toggleCreativeSelection}
+            onSelectCreative={onSelectItem}
+            currentLoadingItem={currentLoadingItem}
+            loadingImageRef={loadingImageRef}
+            handleImageLoaded={handleImageLoaded}
+            setNextItemIndex={setNextItemIndex}
+            templateHtml={templateHtml}
+            templateConfig={templateConfig}
+            templateCss={templateCss}
+          />
         )}
 
-        {/* Upload Button */}
-        <button
-          onClick={() => setShowUploadDialog(true)}
-          className="p-2 text-white rounded hover:opacity-90 transition-opacity"
-          style={getButtonStyle(lookAndFeel)}
-          title="Upload creatives"
-        >
-          <Upload size={20} />
-        </button>
-      </PageHeader>
+        // Custom list view (note: MediaLibraryBase expects renderListItem, not a full view component)
+        // For now we'll render null and handle list view separately
+        renderListItem={null}
 
-      {/* Content */}
-      <div
-        ref={scrollContainerRef}
-        className="p-8 overflow-y-auto relative"
-        style={{ height: 'calc(100vh - 100px)' }}
-      >
-        {/* Floating Info Button */}
-        <div className="fixed bottom-8 right-8 z-40">
-          <button
-            onClick={() => setShowDebugInfo(!showDebugInfo)}
-            className={`p-3 rounded-full shadow-lg transition-all ${
-              showDebugInfo
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-blue-600 hover:bg-blue-50'
-            }`}
-            title="View loading info"
-          >
-            <Info size={20} />
-          </button>
+        // Custom preview using CreativePreview
+        renderPreview={(selectedCreative, onClose, allFilteredCreatives, onNavigate) => (
+          <CreativePreview
+            creative={selectedCreative}
+            onClose={onClose}
+            templateHtml={templateHtml}
+            templateConfig={templateConfig}
+            templateCss={templateCss}
+            allCreatives={allFilteredCreatives}
+            onNavigate={onNavigate}
+          />
+        )}
 
-          {/* Debug Info Panel */}
-          {showDebugInfo && (
-            <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 whitespace-nowrap border border-gray-200">
-              <div className="font-semibold mb-2 text-blue-600">Virtual Scrolling Info</div>
-              <div>{debugInfo}</div>
-            </div>
-          )}
-        </div>
+        // Custom floating actions
+        renderFloatingActions={({ showDebugInfo, setShowDebugInfo, debugInfo }) => (
+          <div className="fixed bottom-8 right-8 z-40">
+            <button
+              onClick={() => setShowDebugInfo(!showDebugInfo)}
+              className={`p-3 rounded-full shadow-lg transition-all ${
+                showDebugInfo
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-blue-600 hover:bg-blue-50'
+              }`}
+              title="View loading info"
+            >
+              <Info size={20} />
+            </button>
 
-        <div className="max-w-7xl mx-auto">
-          {/* Assets Grid */}
-          {(viewMode === 'grid3' || viewMode === 'grid4') ? (
-            <CreativeLibraryMasonryView
-              gridRef={gridRef}
-              columnItems={columnItems}
-              columnCount={columnCount}
-              containerHeight={containerHeight}
-              loadedStart={loadedStart}
-              loadedEnd={loadedEnd}
-              itemPositions={itemPositions}
-              selectorMode={selectorMode}
-              selectedCreativeIds={selectedCreativeIds}
-              onToggleSelection={toggleCreativeSelection}
-              onSelectCreative={setSelectedCreative}
-              currentLoadingItem={currentLoadingItem}
-              loadingImageRef={loadingImageRef}
-              handleImageLoaded={handleImageLoaded}
-              setNextItemIndex={setNextItemIndex}
-              templateHtml={templateHtml}
-              templateConfig={templateConfig}
-              templateCss={templateCss}
-            />
-          ) : (
-            <CreativeLibraryListView
-              gridRef={gridRef}
-              filteredCreatives={filteredCreatives}
-              selectorMode={selectorMode}
-              selectedCreativeIds={selectedCreativeIds}
-              onToggleSelection={toggleCreativeSelection}
-              onSelectCreative={setSelectedCreative}
-            />
-          )}
-
-          {filteredCreatives.length === 0 && totalCreatives === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <ImageIcon size={48} className="mx-auto mb-4 text-gray-300" />
-              <p>No creatives found</p>
-            </div>
-          )}
-        </div>
-      </div>
+            {showDebugInfo && (
+              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 whitespace-nowrap border border-gray-200">
+                <div className="font-semibold mb-2 text-blue-600">Virtual Scrolling Info</div>
+                <div>{debugInfo}</div>
+              </div>
+            )}
+          </div>
+        )}
+      />
 
       {/* Upload Dialogs */}
       <CreativeLibraryUploadDialogs
@@ -897,7 +686,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         isOpen={showShareDialog}
         onClose={closeShareDialog}
         selectedCreativeIds={selectedCreativeIds}
-        selectedCreatives={allFilteredCreatives.filter(c => selectedCreativeIds.has(c.id))}
+        selectedCreatives={creatives.filter(c => selectedCreativeIds.has(c.id))}
         shareTitle={shareTitle}
         setShareTitle={setShareTitle}
         selectedBaseColor={selectedBaseColor}
@@ -913,17 +702,50 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         templateName="html"
       />
 
-      {/* Creative Preview */}
-      <CreativePreview
-        creative={selectedCreative}
-        onClose={() => setSelectedCreative(null)}
-        templateHtml={templateHtml}
-        templateConfig={templateConfig}
-        templateCss={templateCss}
-        allCreatives={allFilteredCreatives}
-        onNavigate={setSelectedCreative}
-      />
-    </div>
+      {/* Sync Progress Overlay */}
+      {syncProgress && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <div className="flex items-start gap-4">
+              {/* Icon */}
+              <div className="flex-shrink-0">
+                {syncProgress.type === 'loading' && (
+                  <Loader size={24} className="text-blue-600 animate-spin" />
+                )}
+                {syncProgress.type === 'success' && (
+                  <CheckCircle size={24} className="text-green-600" />
+                )}
+                {syncProgress.type === 'error' && (
+                  <AlertCircle size={24} className="text-red-600" />
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  {syncProgress.type === 'loading' && 'Syncing with Google Drive...'}
+                  {syncProgress.type === 'success' && 'Sync Successful'}
+                  {syncProgress.type === 'error' && 'Sync Failed'}
+                </h3>
+                <p className="text-sm text-gray-600 whitespace-pre-line">
+                  {syncProgress.message}
+                </p>
+              </div>
+
+              {/* Close button for error */}
+              {syncProgress.type === 'error' && (
+                <button
+                  onClick={() => setSyncProgress(null)}
+                  className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

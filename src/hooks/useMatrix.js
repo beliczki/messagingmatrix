@@ -13,6 +13,7 @@ export const useMatrix = () => {
   const [messages, setMessages] = useState([]);
   const [keywords, setKeywords] = useState({});
   const [assets, setAssets] = useState([]);
+  const [creatives, setCreatives] = useState([]);
   const [messagesByCell, setMessagesByCell] = useState({}); // Fast lookup: "topicKey-audienceKey" -> [messages]
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -50,6 +51,7 @@ export const useMatrix = () => {
       setMessages(data.messages);
       setKeywords(data.keywords || {});
       setAssets(data.assets || []);
+      setCreatives(data.creatives || []);
       setLastSync(new Date());
     } catch (err) {
       console.error('Load error:', err);
@@ -60,7 +62,7 @@ export const useMatrix = () => {
   }, []);
 
   // Save data to sheets
-  const save = useCallback(async (feedData = null, feedFields = null, assetsData = null) => {
+  const save = useCallback(async (feedData = null, feedFields = null, assetsData = null, creativesData = null) => {
     setIsSaving(true);
     setError(null);
 
@@ -95,7 +97,7 @@ export const useMatrix = () => {
           }
         });
 
-      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData);
+      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -331,13 +333,14 @@ export const useMatrix = () => {
   }, []);
 
   // Track reference changes for debugging
-  const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets });
+  const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets, creatives });
   const depsChanged = {
     audiences: prevDepsRef.current.audiences !== audiences,
     topics: prevDepsRef.current.topics !== topics,
     messages: prevDepsRef.current.messages !== messages,
     keywords: prevDepsRef.current.keywords !== keywords,
-    assets: prevDepsRef.current.assets !== assets
+    assets: prevDepsRef.current.assets !== assets,
+    creatives: prevDepsRef.current.creatives !== creatives
   };
 
   // Log every time the hook runs
@@ -345,12 +348,14 @@ export const useMatrix = () => {
     audiencesChanged: depsChanged.audiences,
     topicsChanged: depsChanged.topics,
     messagesChanged: depsChanged.messages,
+    creativesChanged: depsChanged.creatives,
     audiencesRef: audiences,
     topicsRef: topics,
-    messagesRef: messages
+    messagesRef: messages,
+    creativesRef: creatives
   });
 
-  prevDepsRef.current = { audiences, topics, messages, keywords, assets };
+  prevDepsRef.current = { audiences, topics, messages, keywords, assets, creatives };
 
   // Check if arrays have actually changed OR if metadata has changed
   const shouldUpdate = !cachedMatrixResult ||
@@ -359,6 +364,7 @@ export const useMatrix = () => {
     cachedMatrixResult.messages !== messages ||
     cachedMatrixResult.keywords !== keywords ||
     cachedMatrixResult.assets !== assets ||
+    cachedMatrixResult.creatives !== creatives ||
     cachedMatrixResult.messagesByCell !== messagesByCell ||
     cachedMatrixResult.isLoading !== isLoading ||
     cachedMatrixResult.isSaving !== isSaving ||
@@ -370,6 +376,7 @@ export const useMatrix = () => {
       audiences: audiences.length,
       topics: topics.length,
       messages: messages.length,
+      creatives: creatives.length,
       messagesByCellKeys: Object.keys(messagesByCell).length,
       isLoading,
       isSaving
@@ -380,8 +387,10 @@ export const useMatrix = () => {
       messages,
       keywords,
       assets,
+      creatives,
       messagesByCell,
       setAssets,
+      setCreatives,
       isLoading,
       isSaving,
       error,

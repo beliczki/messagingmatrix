@@ -80,6 +80,43 @@ Skills are specialized guides for common development tasks. These are like "runb
    - Review asset management
    - Suggest improvements
 
+## Recent Major Updates (v2.0.0)
+
+### Code Refactoring
+- **MediaLibraryBase** (674 lines) - New shared component for Assets and CreativeLibrary
+  - Eliminated ~1000 lines of code duplication
+  - Provides virtual scrolling, masonry layout, list view
+  - Render props pattern for customization
+- **Assets** - Reduced from 1,103 to 377 lines using MediaLibraryBase
+- **CreativeLibrary** - Reduced from 931 to 525 lines using MediaLibraryBase
+
+### Google Drive Integration
+- Auto-sync assets and creatives from Google Drive folders
+- Spreadsheet-first sync strategy (spreadsheet is source of truth)
+- File metadata extraction (name, size, date, dimensions)
+- Backend proxy for secure file serving (`/api/drive/proxy/{fileId}`)
+- Proxy supports both file IDs and filenames
+
+### Asset & Creative Management
+- Virtual scrolling with masonry layout for high performance
+- Sequential image loading for accurate height calculation
+- List view with sortable columns
+- Advanced filtering with AND/OR logic
+- Dark-themed preview dialog with metadata panel
+- Support for static (images, videos) and dynamic (HTML5) creatives
+
+### Template System
+- HTML5 banner template support
+- Template configuration with placeholder bindings
+- `path-messagingmatrix` for configurable asset paths
+- CSS injection for proper rendering
+- Live preview in Creative Library
+
+### State Management
+- StateManagementDialog showing all application state as JSON
+- Includes Audiences, Topics, Messages, Assets, Creatives, Feed, Keywords tabs
+- Creatives tab added for debugging creative data
+
 ## How to Use
 
 ### For Claude Code
@@ -108,6 +145,7 @@ As the codebase evolves, update these files to reflect:
 - Updated workflows
 - New patterns or conventions
 - Performance improvements
+- Refactored code (update line counts!)
 
 ## Quick Reference
 
@@ -138,12 +176,14 @@ To make best use of these context files:
 3. **Follow established patterns** - Use patterns documented in workflows
 4. **Update context** - Suggest updates when patterns change
 5. **Use line numbers** - Reference specific locations (e.g., `Matrix.jsx:1530`)
+6. **Check for refactoring** - Component line counts may change significantly
 
 ## Context File Structure
 
 ```
 .claude/
 ├── README.md                      # This file
+├── CONTEXT_INDEX.md               # Quick navigation index
 ├── settings.local.json            # Claude Code settings
 ├── context-quickstart.md          # Quick start guide
 ├── context-architecture.md        # Architecture overview
@@ -169,6 +209,7 @@ Update context files when:
 - Modifying workflows
 - Discovering new patterns
 - Fixing recurring issues
+- **Refactoring components** (update line counts!)
 
 ### How to Update
 
@@ -177,6 +218,7 @@ Update context files when:
 3. Update line numbers if files change significantly
 4. Add new skills for new complex workflows
 5. Remove outdated information
+6. **Update CONTEXT_INDEX.md** to reflect changes
 
 ### Version History
 
@@ -186,6 +228,26 @@ Context files should be kept in sync with the codebase. Use git to track changes
 git log .claude/
 ```
 
+## Component Line Count Reference
+
+Quick reference for current component sizes (as of v2.0.0):
+
+| Component | Lines | Notes |
+|-----------|-------|-------|
+| Matrix.jsx | 1,530 | Main matrix grid |
+| MessageEditorDialog.jsx | 1,320 | Message editor |
+| PreviewView.jsx | 1,440 | Share gallery viewer |
+| TreeView.jsx | 902 | Decision tree |
+| ClaudeChat.jsx | 767 | AI integration |
+| **MediaLibraryBase.jsx** | **674** | **NEW: Shared base for Assets/Creatives** |
+| CreativeLibrary.jsx | 525 | Reduced from 931 |
+| Assets.jsx | 377 | Reduced from 1,103 |
+| Templates.jsx | 1,107 | Template management |
+| useMatrix.js | 355 | Core data hook |
+| server.js | 1,400+ | Backend server |
+| sheets.js | 520 | Google Sheets API |
+| patternEvaluator.js | 240 | Pattern evaluation |
+
 ## Benefits
 
 ✓ **Faster Development** - No need to re-explore codebase each session
@@ -194,7 +256,14 @@ git log .claude/
 ✓ **Easier Onboarding** - Comprehensive documentation for new developers
 ✓ **Improved Communication** - Shared understanding of architecture
 ✓ **Reduced Errors** - Clear workflows prevent mistakes
+✓ **Code Reuse** - MediaLibraryBase demonstrates effective component composition
 
 ## Feedback
 
 If you find these context files helpful or have suggestions for improvement, please update them directly or add notes for the next session.
+
+---
+
+**Last Updated**: 2025-10-25
+**Version**: 2.0.0
+**Major Changes**: Added MediaLibraryBase, Google Drive integration, virtual scrolling, updated component line counts

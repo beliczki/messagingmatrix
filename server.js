@@ -1646,7 +1646,7 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     let fileId = fileIdOrName;
 
     // Check if the parameter looks like a filename (has a file extension)
-    const hasExtension = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|pdf|zip|psd)$/i.test(fileIdOrName);
+    const hasExtension = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|pdf|zip|psd|html|htm|css|js|json)$/i.test(fileIdOrName);
 
     if (hasExtension) {
       // This is a filename - search for it in Drive

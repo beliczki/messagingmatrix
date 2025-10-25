@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Info, ExternalLink } from 'lucide-react';
 import settings from '../services/settings';
 
 const CreativePreview = ({
@@ -77,8 +77,21 @@ const CreativePreview = ({
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
           value = msg[fieldName] || value;
 
-          if (config.type === 'image' && value) {
-            value = buildImageUrl(fieldName, value);
+          // Use path-messagingmatrix for images and videos
+          if ((config.type === 'image' || config.type === 'video') && value) {
+            const pathPrefix = config['path-messagingmatrix'] || '';
+            // If value is already a full URL, use it as-is
+            if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+              // If it starts with /, it's a relative path, so prepend the path prefix
+              if (value.startsWith('/') && !pathPrefix) {
+                value = value; // Keep as-is
+              } else if (!value.startsWith('http')) {
+                value = pathPrefix + value;
+              }
+            } else {
+              // It's a file ID or filename, prepend the path
+              value = pathPrefix + value;
+            }
           }
         }
 
@@ -143,107 +156,18 @@ const CreativePreview = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-90 z-50"
+      className="fixed inset-0 bg-black bg-opacity-90 z-50 flex"
       onClick={onClose}
     >
-      {/* Fixed Header at Top */}
-      <div className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 bg-black/50 backdrop-blur-sm z-10">
-        {/* Title - Left */}
-        <h3 className="text-xl font-bold text-white flex-1">{getTitle()}</h3>
-
-        {/* Navigation & Close - Right */}
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {/* Previous Button */}
-          <button
-            onClick={handlePrevious}
-            disabled={!hasPrevious}
-            className={`p-2 rounded transition-colors ${
-              hasPrevious
-                ? 'bg-white/10 hover:bg-white/20 text-white'
-                : 'bg-white/5 text-white/30 cursor-not-allowed'
-            }`}
-            title="Previous creative"
-          >
-            <ChevronLeft size={20} />
-          </button>
-
-          {/* Counter */}
-          {allCreatives.length > 0 && (
-            <span className="text-white/70 text-sm px-2">
-              {currentIndex + 1} / {allCreatives.length}
-            </span>
-          )}
-
-          {/* Next Button */}
-          <button
-            onClick={handleNext}
-            disabled={!hasNext}
-            className={`p-2 rounded transition-colors ${
-              hasNext
-                ? 'bg-white/10 hover:bg-white/20 text-white'
-                : 'bg-white/5 text-white/30 cursor-not-allowed'
-            }`}
-            title="Next creative"
-          >
-            <ChevronRight size={20} />
-          </button>
-
-          {/* Info Button */}
-          <button
-            onClick={() => setInfoOpen(!infoOpen)}
-            className={`p-2 rounded transition-colors ml-2 ${
-              infoOpen
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/10 hover:bg-white/20 text-white'
-            }`}
-            title="Show asset info"
-          >
-            <Info size={20} />
-          </button>
-
-          {/* Close Button */}
-          <button
-            onClick={onClose}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded text-white ml-2"
-            title="Close preview"
-          >
-            <X size={20} />
-          </button>
-        </div>
-      </div>
-
-      {/* Content - Centered with top padding for header */}
-      <div className="flex items-center justify-center h-full pt-20 pb-4 px-4" onClick={(e) => e.stopPropagation()}>
-        {isDynamic ? (
-          renderDynamicCreative()
-        ) : creative.extension === 'mp4' ? (
-          <video src={creative.url} controls autoPlay className="max-w-full max-h-full rounded-lg" />
-        ) : (
-          <div className="flex items-center justify-center rounded-lg" style={checkerboardStyle}>
-            <img src={creative.url} alt={creative.filename} className="max-w-full max-h-full rounded-lg" style={{ display: 'block' }} />
-          </div>
-        )}
-      </div>
-
-      {/* Info Slidein Panel */}
+      {/* Info Panel - Full Height, Left Side, Dark Theme */}
       <div
-        className={`absolute top-0 right-0 bottom-0 w-96 bg-white shadow-xl border-l z-20 transform transition-transform duration-300 ease-in-out overflow-auto ${
-          infoOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`bg-gray-900 shadow-xl border-r border-gray-700 flex-shrink-0 transition-all duration-300 ease-in-out overflow-auto ${
+          infoOpen ? 'w-96' : 'w-0 border-0'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-4 border-b bg-gray-50 sticky top-0 z-10">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-900">Asset Info</h3>
-            <button
-              onClick={() => setInfoOpen(false)}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
-            >
-              <X size={20} className="text-gray-600" />
-            </button>
-          </div>
-        </div>
-        <div className="p-4 space-y-4">
+        <div className="w-96 flex-shrink-0">
+          <div className="p-4 space-y-2">
           {/* Display all asset properties */}
           {Object.entries(creative).map(([key, value]) => {
             // Skip some non-display fields
@@ -255,16 +179,18 @@ const CreativePreview = ({
             if (Array.isArray(value)) {
               if (value.length === 0) return null;
               return (
-                <div key={key} className="border-b border-gray-200 pb-3">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
-                    {key.replace(/_/g, ' ')}
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    {value.map((item, index) => (
-                      <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                        {item}
-                      </span>
-                    ))}
+                <div key={key} className="border-b border-gray-700 pb-2">
+                  <div className="flex items-start gap-3">
+                    <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap flex-shrink-0 w-32">
+                      {key.replace(/_/g, ' ')}
+                    </label>
+                    <div className="flex flex-wrap gap-1 flex-1">
+                      {value.map((item, index) => (
+                        <span key={index} className="px-2 py-1 bg-blue-900 text-blue-200 rounded text-xs">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -273,17 +199,127 @@ const CreativePreview = ({
             // Skip empty values
             if (!value || value === '') return null;
 
+            // Special handling for File_DirectLink and File_thumbnail - show as external link button
+            if ((key === 'File_DirectLink' || key === 'File_thumbnail') && value) {
+              return (
+                <div key={key} className="border-b border-gray-700 pb-2">
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap flex-shrink-0 w-32">
+                      {key.replace(/_/g, ' ')}
+                    </label>
+                    <a
+                      href={value}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition-colors"
+                    >
+                      <span>Open</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <div key={key} className="border-b border-gray-200 pb-3">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
-                  {key.replace(/_/g, ' ')}
-                </label>
-                <div className="text-sm text-gray-900 break-words">
-                  {String(value)}
+              <div key={key} className="border-b border-gray-700 pb-2">
+                <div className="flex items-start gap-3">
+                  <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap flex-shrink-0 w-32">
+                    {key.replace(/_/g, ' ')}
+                  </label>
+                  <div className="text-sm text-gray-200 break-words flex-1">
+                    {String(value)}
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      </div>
+      </div>
+
+      {/* Main Content Area - Flex to take remaining space */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 bg-black/50 backdrop-blur-sm flex-shrink-0">
+          {/* Info Toggle + Title - Left */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setInfoOpen(!infoOpen);
+              }}
+              className={`p-2 rounded-lg shadow-lg transition-all flex-shrink-0 ${
+                infoOpen
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800/90 text-white hover:bg-gray-700'
+              }`}
+              title={infoOpen ? "Hide asset info" : "Show asset info"}
+            >
+              <Info size={20} />
+            </button>
+            <h3 className="text-xl font-bold text-white truncate">{getTitle()}</h3>
+          </div>
+
+          {/* Navigation & Close - Right */}
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            {/* Previous Button */}
+            <button
+              onClick={handlePrevious}
+              disabled={!hasPrevious}
+              className={`p-2 rounded transition-colors ${
+                hasPrevious
+                  ? 'bg-white/10 hover:bg-white/20 text-white'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              }`}
+              title="Previous creative"
+            >
+              <ChevronLeft size={20} />
+            </button>
+
+            {/* Counter */}
+            {allCreatives.length > 0 && (
+              <span className="text-white/70 text-sm px-2">
+                {currentIndex + 1} / {allCreatives.length}
+              </span>
+            )}
+
+            {/* Next Button */}
+            <button
+              onClick={handleNext}
+              disabled={!hasNext}
+              className={`p-2 rounded transition-colors ${
+                hasNext
+                  ? 'bg-white/10 hover:bg-white/20 text-white'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              }`}
+              title="Next creative"
+            >
+              <ChevronRight size={20} />
+            </button>
+
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="p-2 bg-white/10 hover:bg-white/20 rounded text-white ml-2"
+              title="Close preview"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Preview Content - Flex to take remaining space */}
+        <div className="flex-1 flex items-center justify-center p-4 min-h-0" onClick={(e) => e.stopPropagation()}>
+          {isDynamic ? (
+            renderDynamicCreative()
+          ) : creative.extension === 'mp4' ? (
+            <video src={creative.url} controls autoPlay className="max-w-full max-h-full rounded-lg" />
+          ) : (
+            <div className="flex items-center justify-center rounded-lg" style={checkerboardStyle}>
+              <img src={creative.url} alt={creative.filename} className="max-w-full max-h-full rounded-lg" style={{ display: 'block' }} />
+            </div>
+          )}
         </div>
       </div>
     </div>
