@@ -706,6 +706,61 @@ const MessageEditorDialog = ({
                     )}
 
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Template Variant Classes
+                        {variantClassOptions.length > 0 && (
+                          <span className="text-xs text-gray-500 ml-1">({variantClassOptions.length} options)</span>
+                        )}
+                      </label>
+                      {variantClassOptions.length > 0 ? (
+                        <div className="border border-gray-300 rounded p-2 min-h-[42px]">
+                          <div className="flex flex-wrap gap-1">
+                            {variantClassOptions.map(option => {
+                              const selectedClasses = (editingMessage.template_variant_classes || '').split(/\s+/).filter(c => c);
+                              const isSelected = selectedClasses.includes(option);
+
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => {
+                                    let newClasses;
+                                    if (isSelected) {
+                                      // Remove the class
+                                      newClasses = selectedClasses.filter(c => c !== option);
+                                    } else {
+                                      // Add the class
+                                      newClasses = [...selectedClasses, option];
+                                    }
+                                    setEditingMessage({
+                                      ...editingMessage,
+                                      template_variant_classes: newClasses.join(' ')
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                                    isSelected
+                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                                  }`}
+                                >
+                                  {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={editingMessage.template_variant_classes || ''}
+                          onChange={(e) => setEditingMessage({ ...editingMessage, template_variant_classes: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Select a template with variant options or enter manually"
+                        />
+                      )}
+                    </div>
+
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Headline</label>
                       <div className="relative">
                         <input
@@ -742,14 +797,14 @@ const MessageEditorDialog = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Copy 2</label>
                       <div className="relative">
-                        <textarea
+                        <input
+                          type="text"
                           value={editingMessage.copy2 || ''}
                           onChange={(e) => setEditingMessage({ ...editingMessage, copy2: e.target.value })}
-                          rows={3}
                           className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
                         />
                         {isGeneratingContent && (
-                          <div className="absolute right-3 top-3">
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                             <Loader size={16} className="animate-spin text-purple-600" />
                           </div>
                         )}
@@ -810,61 +865,6 @@ const MessageEditorDialog = ({
                         onChange={(e) => setEditingMessage({ ...editingMessage, landingUrl: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Template Variant Classes
-                        {variantClassOptions.length > 0 && (
-                          <span className="text-xs text-gray-500 ml-1">({variantClassOptions.length} options)</span>
-                        )}
-                      </label>
-                      {variantClassOptions.length > 0 ? (
-                        <div className="border border-gray-300 rounded p-2 min-h-[42px]">
-                          <div className="flex flex-wrap gap-1">
-                            {variantClassOptions.map(option => {
-                              const selectedClasses = (editingMessage.template_variant_classes || '').split(/\s+/).filter(c => c);
-                              const isSelected = selectedClasses.includes(option);
-
-                              return (
-                                <button
-                                  key={option}
-                                  type="button"
-                                  onClick={() => {
-                                    let newClasses;
-                                    if (isSelected) {
-                                      // Remove the class
-                                      newClasses = selectedClasses.filter(c => c !== option);
-                                    } else {
-                                      // Add the class
-                                      newClasses = [...selectedClasses, option];
-                                    }
-                                    setEditingMessage({
-                                      ...editingMessage,
-                                      template_variant_classes: newClasses.join(' ')
-                                    });
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                                    isSelected
-                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                                  }`}
-                                >
-                                  {option}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <input
-                          type="text"
-                          value={editingMessage.template_variant_classes || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, template_variant_classes: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Select a template with variant options or enter manually"
-                        />
-                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
