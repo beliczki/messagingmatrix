@@ -569,7 +569,7 @@ const MessageEditorDialog = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                     <input
@@ -587,6 +587,19 @@ const MessageEditorDialog = ({
                       onChange={(e) => setEditingMessage({ ...editingMessage, end_date: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
+                    <select
+                      value={editingMessage.template || ''}
+                      onChange={(e) => setEditingMessage({ ...editingMessage, template: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select a template</option>
+                      {templates.map(t => (
+                        <option key={t.name} value={t.name}>{t.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -621,7 +634,8 @@ const MessageEditorDialog = ({
                         status: editingMessage.status,
                         poms_id: editingMessage.poms_id,
                         start_date: editingMessage.start_date,
-                        end_date: editingMessage.end_date
+                        end_date: editingMessage.end_date,
+                        template: editingMessage.template
                       });
                       setEditingMessage(null);
                     }}
@@ -796,20 +810,6 @@ const MessageEditorDialog = ({
                         onChange={(e) => setEditingMessage({ ...editingMessage, landingUrl: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
-                      <select
-                        value={editingMessage.template || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, template: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Select a template</option>
-                        {templates.map(t => (
-                          <option key={t.name} value={t.name}>{t.name}</option>
-                        ))}
-                      </select>
                     </div>
 
                     <div>
