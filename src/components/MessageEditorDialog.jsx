@@ -264,6 +264,7 @@ const MessageEditorDialog = ({
       .replace(/\{\{copy_style_1\}\}/g, editingMessage.copy1_style || '')
       .replace(/\{\{copy_style_2\}\}/g, editingMessage.copy2_style || '')
       .replace(/\{\{disclaimer_style_1\}\}/g, editingMessage.disclaimer_style || '')
+      .replace(/\{\{sticker_style_1\}\}/g, editingMessage.flash_style || '')
       .replace(/\{\{cta_style_1\}\}/g, editingMessage.cta_style || '')
       .replace(/\{\{background_image_1\}\}/g, buildImageUrl('image1', editingMessage.image1))
       .replace(/\{\{background_image_2\}\}/g, buildImageUrl('image2', editingMessage.image2))
@@ -1110,6 +1111,17 @@ const MessageEditorDialog = ({
                     </div>
 
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Flash Style</label>
+                      <input
+                        type="text"
+                        value={editingMessage.flash_style || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, flash_style: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        placeholder="e.g., background: #ff0000; color: white;"
+                      />
+                    </div>
+
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">CTA Style</label>
                       <input
                         type="text"
@@ -1192,6 +1204,7 @@ const MessageEditorDialog = ({
                         copy1_style: editingMessage.copy1_style,
                         copy2_style: editingMessage.copy2_style,
                         disclaimer_style: editingMessage.disclaimer_style,
+                        flash_style: editingMessage.flash_style,
                         cta_style: editingMessage.cta_style,
                         css: editingMessage.css
                       });

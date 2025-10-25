@@ -257,7 +257,7 @@ class SheetsService {
     ];
 
     const messageRows = [
-      ['ID', 'POMS_ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Disclaimer', 'Headline_style', 'Copy1_style', 'Copy2_style', 'Disclaimer_style', 'CSS', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'CTA', 'CTA_style', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
+      ['ID', 'POMS_ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Disclaimer', 'Headline_style', 'Copy1_style', 'Copy2_style', 'Disclaimer_style', 'CSS', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'Flash_style', 'CTA', 'CTA_style', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
       ...messages
         .filter(m => m.status !== 'deleted')
         .map(m => [
@@ -291,17 +291,18 @@ class SheetsService {
           m.image5 || '',       // AB: Image5
           m.image6 || '',       // AC: Image6
           m.flash || '',        // AD: Flash
-          m.cta || '',          // AE: CTA
-          m.cta_style || '',    // AF: CTA_style
-          m.landingUrl || '',   // AG: Landing_URL
-          m.comment || '',      // AH: Comment
-          m.utm_campaign || '', // AI: UTM_Campaign
-          m.utm_source || '',   // AJ: UTM_Source
-          m.utm_medium || '',   // AK: UTM_Medium
-          m.utm_content || '',  // AL: UTM_Content
-          m.utm_term || '',     // AM: UTM_Term
-          m.utm_cd26 || '',     // AN: UTM_CD26
-          m.final_trafficked_url || '' // AO: Final_Trafficked_URL
+          m.flash_style || '',  // AE: Flash_style
+          m.cta || '',          // AF: CTA
+          m.cta_style || '',    // AG: CTA_style
+          m.landingUrl || '',   // AH: Landing_URL
+          m.comment || '',      // AI: Comment
+          m.utm_campaign || '', // AJ: UTM_Campaign
+          m.utm_source || '',   // AK: UTM_Source
+          m.utm_medium || '',   // AL: UTM_Medium
+          m.utm_content || '',  // AM: UTM_Content
+          m.utm_term || '',     // AN: UTM_Term
+          m.utm_cd26 || '',     // AO: UTM_CD26
+          m.final_trafficked_url || '' // AP: Final_Trafficked_URL
         ])
     ];
 
@@ -470,6 +471,7 @@ class SheetsService {
           image5: this.getValue(row, columnMap, 'Image5'),
           image6: this.getValue(row, columnMap, 'Image6'),
           flash: this.getValue(row, columnMap, 'Flash'),
+          flash_style: this.getValue(row, columnMap, 'Flash_style'),
           cta: this.getValue(row, columnMap, 'CTA'),
           cta_style: this.getValue(row, columnMap, 'CTA_style'),
           landingUrl: this.getValue(row, columnMap, 'Landing_URL'),
