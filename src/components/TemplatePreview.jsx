@@ -1,5 +1,11 @@
 import React from 'react';
 import settings from '../services/settings';
+import mainCss from '../templates/html/main.css?raw';
+import css300x250 from '../templates/html/300x250.css?raw';
+import css300x600 from '../templates/html/300x600.css?raw';
+import css640x360 from '../templates/html/640x360.css?raw';
+import css970x250 from '../templates/html/970x250.css?raw';
+import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 /**
  * Reusable template preview component
@@ -47,11 +53,40 @@ const TemplatePreview = ({
     return (imageBaseUrls[imageKey] || '') + filename;
   };
 
-  // Populate template with message data
+  // Populate template with message data and inject CSS
   const populateTemplate = (html, msg) => {
-    if (!msg || !html) return html;
+    if (!html) return html;
 
     let result = html;
+
+    // Inject CSS inline - replace <link> tags with <style> tags
+    const cssMap = {
+      '300x250': css300x250,
+      '300x600': css300x600,
+      '640x360': css640x360,
+      '970x250': css970x250,
+      '1080x1080': css1080x1080
+    };
+
+    const sizeCss = cssMap[previewSize] || '';
+
+    if (mainCss && sizeCss) {
+      const combinedCss = `${mainCss}\n${sizeCss}`;
+
+      // Replace main.css link with inline styles
+      result = result.replace(
+        /<link rel="stylesheet" href="main\.css".*?>/i,
+        `<style>${combinedCss}</style>`
+      );
+
+      // Remove [[css]] placeholder link
+      result = result.replace(
+        /<link rel="stylesheet" href="\[\[css\]\]".*?>/i,
+        ''
+      );
+    }
+
+    if (!msg) return result;
 
     if (templateConfig && templateConfig.placeholders) {
       // Use dynamic mapping from template.json
@@ -63,7 +98,34 @@ const TemplatePreview = ({
         if (binding) {
           // Support both "message.Headline" and just "Headline" formats
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
-          value = msg[fieldName] || value;
+
+          // Map all message fields including style and CSS
+          const fieldMap = {
+            'headline': msg.headline,
+            'copy1': msg.copy1,
+            'copy2': msg.copy2,
+            'flash': msg.flash,
+            'cta': msg.cta,
+            'image1': msg.image1,
+            'image2': msg.image2,
+            'image3': msg.image3,
+            'image4': msg.image4,
+            'image5': msg.image5,
+            'image6': msg.image6,
+            'template_variant_classes': msg.template_variant_classes,
+            // Style fields
+            'headline_style': msg.headline_style,
+            'copy1_style': msg.copy1_style,
+            'copy2_style': msg.copy2_style,
+            'flash_style': msg.flash_style,
+            'cta_style': msg.cta_style,
+            'disclaimer_style': msg.disclaimer_style,
+            // CSS field
+            'css_styles': msg.css,
+            'css': msg.css
+          };
+
+          value = fieldMap[fieldName] || msg[fieldName] || value;
 
           // For image types, build the full URL
           if (config.type === 'image' && value) {
@@ -118,7 +180,7 @@ const TemplatePreview = ({
           left: 0
         }}
         title="Template Preview"
-        sandbox="allow-same-origin"
+        sandbox="allow-same-origin allow-scripts"
       />
     </div>
   );

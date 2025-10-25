@@ -46,6 +46,7 @@ const MessageEditorDialog = ({
   // Template management state
   const [templates, setTemplates] = useState([]);
   const [templateConfig, setTemplateConfig] = useState(null);
+  const [templateHtml, setTemplateHtml] = useState('');
   const [variantClassOptions, setVariantClassOptions] = useState([]);
   const [availableDimensions, setAvailableDimensions] = useState([]);
 
@@ -102,6 +103,29 @@ const MessageEditorDialog = ({
     };
 
     loadTemplateConfig();
+  }, [editingMessage?.template]);
+
+  // Load template HTML when template changes
+  useEffect(() => {
+    const loadTemplateHtml = async () => {
+      if (!editingMessage?.template) {
+        setTemplateHtml('');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/templates/${editingMessage.template}/index.html`);
+        if (response.ok) {
+          const data = await response.json();
+          setTemplateHtml(data.content);
+        }
+      } catch (error) {
+        console.error('Error loading template HTML:', error);
+        setTemplateHtml('');
+      }
+    };
+
+    loadTemplateHtml();
   }, [editingMessage?.template]);
 
   // Load available dimensions when template changes
@@ -163,8 +187,13 @@ const MessageEditorDialog = ({
     return (imageBaseUrls[imageKey] || '') + filename;
   };
 
-  // Generate preview HTML
+  // Generate preview HTML dynamically from template files
   const generatePreviewHtml = () => {
+    // Return empty if no template HTML is loaded yet
+    if (!templateHtml) {
+      return '<html><body><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#999;">Loading template...</div></body></html>';
+    }
+
     // CSS map for different sizes
     const cssMap = {
       '300x250': css300x250,
@@ -177,102 +206,94 @@ const MessageEditorDialog = ({
     // Get the size-specific CSS
     const sizeCss = cssMap[previewSize] || '';
 
-    const templateHtml = `<html id="html">
-  <head>
-    <title>${editingMessage.name || 'Preview'}</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-      ${mainCss}
-      ${sizeCss}
-      ${editingMessage.css || ''}
-    </style>
-  </head>
-  <body>
-      <div class="click-url" id="clickLayer">
-        <div id="adContainer" class="template_variant_class ${editingMessage.template_variant_classes || ''}">
-          <div id="backgroundContainer">
-            <div id="imageWrapper">
-              <div style="background-image:url('{{background_image_1}}')" class="background_image_1"></div>
-            </div>
-            <div id="videoWrapper">
-              <video autoplay muted playsinline loop onload="playVideo()">
-                <source src="{{background_video_1}}" type="video/mp4" class="background_video_1"></video>
-            </div>
-          </div>
-          <main>
-            <div id="objectWrapper">
-              <div style="background-image:url('{{background_image_2}}')" class="background_image_2"></div>
-            </div>
-            <div id="textContainer">
-              <div id="stickerContainer">
-                <div class="stickerTextWrapper">
-                  <p class="sticker_text_1 sticker_style_1" style="{{sticker_style_1}}">{{sticker_text_1}}</p>
-                </div>
-                <div class="stickerImageWrapper">
-                  <div style="background-image:url('{{sticker_image_1}}')" class="sticker_image_1">
-                  {{sticker_image_1}}
-                  </div>
-                </div>
-              </div>
-              <div id="cardContainer">
-                <div class="cardImageWrapper">
-                  <div style="background-image:url('{{background_image_3}}')" class="background_image_3">
-                  {{background_image_3}}
-                  </div>
-                </div>
-              </div>
-              <div id="headlineWrapper">
-                <h2 class="headline_text_1 headline_style_1" style="{{headline_style_1}}">{{headline_text_1}}</h2>
-              </div>
-              <div id="copyWrapper1">
-                <p class="copy_text_1 copy_style_1" style="{{copy_style_1}}">{{copy_text_1}}</p>
-              </div>
-              <div id="copyWrapper2">
-                <p class="thm copy_style_2" style="{{copy_style_2}}">{{copy_text_2}}</b></p>
-              </div>
-              <div id="buttonWrapper">
-                <span class="cta_text_1 cta_style_1" style="{{cta_style_1}}" data="{{cta_text_1}}">{{cta_text_1}}</span>
-              </div>
-              <div id="disclaimerWrapper1">
-                <p class="disclaimer_text_1 disclaimer_style_1" style="{{disclaimer_style_1}}" data="{{disclaimer_text_1}}">{{disclaimer_text_1}}</p>
-              </div>
-            </div>
-          </main>
-          <div id="frameContainer"></div>
-          <div id="logoContainer">
-            <div id="logoWrapper">
-              <img src="{{brand_image_1}}" class="logo logo_image_1 brand_image_1"/>
-            </div>
-          </div>
-        </div>
-    </div>
-  </body>
-</html>`;
+    // Start with the loaded template HTML
+    let html = templateHtml;
 
-    return templateHtml
-      .replace(/\{\{headline_text_1\}\}/g, editingMessage.headline || '')
-      .replace(/\{\{copy_text_1\}\}/g, editingMessage.copy1 || '')
-      .replace(/\{\{copy_text_2\}\}/g, editingMessage.copy2 || '')
-      .replace(/\{\{disclaimer_text_1\}\}/g, editingMessage.disclaimer || '')
-      .replace(/\{\{cta_text_1\}\}/g, editingMessage.cta || '')
-      .replace(/\{\{sticker_text_1\}\}/g, editingMessage.flash || '')
-      .replace(/\{\{headline_style_1\}\}/g, editingMessage.headline_style || '')
-      .replace(/\{\{copy_style_1\}\}/g, editingMessage.copy1_style || '')
-      .replace(/\{\{copy_style_2\}\}/g, editingMessage.copy2_style || '')
-      .replace(/\{\{disclaimer_style_1\}\}/g, editingMessage.disclaimer_style || '')
-      .replace(/\{\{sticker_style_1\}\}/g, editingMessage.flash_style || '')
-      .replace(/\{\{cta_style_1\}\}/g, editingMessage.cta_style || '')
-      .replace(/\{\{background_image_1\}\}/g, buildImageUrl('image1', editingMessage.image1))
-      .replace(/\{\{background_image_2\}\}/g, buildImageUrl('image2', editingMessage.image2))
-      .replace(/\{\{background_image_3\}\}/g, buildImageUrl('image3', editingMessage.image3))
-      .replace(/\{\{brand_image_1\}\}/g, buildImageUrl('image5', editingMessage.image5))
-      .replace(/\{\{sticker_image_1\}\}/g, buildImageUrl('image6', editingMessage.image6))
-      .replace(/\{\{[^}]+\}\}/g, '')
-      .replace(/\[\[[^\]]+\]\]/g, '');
+    // Inject CSS by replacing <link> tags with <style> tags
+    if (mainCss && sizeCss) {
+      const combinedCss = `${mainCss}\n${sizeCss}`;
+
+      // Replace main.css link
+      html = html.replace(
+        /<link rel="stylesheet" href="main\.css".*?>/i,
+        `<style>${combinedCss}</style>`
+      );
+
+      // Remove [[css]] placeholder link
+      html = html.replace(
+        /<link rel="stylesheet" href="\[\[css\]\]".*?>/i,
+        ''
+      );
+    }
+
+    // Populate template with message data using template.json bindings
+    if (templateConfig && templateConfig.placeholders) {
+      Object.keys(templateConfig.placeholders).forEach(placeholderName => {
+        const config = templateConfig.placeholders[placeholderName];
+        const binding = config['binding-messagingmatrix'];
+        let value = config.default || '';
+
+        if (binding) {
+          // Convert binding to message field name (e.g., "message.Headline" -> "headline")
+          const fieldName = binding.replace(/^message\./i, '').toLowerCase();
+
+          // Map message fields to values (including style fields)
+          const fieldMap = {
+            'headline': editingMessage.headline,
+            'copy1': editingMessage.copy1,
+            'copy2': editingMessage.copy2,
+            'flash': editingMessage.flash,
+            'cta': editingMessage.cta,
+            'image1': editingMessage.image1,
+            'image2': editingMessage.image2,
+            'image3': editingMessage.image3,
+            'image4': editingMessage.image4,
+            'image5': editingMessage.image5,
+            'image6': editingMessage.image6,
+            'template_variant_classes': editingMessage.template_variant_classes,
+            // Style fields
+            'headline_style': editingMessage.headline_style,
+            'copy1_style': editingMessage.copy1_style,
+            'copy2_style': editingMessage.copy2_style,
+            'flash_style': editingMessage.flash_style,
+            'cta_style': editingMessage.cta_style,
+            'disclaimer_style': editingMessage.disclaimer_style,
+            // CSS field
+            'css_styles': editingMessage.css,
+            'css': editingMessage.css
+          };
+
+          value = fieldMap[fieldName] || value;
+
+          // Use path-messagingmatrix for images and videos
+          if ((config.type === 'image' || config.type === 'video') && value) {
+            const pathPrefix = config['path-messagingmatrix'] || '';
+            // If value is already a full URL, use it as-is
+            if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+              // If it starts with /, it's a relative path, so prepend the path prefix if available
+              if (value.startsWith('/') && pathPrefix) {
+                value = pathPrefix + value;
+              } else if (!value.startsWith('http') && pathPrefix) {
+                value = pathPrefix + value;
+              }
+            } else {
+              // It's a file ID or filename, prepend the path
+              value = pathPrefix + value;
+            }
+          }
+        }
+
+        // Replace placeholder in HTML
+        const regex = new RegExp(`\\{\\{${placeholderName}\\}\\}`, 'g');
+        html = html.replace(regex, value || '');
+      });
+    }
+
+    // Clean up any remaining placeholders
+    html = html.replace(/\{\{[^}]+\}\}/g, '');
+    html = html.replace(/\[\[[^\]]+\]\]/g, '');
+
+    return html;
   };
 
   // Get all messages for navigation
@@ -666,6 +687,7 @@ const MessageEditorDialog = ({
                             style={{ width: `${width}px`, height: `${height}px` }}
                             className="border-0"
                             title="Message Preview"
+                            sandbox="allow-same-origin allow-scripts"
                           />
                         ) : (
                           <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
@@ -959,6 +981,7 @@ const MessageEditorDialog = ({
                             srcDoc={generatePreviewHtml()}
                             className="w-full h-[600px] border-0"
                             title="Message Preview"
+                            sandbox="allow-same-origin allow-scripts"
                           />
                         ) : (
                           <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
@@ -1054,6 +1077,7 @@ const MessageEditorDialog = ({
                             style={{ width: `${width}px`, height: `${height}px` }}
                             className="border-0"
                             title="Message Preview"
+                            sandbox="allow-same-origin allow-scripts"
                           />
                         ) : (
                           <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
@@ -1164,6 +1188,7 @@ const MessageEditorDialog = ({
                             srcDoc={generatePreviewHtml()}
                             className="w-full h-[600px] border-0"
                             title="Message Preview"
+                            sandbox="allow-same-origin allow-scripts"
                           />
                         ) : (
                           <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
