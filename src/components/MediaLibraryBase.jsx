@@ -129,7 +129,7 @@ const MediaLibraryBase = ({
     const itemId = getItemId(item);
 
     if (processedItems.current.has(itemId)) {
-      console.log(`⚠️ Item #${itemIndex} already processed, skipping: ${getItemFilename(item)}`);
+      // console.log(`⚠️ Item #${itemIndex} already processed, skipping: ${getItemFilename(item)}`);
       setNextItemIndex(itemIndex + 1);
       return;
     }
@@ -139,7 +139,7 @@ const MediaLibraryBase = ({
     // List view uses fixed row height, so chunk boundaries are already set
     // Just mark as loaded and move to next
     if (viewMode === 'list') {
-      console.log(`✅ List item #${itemIndex} loaded, triggering next item #${itemIndex + 1}`);
+      // console.log(`✅ List item #${itemIndex} loaded, triggering next item #${itemIndex + 1}`);
       setNextItemIndex(itemIndex + 1);
       return;
     }
@@ -151,7 +151,7 @@ const MediaLibraryBase = ({
     const mediaHeight = isVideo ? media.videoHeight : media.naturalHeight;
     const mediaWidth = isVideo ? media.videoWidth : media.naturalWidth;
 
-    console.log(`📐 Item #${itemIndex} dimensions: ${mediaWidth}x${mediaHeight}`);
+    // console.log(`📐 Item #${itemIndex} dimensions: ${mediaWidth}x${mediaHeight}`);
 
     const currentColumnCount = Object.keys(columnHeightsRef.current).length;
     const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
@@ -196,7 +196,7 @@ const MediaLibraryBase = ({
       return newHeights;
     });
 
-    console.log(`✅ Item #${itemIndex} added to column ${shortestCol}, triggering next item #${itemIndex + 1}`);
+    // console.log(`✅ Item #${itemIndex} added to column ${shortestCol}, triggering next item #${itemIndex + 1}`);
     setNextItemIndex(itemIndex + 1);
   }, [loadChunkSize, viewMode, getItemId, getItemFilename, getItemExtension]);
 
@@ -362,7 +362,7 @@ const MediaLibraryBase = ({
 
   // Reset and start loading when items change
   useEffect(() => {
-    console.log(`📊 Items changed: length=${items.length}, viewMode=${viewMode}, columnCount=${columnCount}`);
+    // console.log(`📊 Items changed: length=${items.length}, viewMode=${viewMode}, columnCount=${columnCount}`);
 
     if (items.length > 0 && (viewMode === 'grid3' || viewMode === 'grid4')) {
       const emptyColumns = initializeColumns(columnCount);
@@ -379,7 +379,7 @@ const MediaLibraryBase = ({
       itemPositions.current.clear();
       processedItems.current.clear();
 
-      console.log(`🎯 Starting sequential loading for ${items.length} items`);
+      // console.log(`🎯 Starting sequential loading for ${items.length} items`);
     }
   }, [items.length, columnCount, viewMode, initializeColumns, initializeHeights]);
 
@@ -407,11 +407,23 @@ const MediaLibraryBase = ({
 
   // Get filtered items - memoized to prevent unnecessary recalculations
   const allFilteredItems = useMemo(() => {
-    console.log('🔍 MediaLibraryBase - filtering items:', items?.length || 0, 'total, filterText:', filterText);
+    // console.log('🔍 MediaLibraryBase - filtering items:', items?.length || 0, 'total, filterText:', filterText);
     const filtered = filterAssets(items, filterText);
-    console.log('✅ MediaLibraryBase - filtered result:', filtered?.length || 0, 'items');
+    // console.log('✅ MediaLibraryBase - filtered result:', filtered?.length || 0, 'items');
     return filtered;
   }, [items, filterText]);
+
+  // Reset masonry state when filter changes
+  useEffect(() => {
+    // Reset all masonry-related state
+    setColumnItems(initializeColumns(columnCount));
+    setColumnHeights(initializeHeights(columnCount));
+    setNextItemIndex(0);
+    processedItems.current.clear();
+    setLoadedStart(0);
+    setLoadedEnd(loadChunkSize);
+    setTotalVisible(loadChunkSize);
+  }, [filterText, initializeColumns, initializeHeights, columnCount, loadChunkSize]);
 
   const totalItems = allFilteredItems.length;
   const visibleItems = allFilteredItems.slice(0, totalVisible);
@@ -437,25 +449,25 @@ const MediaLibraryBase = ({
       chunkBoundaries.current.set(chunkIndex, { start, end });
     }
 
-    console.log(`📋 List view: populated ${totalChunks} chunk boundaries`);
+    // console.log(`📋 List view: populated ${totalChunks} chunk boundaries`);
   }, [viewMode, allFilteredItems.length, loadChunkSize]);
 
   // Get the current item that should be loading (sequential for proper masonry)
   const currentLoadingItem = useMemo(() => {
-    console.log(`🔍 currentLoadingItem check: nextItemIndex=${nextItemIndex}, loadedStart=${loadedStart}, loadedEnd=${loadedEnd}, totalItems=${totalItems}, allFilteredItems.length=${allFilteredItems.length}`);
+    // console.log(`🔍 currentLoadingItem check: nextItemIndex=${nextItemIndex}, loadedStart=${loadedStart}, loadedEnd=${loadedEnd}, totalItems=${totalItems}, allFilteredItems.length=${allFilteredItems.length}`);
 
     if (nextItemIndex < loadedStart || nextItemIndex >= loadedEnd || nextItemIndex >= totalItems) {
-      console.log(`⏸️ No loading item (out of range)`);
+      // console.log(`⏸️ No loading item (out of range)`);
       return null;
     }
 
     const item = allFilteredItems[nextItemIndex];
     if (!item) {
-      console.log(`❌ Item #${nextItemIndex} is undefined in allFilteredItems (length: ${allFilteredItems.length})`);
+      // console.log(`❌ Item #${nextItemIndex} is undefined in allFilteredItems (length: ${allFilteredItems.length})`);
       return null;
     }
 
-    console.log(`🔄 Loading item #${nextItemIndex}: ${getItemFilename(item)}`);
+    // console.log(`🔄 Loading item #${nextItemIndex}: ${getItemFilename(item)}`);
     return { item, index: nextItemIndex };
   }, [nextItemIndex, loadedStart, loadedEnd, totalItems, allFilteredItems, getItemFilename]);
 

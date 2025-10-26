@@ -177,7 +177,16 @@ export const filterAssets = (assets, filterText) => {
     } else {
       // Default behavior: split by whitespace and use AND logic
       const terms = filterLower.split(/\s+/).filter(t => t.length > 0);
-      return terms.every(term => searchableText.includes(term));
+      return terms.every(term => {
+        // For dimension patterns like "300x250", use word boundary matching
+        if (/^\d+x\d+$/.test(term)) {
+          // Match exact dimension (with word boundaries)
+          const dimRegex = new RegExp(`\\b${term}\\b`, 'i');
+          return dimRegex.test(searchableText);
+        }
+        // For other terms, use includes (substring match)
+        return searchableText.includes(term);
+      });
     }
   });
 };
