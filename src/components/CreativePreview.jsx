@@ -49,10 +49,10 @@ const CreativePreview = ({
     }
   };
 
-  // Format title - show MC number, variant and size for dynamic HTML
+  // Format title - show MC number, variant, size and version for dynamic HTML
   const getTitle = () => {
     if (isDynamic && creative.messageData && creative.bannerSize) {
-      return `MC${creative.messageData.number} v${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height}`;
+      return `MC${creative.messageData.number} ${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height} v${creative.messageData.version || 1}`;
     }
     return creative.filename || creative.product || 'Preview';
   };

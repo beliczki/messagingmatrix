@@ -270,7 +270,7 @@ const CreativeLibraryItem = ({
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
           <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
             {isDynamic && creative.messageData && creative.bannerSize
-              ? `MC${creative.messageData.number} v${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height}`
+              ? `MC${creative.messageData.number} ${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height} v${creative.messageData.version || 1}`
               : creative.product || creative.filename
             }
           </h3>
@@ -297,7 +297,7 @@ const CreativeLibraryItem = ({
             )}
           </div>
 
-          {(creative.platforms.length > 0 || creative.tags.length > 0) && (
+          {!isDynamic && (creative.platforms.length > 0 || creative.tags.length > 0) && (
             <div className="flex flex-wrap gap-1 mt-2">
               {creative.platforms.map(platform => (
                 <span key={platform} className="px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
