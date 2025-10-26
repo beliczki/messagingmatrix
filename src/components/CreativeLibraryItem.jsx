@@ -269,19 +269,28 @@ const CreativeLibraryItem = ({
         {/* Hover Overlay with Info */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
           <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
-            {creative.product || creative.filename}
+            {isDynamic && creative.messageData && creative.bannerSize
+              ? `MC${creative.messageData.number} v${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height}`
+              : creative.product || creative.filename
+            }
           </h3>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
-              {creative.extension}
-            </span>
-            {creative.size && (
+            {isDynamic ? (
+              <span className="px-2 py-1 bg-purple-500/80 backdrop-blur-sm text-white rounded text-xs font-medium">
+                Dynamic HTML
+              </span>
+            ) : (
+              <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                {creative.extension}
+              </span>
+            )}
+            {!isDynamic && creative.size && (
               <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
                 {creative.size}
               </span>
             )}
-            {creative.variant && (
+            {!isDynamic && creative.variant && (
               <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
                 v{creative.variant.toUpperCase()}
               </span>
