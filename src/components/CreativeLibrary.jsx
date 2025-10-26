@@ -620,6 +620,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             templateHtml={templateHtml}
             templateConfig={templateConfig}
             templateCss={templateCss}
+            textFormatting={matrixData?.textFormatting || []}
           />
         )}
 
@@ -637,6 +638,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             templateCss={templateCss}
             allCreatives={allFilteredCreatives}
             onNavigate={onNavigate}
+            textFormatting={matrixData?.textFormatting || []}
           />
         )}
 

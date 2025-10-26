@@ -19,7 +19,8 @@ const CreativeLibraryMasonryView = ({
   setNextItemIndex,
   templateHtml,
   templateConfig,
-  templateCss
+  templateCss,
+  textFormatting = []
 }) => {
   return (
     <div className="relative">
@@ -51,6 +52,7 @@ const CreativeLibraryMasonryView = ({
                   templateHtml={templateHtml}
                   templateConfig={templateConfig}
                   templateCss={templateCss}
+                  textFormatting={textFormatting}
                 />
               );
             })}

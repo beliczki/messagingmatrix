@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Check } from 'lucide-react';
 import settings from '../services/settings';
+import { applyTextFormattingSpans } from '../utils/textFormatter';
 
 const CreativeLibraryItem = ({
   creative,
@@ -12,7 +13,8 @@ const CreativeLibraryItem = ({
   savedHeight = 300,
   templateHtml = '',
   templateConfig = null,
-  templateCss = null
+  templateCss = null,
+  textFormatting = []
 }) => {
   const isVideo = creative.extension === 'mp4';
   const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
@@ -73,6 +75,21 @@ const CreativeLibraryItem = ({
         if (binding) {
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
           value = msg[fieldName] || value;
+
+          // Apply text formatting with spans for text fields
+          const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+          if (textFields.includes(fieldName) && value && textFormatting && textFormatting.length > 0) {
+            // Build message identifiers for MC scope matching
+            const msgIdentifiers = {
+              id: String(msg.id),
+              poms_id: msg.poms_id,
+              name: msg.name,
+              number: String(msg.number || ''),
+              variant: msg.variant || '',
+              numberVariant: `${msg.number || ''}${msg.variant || ''}`
+            };
+            value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers);
+          }
 
           // Use path-messagingmatrix for images and videos
           if ((config.type === 'image' || config.type === 'video') && value) {
