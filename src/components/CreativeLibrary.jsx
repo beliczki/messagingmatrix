@@ -629,9 +629,80 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           />
         )}
 
-        // Custom list view (note: MediaLibraryBase expects renderListItem, not a full view component)
-        // For now we'll render null and handle list view separately
-        renderListItem={null}
+        // Custom list view
+        renderListItem={(creative) => {
+          const isDynamic = creative.isDynamic && creative.extension === 'html';
+          const isVideo = creative.extension === 'mp4';
+
+          // Get display name
+          const displayName = isDynamic && creative.messageData && creative.bannerSize
+            ? `MC${creative.messageData.number} ${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height} v${creative.messageData.version || 1}`
+            : creative.filename;
+
+          return (
+            <>
+              <td className="py-3 px-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {isVideo ? (
+                      <video
+                        src={creative.url}
+                        className="w-full h-full object-contain"
+                        preload="metadata"
+                      />
+                    ) : isDynamic ? (
+                      <div className="w-full h-full flex items-center justify-center bg-purple-100 text-purple-600 text-xs font-semibold">
+                        HTML
+                      </div>
+                    ) : (
+                      <img
+                        src={creative.url}
+                        alt={creative.filename}
+                        className="w-full h-full object-contain"
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 truncate">{displayName}</div>
+                    {creative.product && !isDynamic && (
+                      <div className="text-sm text-gray-500">{creative.product}</div>
+                    )}
+                  </div>
+                </div>
+              </td>
+              <td className="py-3 px-4">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  isDynamic
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {isDynamic ? 'Dynamic HTML' : creative.extension?.toUpperCase()}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-700">{creative.size}</td>
+              <td className="py-3 px-4 text-sm text-gray-500">{creative.date}</td>
+              <td className="py-3 px-4">
+                <div className="flex flex-wrap gap-1">
+                  {creative.variant && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                      v{creative.variant.toUpperCase()}
+                    </span>
+                  )}
+                  {creative.platforms?.slice(0, 2).map((platform, i) => (
+                    <span key={i} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                      {platform}
+                    </span>
+                  ))}
+                  {creative.tags?.slice(0, 2).map((tag, i) => (
+                    <span key={i} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </>
+          );
+        }}
 
         // Custom preview using CreativePreview
         renderPreview={(selectedCreative, onClose, allFilteredCreatives, onNavigate) => (
