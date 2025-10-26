@@ -134,8 +134,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         creative => creative.File_driveID && !driveDriveIds.has(creative.File_driveID)
       );
 
-      console.log(`🔄 Sync results: ${newCreatives.length} new, ${deletedCreatives.length} deleted`);
-
       // If no changes, just inform user
       if (newCreatives.length === 0 && deletedCreatives.length === 0) {
         setSyncProgress({
@@ -284,20 +282,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           }
         });
 
-        console.log('📊 Total active messages:', activeMessages.length);
-        console.log('✅ Unique messages after deduplication:', uniqueMessages.length);
-        console.log('🔍 Unique messages:', uniqueMessages.map(m => `MC${m.number}-${m.variant} (ID: ${m.id}, Name: ${m.name})`));
-
         const allMessageCreatives = [];
 
         // Create creatives for each unique message
         uniqueMessages.forEach(message => {
+          // Look up product from audiences based on message.audience
+          const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
+          const product = audience?.product || message.name || `Message ${message.number}`;
+
           const messageCreatives = bannerSizes.map((size) => ({
             id: `mc${message.number}-${message.variant}-${size.width}x${size.height}`,
             filename: `MC${message.number}_${message.variant}_${size.width}x${size.height}.html`,
             extension: 'html',
             url: null,
-            product: message.name || `Message ${message.number}`,
+            product: product,
             size: `${size.width}x${size.height}`,
             variant: message.variant,
             date: new Date().toISOString().split('T')[0],
@@ -626,6 +624,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             templateConfig={templateConfig}
             templateCss={templateCss}
             textFormatting={matrixData?.textFormatting || []}
+            audiences={matrixData?.audiences || []}
           />
         )}
 
@@ -670,15 +669,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                   </div>
                 </div>
               </td>
-              <td className="py-3 px-4">
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  isDynamic
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {isDynamic ? 'Dynamic HTML' : creative.extension?.toUpperCase()}
-                </span>
-              </td>
               <td className="py-3 px-4 text-sm text-gray-700">{creative.size}</td>
               <td className="py-3 px-4 text-sm text-gray-500">{creative.date}</td>
               <td className="py-3 px-4">
@@ -715,6 +705,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             allCreatives={allFilteredCreatives}
             onNavigate={onNavigate}
             textFormatting={matrixData?.textFormatting || []}
+            audiences={matrixData?.audiences || []}
           />
         )}
 

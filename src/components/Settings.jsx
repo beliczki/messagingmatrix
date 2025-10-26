@@ -56,6 +56,11 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       image6: ''
     },
     spreadsheetId: '',
+    googleDrive: {
+      enabled: false,
+      assetsFolderId: '',
+      creativesFolderId: ''
+    },
     treeStructure: 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
     feedStructure: 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2',
     lookAndFeel: {
@@ -107,6 +112,7 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       // Save to config.json via API
       const success = await settings.save({
         spreadsheetId: config.spreadsheetId,
+        googleDrive: config.googleDrive,
         imageBaseUrls: config.imageBaseUrls,
         patterns: config.patterns,
         treeStructure: config.treeStructure,
@@ -239,6 +245,69 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                       <ExternalLink size={14} />
                     </a>
                   )}
+                </div>
+              </div>
+
+              {/* Google Drive Folder IDs */}
+              <div className="pt-4 border-t border-gray-200">
+                <h3 className="text-md font-semibold text-gray-800 mb-4">Google Drive Integration</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Assets Folder ID
+                    </label>
+                    <p className="text-xs text-gray-600 mb-2">
+                      Google Drive folder ID for media library assets
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={config.googleDrive?.assetsFolderId || ''}
+                        onChange={(e) => handleInputChange('googleDrive.assetsFolderId', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        placeholder="Enter Google Drive folder ID for assets"
+                      />
+                      {config.googleDrive?.assetsFolderId && (
+                        <a
+                          href={`https://drive.google.com/drive/folders/${config.googleDrive.assetsFolderId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors"
+                        >
+                          <span>Open</span>
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Creative Library Folder ID
+                    </label>
+                    <p className="text-xs text-gray-600 mb-2">
+                      Google Drive folder ID for creative library files
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={config.googleDrive?.creativesFolderId || ''}
+                        onChange={(e) => handleInputChange('googleDrive.creativesFolderId', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        placeholder="Enter Google Drive folder ID for creatives"
+                      />
+                      {config.googleDrive?.creativesFolderId && (
+                        <a
+                          href={`https://drive.google.com/drive/folders/${config.googleDrive.creativesFolderId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors"
+                        >
+                          <span>Open</span>
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -768,26 +837,6 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
             </div>
           </div>
 
-          {/* Image Base URLs */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Image Base URLs</h2>
-            <div className="space-y-4">
-              {Object.keys(config.imageBaseUrls || {}).map((key) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {key.charAt(0).toUpperCase() + key.slice(1)}
-                  </label>
-                  <input
-                    type="text"
-                    value={config.imageBaseUrls?.[key] || ''}
-                    onChange={(e) => handleInputChange(`imageBaseUrls.${key}`, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder={`https://example.com/path/to/${key}/`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

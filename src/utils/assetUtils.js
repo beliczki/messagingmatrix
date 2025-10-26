@@ -1,5 +1,40 @@
 // Shared utility functions for asset/creative management
 
+// Parse dimensions from various sources (File_dimensions, size field, bannerSize object)
+export const parseDimensions = (creative) => {
+  // Try bannerSize object first (for dynamic HTML creatives)
+  if (creative.bannerSize && creative.bannerSize.width && creative.bannerSize.height) {
+    return {
+      width: creative.bannerSize.width,
+      height: creative.bannerSize.height
+    };
+  }
+
+  // Try File_dimensions or size field (e.g., "300x250")
+  const sizeString = creative.File_dimensions || creative.size || '';
+  const match = sizeString.match(/(\d+)x(\d+)/i);
+  if (match) {
+    return {
+      width: parseInt(match[1]),
+      height: parseInt(match[2])
+    };
+  }
+
+  // Fallback: assume 16:9 aspect ratio for videos, 1:1 for images
+  const extension = (creative.extension || creative.File_format || '').toLowerCase();
+  if (extension === 'mp4' || extension === 'webm' || extension === 'mov') {
+    return { width: 16, height: 9 }; // Video default
+  }
+
+  return { width: 1, height: 1 }; // Square default for images
+};
+
+// Calculate placeholder height for masonry layout
+export const calculatePlaceholderHeight = (creative, columnWidth) => {
+  const dimensions = parseDimensions(creative);
+  return (dimensions.height / dimensions.width) * columnWidth;
+};
+
 // Helper function to extract metadata from filename
 export const extractMetadata = (filename) => {
   const nameWithoutExt = filename.replace(/\.(jpg|jpeg|png|mp4|gif)$/i, '');
@@ -129,8 +164,10 @@ export const filterAssets = (assets, filterText) => {
     Object.keys(asset).forEach(key => {
       const value = asset[key];
 
-      // Skip non-searchable fields
-      if (key === 'url' || key === 'thumbnail' || key === 'id' || key === 'source') {
+      // Skip non-searchable fields (URLs, IDs, Drive IDs, etc.)
+      if (key === 'url' || key === 'thumbnail' || key === 'id' || key === 'source' ||
+          key === 'File_driveID' || key === 'driveId' || key === 'fileId' || key === 'File_ID' ||
+          key === 'fullResUrl') {
         return;
       }
 

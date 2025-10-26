@@ -20,7 +20,8 @@ const CreativeLibraryMasonryView = ({
   templateHtml,
   templateConfig,
   templateCss,
-  textFormatting = []
+  textFormatting = [],
+  audiences = []
 }) => {
   return (
     <div className="relative">
@@ -53,6 +54,7 @@ const CreativeLibraryMasonryView = ({
                   templateConfig={templateConfig}
                   templateCss={templateCss}
                   textFormatting={textFormatting}
+                  audiences={audiences}
                 />
               );
             })}

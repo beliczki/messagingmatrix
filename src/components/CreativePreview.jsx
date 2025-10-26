@@ -11,7 +11,8 @@ const CreativePreview = ({
   templateCss = null,
   allCreatives = [],
   onNavigate = null,
-  textFormatting = []
+  textFormatting = [],
+  audiences = []
 }) => {
   const [infoOpen, setInfoOpen] = useState(false);
 
@@ -23,6 +24,19 @@ const CreativePreview = ({
   const isDynamic = creative.isDynamic && creative.extension === 'html';
   const isPng = creative.extension?.toLowerCase() === 'png';
   const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
+
+  // Get product from audiences based on messageData.audience
+  const getProduct = () => {
+    if (isDynamic && creative.messageData?.audience && audiences.length > 0) {
+      const audience = audiences.find(a => a.key === creative.messageData.audience);
+      return audience?.product || creative.product;
+    }
+    return creative.product;
+  };
+  const product = getProduct();
+
+  // Add product to creative object for display in info panel
+  const creativeWithProduct = product ? { ...creative, Product: product } : creative;
 
   useEffect(() => {
     // Reset to initial URL when creative changes
@@ -210,7 +224,7 @@ const CreativePreview = ({
         <div className="w-96 flex-shrink-0">
           <div className="p-4 space-y-2">
           {/* Display all asset properties */}
-          {Object.entries(creative).map(([key, value]) => {
+          {Object.entries(creativeWithProduct).map(([key, value]) => {
             // Skip some non-display fields
             if (['url', 'thumbnail', 'isPlaceholder', 'isDynamic', 'messageData', 'bannerSize'].includes(key)) {
               return null;

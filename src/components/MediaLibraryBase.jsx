@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Image as ImageIcon, Info } from 'lucide-react';
 import PageHeader from './PageHeader';
-import { filterAssets } from '../utils/assetUtils';
+import { filterAssets, calculatePlaceholderHeight } from '../utils/assetUtils';
 
 /**
  * MediaLibraryBase - Shared base component for Assets and Creative Library
@@ -93,6 +93,58 @@ const MediaLibraryBase = ({
     return heights;
   }, []);
 
+  // Build masonry layout with placeholders using known dimensions from spreadsheet
+  const buildMasonryWithPlaceholders = useCallback((filteredItems, colCount) => {
+    if (!gridRef.current || filteredItems.length === 0) {
+      return {
+        columns: initializeColumns(colCount),
+        heights: initializeHeights(colCount),
+        chunks: new Map()
+      };
+    }
+
+    const columns = initializeColumns(colCount);
+    const heights = initializeHeights(colCount);
+    const chunks = new Map();
+    const columnWidth = (gridRef.current?.offsetWidth || 1000) / colCount - 16;
+
+    // Distribute items to columns based on calculated placeholder heights
+    filteredItems.forEach((item, index) => {
+      // Calculate placeholder height from dimensions
+      const placeholderHeight = calculatePlaceholderHeight(item, columnWidth);
+
+      // Find shortest column
+      const heightsArray = Object.values(heights);
+      const shortestCol = heightsArray.indexOf(Math.min(...heightsArray));
+
+      // Add to column with index info
+      columns[shortestCol].push({ ...item, originalIndex: index });
+
+      // Update chunk boundaries
+      const chunkIndex = Math.floor(index / loadChunkSize);
+      const itemYStart = heights[shortestCol];
+      const itemYEnd = heights[shortestCol] + placeholderHeight;
+
+      const existingBoundary = chunks.get(chunkIndex);
+      if (existingBoundary) {
+        chunks.set(chunkIndex, {
+          start: Math.min(existingBoundary.start, itemYStart),
+          end: Math.max(existingBoundary.end, itemYEnd)
+        });
+      } else {
+        chunks.set(chunkIndex, {
+          start: itemYStart,
+          end: itemYEnd
+        });
+      }
+
+      // Update column height
+      heights[shortestCol] += placeholderHeight + 16; // 16px gap
+    });
+
+    return { columns, heights, chunks };
+  }, [gridRef, loadChunkSize, initializeColumns, initializeHeights]);
+
   const [columnItems, setColumnItems] = useState(() => initializeColumns(columnCount));
   const [columnHeights, setColumnHeights] = useState(() => initializeHeights(columnCount));
   const [nextItemIndex, setNextItemIndex] = useState(0);
@@ -144,59 +196,32 @@ const MediaLibraryBase = ({
       return;
     }
 
-    // Grid view: calculate dynamic heights and add to masonry columns
+    // Grid view with new placeholder system:
+    // - Items are already placed in columns from buildMasonryWithPlaceholders
+    // - We just need to mark them as loaded by expanding loadedEnd
+    // - Layout height is already estimated from File_dimensions, keeping layout stable
+
+    // Expand the loaded range to include this item
+    setLoadedEnd(prev => Math.max(prev, itemIndex + 1));
+
+    // Store actual dimensions for reference (optional, for future use)
     const extension = getItemExtension(item);
     const isVideo = extension === 'mp4';
     const media = event.target;
     const mediaHeight = isVideo ? media.videoHeight : media.naturalHeight;
     const mediaWidth = isVideo ? media.videoWidth : media.naturalWidth;
 
-    // console.log(`📐 Item #${itemIndex} dimensions: ${mediaWidth}x${mediaHeight}`);
+    if (mediaHeight && mediaWidth) {
+      const currentColumnCount = Object.keys(columnHeightsRef.current).length;
+      const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
+      const renderedHeight = (mediaHeight / mediaWidth) * columnWidth;
 
-    const currentColumnCount = Object.keys(columnHeightsRef.current).length;
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
-    const renderedHeight = (mediaHeight / mediaWidth) * columnWidth;
-
-    const heights = Object.values(columnHeightsRef.current);
-    const shortestCol = heights.indexOf(Math.min(...heights));
-
-    const chunkIndex = Math.floor(itemIndex / loadChunkSize);
-    const itemYStart = columnHeightsRef.current[shortestCol];
-    const itemYEnd = columnHeightsRef.current[shortestCol] + renderedHeight;
-
-    const existingBoundary = chunkBoundaries.current.get(chunkIndex);
-    if (existingBoundary) {
-      chunkBoundaries.current.set(chunkIndex, {
-        start: Math.min(existingBoundary.start, itemYStart),
-        end: Math.max(existingBoundary.end, itemYEnd)
-      });
-    } else {
-      chunkBoundaries.current.set(chunkIndex, {
-        start: itemYStart,
-        end: itemYEnd
+      itemPositions.current.set(itemId, {
+        height: renderedHeight
       });
     }
 
-    itemPositions.current.set(itemId, {
-      height: renderedHeight
-    });
-
-    setColumnItems(prev => {
-      const updated = { ...prev };
-      updated[shortestCol] = [...updated[shortestCol], { ...item, originalIndex: itemIndex }];
-      return updated;
-    });
-
-    setColumnHeights(prev => {
-      const newHeights = {
-        ...prev,
-        [shortestCol]: prev[shortestCol] + renderedHeight + 16
-      };
-      columnHeightsRef.current = newHeights;
-      return newHeights;
-    });
-
-    // console.log(`✅ Item #${itemIndex} added to column ${shortestCol}, triggering next item #${itemIndex + 1}`);
+    // console.log(`✅ Item #${itemIndex} loaded (range: 0-${itemIndex + 1}), moving to next`);
     setNextItemIndex(itemIndex + 1);
   }, [loadChunkSize, viewMode, getItemId, getItemFilename, getItemExtension]);
 
@@ -304,84 +329,10 @@ const MediaLibraryBase = ({
     };
   }, [handleScroll]);
 
-  // Reset state when filter changes
-  useEffect(() => {
-    const emptyColumns = initializeColumns(columnCount);
-    const emptyHeights = initializeHeights(columnCount);
+  // Removed: Old sequential loading reset effects
+  // Now handled by placeholder-based masonry building below
 
-    setTotalVisible(loadChunkSize * 2);
-    setLoadedStart(0);
-    setLoadedEnd(loadChunkSize * 2);
-    setColumnItems(emptyColumns);
-    setColumnHeights(emptyHeights);
-
-    columnItemsRef.current = emptyColumns;
-    columnHeightsRef.current = emptyHeights;
-
-    chunkBoundaries.current.clear();
-    itemPositions.current.clear();
-    processedItems.current.clear();
-
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-
-    // Force reload by resetting nextItemIndex after state updates
-    setTimeout(() => {
-      setNextItemIndex(0);
-    }, 0);
-  }, [filterText, loadChunkSize, columnCount, initializeColumns, initializeHeights]);
-
-  // Clear column assignments when view mode changes
-  useEffect(() => {
-    const emptyColumns = initializeColumns(columnCount);
-    const emptyHeights = initializeHeights(columnCount);
-
-    setTotalVisible(loadChunkSize * 2);
-    setLoadedStart(0);
-    setLoadedEnd(loadChunkSize * 2);
-    setColumnItems(emptyColumns);
-    setColumnHeights(emptyHeights);
-
-    columnItemsRef.current = emptyColumns;
-    columnHeightsRef.current = emptyHeights;
-
-    chunkBoundaries.current.clear();
-    itemPositions.current.clear();
-    processedItems.current.clear();
-
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-
-    // Force reload by resetting nextItemIndex after state updates
-    setTimeout(() => {
-      setNextItemIndex(0);
-    }, 0);
-  }, [viewMode, columnCount, loadChunkSize, initializeColumns, initializeHeights]);
-
-  // Reset and start loading when items change
-  useEffect(() => {
-    // console.log(`📊 Items changed: length=${items.length}, viewMode=${viewMode}, columnCount=${columnCount}`);
-
-    if (items.length > 0 && (viewMode === 'grid3' || viewMode === 'grid4')) {
-      const emptyColumns = initializeColumns(columnCount);
-      const emptyHeights = initializeHeights(columnCount);
-
-      setColumnItems(emptyColumns);
-      setColumnHeights(emptyHeights);
-      setNextItemIndex(0);
-
-      columnItemsRef.current = emptyColumns;
-      columnHeightsRef.current = emptyHeights;
-
-      chunkBoundaries.current.clear();
-      itemPositions.current.clear();
-      processedItems.current.clear();
-
-      // console.log(`🎯 Starting sequential loading for ${items.length} items`);
-    }
-  }, [items.length, columnCount, viewMode, initializeColumns, initializeHeights]);
+  // Removed: Items change effect - now handled by placeholder building
 
   // When loaded range changes, only reload the newly visible items
   useEffect(() => {
@@ -413,17 +364,28 @@ const MediaLibraryBase = ({
     return filtered;
   }, [items, filterText]);
 
-  // Reset masonry state when filter changes
+  // Build masonry with placeholders when filter changes (instant layout!)
   useEffect(() => {
-    // Reset all masonry-related state
-    setColumnItems(initializeColumns(columnCount));
-    setColumnHeights(initializeHeights(columnCount));
-    setNextItemIndex(0);
+    if (viewMode !== 'grid3' && viewMode !== 'grid4') return;
+
+    const filtered = filterAssets(items, filterText);
+
+    // Build entire masonry layout with placeholders using known dimensions
+    const { columns, heights, chunks } = buildMasonryWithPlaceholders(filtered, columnCount);
+
+    setColumnItems(columns);
+    setColumnHeights(heights);
+    chunkBoundaries.current = chunks;
     processedItems.current.clear();
+
+    // Set visible range to show all items as placeholders initially
     setLoadedStart(0);
-    setLoadedEnd(loadChunkSize);
-    setTotalVisible(loadChunkSize);
-  }, [filterText, initializeColumns, initializeHeights, columnCount, loadChunkSize]);
+    setLoadedEnd(0); // Start with no items loaded - they're all placeholders
+    setTotalVisible(filtered.length);
+    setNextItemIndex(0); // Start loading from the beginning
+
+    console.log(`📐 Built masonry with ${filtered.length} placeholders across ${columnCount} columns`);
+  }, [filterText, items, viewMode, columnCount, buildMasonryWithPlaceholders]);
 
   const totalItems = allFilteredItems.length;
   const visibleItems = allFilteredItems.slice(0, totalVisible);
@@ -456,8 +418,9 @@ const MediaLibraryBase = ({
   const currentLoadingItem = useMemo(() => {
     // console.log(`🔍 currentLoadingItem check: nextItemIndex=${nextItemIndex}, loadedStart=${loadedStart}, loadedEnd=${loadedEnd}, totalItems=${totalItems}, allFilteredItems.length=${allFilteredItems.length}`);
 
-    if (nextItemIndex < loadedStart || nextItemIndex >= loadedEnd || nextItemIndex >= totalItems) {
-      // console.log(`⏸️ No loading item (out of range)`);
+    // With placeholder system, allow loading up to totalItems (items are already placed in columns as placeholders)
+    if (nextItemIndex >= totalItems) {
+      // console.log(`⏸️ No loading item (all items loaded)`);
       return null;
     }
 
