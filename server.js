@@ -1663,13 +1663,26 @@ app.get('/api/drive/download/:fileId', async (req, res) => {
     // Get file metadata first
     const metadata = await driveStorage.getFileMetadata(fileId);
 
+    // Use file ID + modified time as ETag
+    const etag = `"${fileId}-${metadata.modifiedTime || 'static'}"`;
+
+    // Check if client has cached version
+    const clientEtag = req.headers['if-none-match'];
+    if (clientEtag === etag) {
+      res.status(304).end();
+      return;
+    }
+
     // Download file
     const fileData = await driveStorage.downloadFile(fileId);
 
-    // Set headers
+    // Set headers with caching
     res.setHeader('Content-Type', metadata.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${metadata.name}"`);
     res.setHeader('Content-Length', fileData.length);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache downloads for 1 hour
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', new Date(metadata.modifiedTime || Date.now()).toUTCString());
 
     // Send file
     res.send(fileData);
@@ -1829,15 +1842,28 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
       console.log(`Found file: ${files[0].name} (ID: ${fileId})`);
     }
 
+    // Get file metadata first to check ETag
+    const metadata = await driveStorage.getFileMetadata(fileId);
+
+    // Use file ID + modified time as ETag for cache validation
+    const etag = `"${fileId}-${metadata.modifiedTime || 'static'}"`;
+
+    // Check if client has cached version
+    const clientEtag = req.headers['if-none-match'];
+    if (clientEtag === etag) {
+      // File hasn't changed, return 304 Not Modified
+      res.status(304).end();
+      return;
+    }
+
     // Download file from Drive
     const fileData = await driveStorage.downloadFile(fileId);
 
-    // Get file metadata to set proper content type
-    const metadata = await driveStorage.getFileMetadata(fileId);
-
-    // Set appropriate headers
+    // Set appropriate headers with strong caching
     res.setHeader('Content-Type', metadata.mimeType || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year, immutable
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', new Date(metadata.modifiedTime || Date.now()).toUTCString());
 
     // Send the file data
     res.send(fileData);
