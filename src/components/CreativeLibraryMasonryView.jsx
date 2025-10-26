@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import CreativeLibraryItem from './CreativeLibraryItem';
 
 const CreativeLibraryMasonryView = ({
@@ -23,6 +23,9 @@ const CreativeLibraryMasonryView = ({
   textFormatting = [],
   audiences = []
 }) => {
+  // Track which items have already been loaded to prevent duplicate calls
+  const loadedItemsRef = useRef(new Set());
+
   return (
     <div className="relative">
       {/* Background container */}
@@ -98,8 +101,10 @@ const CreativeLibraryMasonryView = ({
                       ref={(el) => {
                         loadingImageRef.current = el;
                         // Check if image already loaded (cached)
-                        if (el && el.complete && el.naturalHeight !== 0) {
+                        const itemId = `${itemIndex}-${item.filename}`;
+                        if (el && el.complete && el.naturalHeight !== 0 && !loadedItemsRef.current.has(itemId)) {
                           console.log(`✅ Image already loaded (cached): ${item.filename}`);
+                          loadedItemsRef.current.add(itemId);
                           // Trigger the handler directly since onLoad won't fire
                           handleImageLoaded(item, itemIndex, { target: el });
                         }

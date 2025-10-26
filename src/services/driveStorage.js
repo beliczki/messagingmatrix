@@ -347,6 +347,12 @@ class DriveStorageService {
         ? this.config.creativesFolderId
         : this.config.assetsFolderId;
 
+      // Check if folder ID is configured
+      if (!folderId) {
+        console.warn(`Folder ID not configured for ${folderType}, returning empty results`);
+        return [];
+      }
+
       // Escape single quotes in searchTerm for query
       const escapedTerm = searchTerm.replace(/'/g, "\\'");
 

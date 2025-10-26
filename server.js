@@ -1809,8 +1809,11 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
   try {
     const { fileIdOrName } = req.params;
 
-    // Ensure Drive storage is initialized
-    driveStorage.ensureInitialized();
+    // Check if Drive storage is initialized
+    if (!driveStorage.initialized) {
+      console.warn(`Drive proxy request for ${fileIdOrName} but Drive is not initialized`);
+      return res.status(404).json({ error: 'Google Drive integration is disabled' });
+    }
 
     let fileId = fileIdOrName;
 

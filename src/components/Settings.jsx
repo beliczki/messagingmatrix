@@ -308,6 +308,29 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
                       )}
                     </div>
                   </div>
+
+                  {/* Enable Google Drive Toggle */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={config.googleDrive?.enabled || false}
+                          onChange={(e) => handleInputChange('googleDrive.enabled', e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">Enable Google Drive Integration</span>
+                        <p className="text-xs text-gray-600 mt-1">
+                          When enabled, the application will sync assets and creatives with Google Drive folders.
+                          This allows automatic syncing of files, loading images via proxy API, and managing files directly in Drive.
+                          When disabled, only local spreadsheet data will be used.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>

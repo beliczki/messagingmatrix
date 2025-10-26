@@ -633,6 +633,49 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           const isDynamic = creative.isDynamic && creative.extension === 'html';
           const isVideo = creative.extension === 'mp4';
 
+          // Get product from audiences based on messageData.audience
+          const getProduct = () => {
+            if (isDynamic && creative.messageData?.audience && matrixData?.audiences?.length > 0) {
+              const audience = matrixData.audiences.find(a => a.key === creative.messageData.audience);
+              return audience?.product || creative.product;
+            }
+            return creative.product;
+          };
+          const product = getProduct();
+
+          // Get thumbnail for dynamic HTML - use first non-empty background image with template config path
+          const getThumbnailUrl = () => {
+            if (!isDynamic || !creative.messageData || !templateConfig) return creative.url;
+
+            const msg = creative.messageData;
+
+            // Check background images in order: image1, image2, image3, image4
+            const backgroundImages = [
+              { placeholderName: 'background_image_1', value: msg.image1 },
+              { placeholderName: 'background_image_2', value: msg.image2 },
+              { placeholderName: 'background_image_3', value: msg.image3 },
+              { placeholderName: 'background_image_4', value: msg.image4 }
+            ];
+
+            for (const img of backgroundImages) {
+              // Skip empty values and empty.png
+              if (img.value && img.value.toLowerCase() !== 'empty.png') {
+                // Get path from template config
+                const placeholder = templateConfig.placeholders?.[img.placeholderName];
+                const pathPrefix = placeholder?.['path-messagingmatrix'] || '';
+
+                // Build full URL
+                if (img.value.startsWith('http://') || img.value.startsWith('https://')) {
+                  return img.value;
+                }
+                return pathPrefix + img.value;
+              }
+            }
+
+            return null; // No background image found
+          };
+          const thumbnailUrl = getThumbnailUrl();
+
           // Get display name
           const displayName = isDynamic && creative.messageData && creative.bannerSize
             ? `MC${creative.messageData.number} ${creative.variant.toUpperCase()} ${creative.bannerSize.width}x${creative.bannerSize.height} v${creative.messageData.version || 1}`
@@ -642,13 +685,30 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             <>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0 relative">
                     {isVideo ? (
                       <video
                         src={creative.url}
                         className="w-full h-full object-contain"
                         preload="metadata"
                       />
+                    ) : isDynamic && thumbnailUrl ? (
+                      <>
+                        {/* Fallback HTML placeholder */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-purple-100 text-purple-600 text-xs font-semibold">
+                          HTML
+                        </div>
+                        {/* Thumbnail image - will hide fallback if loaded successfully */}
+                        <img
+                          src={thumbnailUrl}
+                          alt={creative.filename}
+                          className="absolute inset-0 w-full h-full object-cover bg-white"
+                          onError={(e) => {
+                            // Hide image on error to reveal fallback
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      </>
                     ) : isDynamic ? (
                       <div className="w-full h-full flex items-center justify-center bg-purple-100 text-purple-600 text-xs font-semibold">
                         HTML
@@ -670,25 +730,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                 </div>
               </td>
               <td className="py-3 px-4 text-sm text-gray-700">{creative.size}</td>
+              <td className="py-3 px-4 text-sm text-gray-500">
+                {isDynamic && creative.messageData?.template ? creative.messageData.template : ''}
+              </td>
               <td className="py-3 px-4 text-sm text-gray-500">{creative.date}</td>
               <td className="py-3 px-4">
-                <div className="flex flex-wrap gap-1">
-                  {creative.variant && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                      v{creative.variant.toUpperCase()}
-                    </span>
-                  )}
-                  {creative.platforms?.slice(0, 2).map((platform, i) => (
-                    <span key={i} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
-                      {platform}
-                    </span>
-                  ))}
-                  {creative.tags?.slice(0, 2).map((tag, i) => (
-                    <span key={i} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                {product && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                    {product}
+                  </span>
+                )}
               </td>
             </>
           );
