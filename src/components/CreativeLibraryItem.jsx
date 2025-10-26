@@ -189,9 +189,10 @@ const CreativeLibraryItem = ({
         )}
         {isVideo && (
           <video
-            src={creative.url}
+            src={creative.fullResUrl || creative.url}
             className="w-full h-auto object-cover"
             preload="metadata"
+            poster={creative.url !== creative.fullResUrl ? creative.url : undefined}
           />
         )}
         {isDynamic && creative.bannerSize && (() => {

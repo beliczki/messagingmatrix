@@ -1858,15 +1858,41 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
 
     // Download file from Drive
     const fileData = await driveStorage.downloadFile(fileId);
+    const fileSize = fileData.length;
 
-    // Set appropriate headers with strong caching
-    res.setHeader('Content-Type', metadata.mimeType || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year, immutable
-    res.setHeader('ETag', etag);
-    res.setHeader('Last-Modified', new Date(metadata.modifiedTime || Date.now()).toUTCString());
+    // Handle byte-range requests (crucial for video seeking and caching)
+    const range = req.headers.range;
 
-    // Send the file data
-    res.send(fileData);
+    if (range) {
+      // Parse range header (e.g., "bytes=0-1023")
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+
+      // Slice the file buffer
+      const chunk = fileData.slice(start, end + 1);
+
+      // Send 206 Partial Content response
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Length', chunksize);
+      res.setHeader('Content-Type', metadata.mimeType || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', new Date(metadata.modifiedTime || Date.now()).toUTCString());
+      res.send(chunk);
+    } else {
+      // Send full file
+      res.setHeader('Content-Type', metadata.mimeType || 'application/octet-stream');
+      res.setHeader('Content-Length', fileSize);
+      res.setHeader('Accept-Ranges', 'bytes'); // Advertise range support
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', new Date(metadata.modifiedTime || Date.now()).toUTCString());
+      res.send(fileData);
+    }
   } catch (error) {
     console.error('Error proxying Drive file:', error);
     res.status(500).json({ error: 'Failed to proxy Drive file' });
