@@ -347,15 +347,36 @@ class DriveStorageService {
         ? this.config.creativesFolderId
         : this.config.assetsFolderId;
 
-      // Use only name search (not fullText) to allow sorting
-      const query = `'${folderId}' in parents and name contains '${searchTerm}' and trashed=false`;
+      // Escape single quotes in searchTerm for query
+      const escapedTerm = searchTerm.replace(/'/g, "\\'");
 
-      const response = await this.drive.files.list({
+      // Try exact match first
+      let query = `'${folderId}' in parents and name = '${escapedTerm}' and trashed=false`;
+      console.log(`Drive query (exact): ${query}`);
+
+      let response = await this.drive.files.list({
         q: query,
         pageSize: 100,
         fields: 'files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime, properties, description, imageMediaMetadata(width, height), videoMediaMetadata(width, height))',
         orderBy: 'name',
       });
+
+      console.log(`Exact match found ${response.data.files ? response.data.files.length : 0} files`);
+
+      // If no exact match, try contains search
+      if (!response.data.files || response.data.files.length === 0) {
+        query = `'${folderId}' in parents and name contains '${escapedTerm}' and trashed=false`;
+        console.log(`Drive query (contains): ${query}`);
+
+        response = await this.drive.files.list({
+          q: query,
+          pageSize: 100,
+          fields: 'files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime, properties, description, imageMediaMetadata(width, height), videoMediaMetadata(width, height))',
+          orderBy: 'name',
+        });
+
+        console.log(`Contains search found ${response.data.files ? response.data.files.length : 0} files`);
+      }
 
       return response.data.files || [];
     } catch (error) {

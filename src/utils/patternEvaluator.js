@@ -42,9 +42,17 @@ export function evaluatePattern(pattern, context) {
  * @returns {string} - Evaluated value
  */
 function evaluateExpression(expression, context) {
-  // Handle simple variables first
+  // Handle simple variables first - try exact match first, then case-insensitive
   if (context.hasOwnProperty(expression)) {
     return String(context[expression] || '');
+  }
+
+  // Try case-insensitive match
+  const expressionLower = expression.toLowerCase();
+  for (const key in context) {
+    if (key.toLowerCase() === expressionLower) {
+      return String(context[key] || '');
+    }
   }
 
   // Handle array access patterns like audiences[key].field

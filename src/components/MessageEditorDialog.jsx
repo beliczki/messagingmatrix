@@ -25,7 +25,9 @@ const MessageEditorDialog = ({
   activeTab,
   setActiveTab,
   isGeneratingContent,
-  handleGenerateContent
+  handleGenerateContent,
+  selectedProducts = [],
+  selectedStatuses = []
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -348,25 +350,54 @@ const MessageEditorDialog = ({
           // Text fields that should get span-based formatting
           const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
 
+          // Build message identifiers for MC scope matching
+          const msgIdentifiers = {
+            id: String(editingMessage.id),
+            poms_id: editingMessage.poms_id,
+            name: editingMessage.name,
+            number: String(editingMessage.number || ''),
+            variant: editingMessage.variant || '',
+            numberVariant: `${editingMessage.number || ''}${editingMessage.variant || ''}`
+          };
+
+          // Debug: log message identifiers and text formatting rules
+          // if (fieldName === 'headline') {
+          //   console.log('🔧 Preview generation for headline:', {
+          //     messageNumber: editingMessage.number,
+          //     messageVariant: editingMessage.variant,
+          //     identifiers: msgIdentifiers,
+          //     headlineText: editingMessage.headline,
+          //     textFormattingRulesCount: textFormatting?.length || 0,
+          //     hasHeadlineRules: textFormatting?.filter(r => r.text_original === editingMessage.headline).length || 0
+          //   });
+          // }
+
           // Map message fields to values (including style fields and span-formatted text)
           const fieldMap = {
-            'headline': textFields.includes('headline') && editingMessage.headline
-              ? applyTextFormattingSpans(editingMessage.headline, textFormatting)
-              : editingMessage.headline,
+            'headline': (() => {
+              if (textFields.includes('headline') && editingMessage.headline) {
+                const formatted = applyTextFormattingSpans(editingMessage.headline, textFormatting, msgIdentifiers);
+                // if (formatted.includes('<span')) {
+                //   console.log('📝 Preview: Added spans to headline:', formatted.substring(0, 150) + '...');
+                // }
+                return formatted;
+              }
+              return editingMessage.headline;
+            })(),
             'copy1': textFields.includes('copy1') && editingMessage.copy1
-              ? applyTextFormattingSpans(editingMessage.copy1, textFormatting)
+              ? applyTextFormattingSpans(editingMessage.copy1, textFormatting, msgIdentifiers)
               : editingMessage.copy1,
             'copy2': textFields.includes('copy2') && editingMessage.copy2
-              ? applyTextFormattingSpans(editingMessage.copy2, textFormatting)
+              ? applyTextFormattingSpans(editingMessage.copy2, textFormatting, msgIdentifiers)
               : editingMessage.copy2,
             'flash': textFields.includes('flash') && editingMessage.flash
-              ? applyTextFormattingSpans(editingMessage.flash, textFormatting)
+              ? applyTextFormattingSpans(editingMessage.flash, textFormatting, msgIdentifiers)
               : editingMessage.flash,
             'cta': textFields.includes('cta') && editingMessage.cta
-              ? applyTextFormattingSpans(editingMessage.cta, textFormatting)
+              ? applyTextFormattingSpans(editingMessage.cta, textFormatting, msgIdentifiers)
               : editingMessage.cta,
             'disclaimer': textFields.includes('disclaimer') && editingMessage.disclaimer
-              ? applyTextFormattingSpans(editingMessage.disclaimer, textFormatting)
+              ? applyTextFormattingSpans(editingMessage.disclaimer, textFormatting, msgIdentifiers)
               : editingMessage.disclaimer,
             'image1': editingMessage.image1,
             'image2': editingMessage.image2,
@@ -425,18 +456,57 @@ const MessageEditorDialog = ({
     return html;
   };
 
-  // Get all messages for navigation
-  const allMessages = messages
-    .filter(m => m.status !== 'deleted')
+  // Get filtered messages for navigation (only those visible in matrix)
+  const filteredMessages = messages
+    .filter(m => {
+      // Filter out deleted messages
+      if (m.status === 'deleted') return false;
+
+      // Get audience for this message to check product filter
+      const audience = audiences.find(a => a.key === m.audience);
+
+      // Filter by product if products are selected
+      if (selectedProducts.length > 0 && audience) {
+        if (!selectedProducts.includes(audience.product)) {
+          return false;
+        }
+      }
+
+      // Filter by status if statuses are selected
+      if (selectedStatuses.length > 0) {
+        const messageStatus = (m.status || 'PLANNED').toUpperCase();
+        if (!selectedStatuses.includes(messageStatus)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+  // Group by unique variant (number + variant) and keep only one representative per variant
+  const variantMap = new Map();
+  filteredMessages.forEach(m => {
+    const variantKey = `${m.number}-${m.variant || 'a'}`;
+    if (!variantMap.has(variantKey)) {
+      variantMap.set(variantKey, m);
+    }
+  });
+
+  // Get unique variants sorted by number and variant
+  const uniqueVariants = Array.from(variantMap.values())
     .sort((a, b) => {
       // Sort by number first, then by variant
       if (a.number !== b.number) return a.number - b.number;
       return (a.variant || 'a').localeCompare(b.variant || 'a');
     });
 
-  const currentIndex = allMessages.findIndex(m => m.id === editingMessage.id);
+  // Find current variant
+  const currentVariantKey = `${editingMessage.number}-${editingMessage.variant || 'a'}`;
+  const currentIndex = uniqueVariants.findIndex(m =>
+    `${m.number}-${m.variant || 'a'}` === currentVariantKey
+  );
   const hasPrevious = currentIndex > 0;
-  const hasNext = currentIndex < allMessages.length - 1;
+  const hasNext = currentIndex < uniqueVariants.length - 1;
 
   // Determine status color from lookAndFeel config
   const status = (editingMessage.status || 'PLANNED').toUpperCase();
@@ -466,6 +536,21 @@ const MessageEditorDialog = ({
     m.variant === editingMessage.variant &&
     m.status !== 'deleted'
   );
+
+  // Helper function to update message and sync to variants
+  const updateMessageWithSync = (messageId, updates) => {
+    // Update the main message
+    updateMessage(messageId, updates);
+
+    // Sync to all variant copies (excluding audience and pmmid)
+    if (syncedMessages.length > 0) {
+      syncedMessages.forEach(syncedMsg => {
+        // Create a copy of updates but exclude audience-specific fields
+        const { audience, pmmid, ...syncUpdates } = updates;
+        updateMessage(syncedMsg.id, syncUpdates);
+      });
+    }
+  };
 
   // Determine if preview should be on side or top based on width
   const [width, height] = previewSize.split('x').map(Number);
@@ -650,14 +735,14 @@ const MessageEditorDialog = ({
             <button
               onClick={() => {
                 if (hasPrevious) {
-                  setEditingMessage(allMessages[currentIndex - 1]);
+                  setEditingMessage(uniqueVariants[currentIndex - 1]);
                 } else {
                   // Wrap around to last message
-                  setEditingMessage(allMessages[allMessages.length - 1]);
+                  setEditingMessage(uniqueVariants[uniqueVariants.length - 1]);
                 }
               }}
               className="p-1 hover:bg-gray-100 rounded"
-              title="Previous message (all variants)"
+              title="Previous variant"
             >
               <ChevronLeft size={20} />
             </button>
@@ -668,14 +753,14 @@ const MessageEditorDialog = ({
             <button
               onClick={() => {
                 if (hasNext) {
-                  setEditingMessage(allMessages[currentIndex + 1]);
+                  setEditingMessage(uniqueVariants[currentIndex + 1]);
                 } else {
                   // Wrap around to first message
-                  setEditingMessage(allMessages[0]);
+                  setEditingMessage(uniqueVariants[0]);
                 }
               }}
               className="p-1 hover:bg-gray-100 rounded"
-              title="Next message (all variants)"
+              title="Next variant"
             >
               <ChevronRight size={20} />
             </button>
@@ -945,7 +1030,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         name: editingMessage.name,
                         number: editingMessage.number,
                         variant: editingMessage.variant,
@@ -962,7 +1047,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         name: editingMessage.name,
                         number: editingMessage.number,
                         variant: editingMessage.variant,
@@ -1115,10 +1200,9 @@ const MessageEditorDialog = ({
 
                     {renderTextInputWithFormatting('disclaimer', 'Disclaimer', 'textarea', 2)}
 
-                    <div className="grid grid-cols-2 gap-4">
-                      {renderTextInputWithFormatting('flash', 'Flash', 'input')}
-                      {renderTextInputWithFormatting('cta', 'CTA', 'input')}
-                    </div>
+                    {renderTextInputWithFormatting('flash', 'Flash', 'input')}
+
+                    {renderTextInputWithFormatting('cta', 'CTA', 'input')}
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Landing URL</label>
@@ -1282,7 +1366,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         headline: editingMessage.headline,
                         copy1: editingMessage.copy1,
                         copy2: editingMessage.copy2,
@@ -1307,7 +1391,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         headline: editingMessage.headline,
                         copy1: editingMessage.copy1,
                         copy2: editingMessage.copy2,
@@ -1500,7 +1584,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         headline_style: editingMessage.headline_style,
                         copy1_style: editingMessage.copy1_style,
                         copy2_style: editingMessage.copy2_style,
@@ -1516,7 +1600,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         headline_style: editingMessage.headline_style,
                         copy1_style: editingMessage.copy1_style,
                         copy2_style: editingMessage.copy2_style,
@@ -1643,7 +1727,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         utm_campaign: editingMessage.utm_campaign,
                         utm_source: editingMessage.utm_source,
                         utm_medium: editingMessage.utm_medium,
@@ -1659,7 +1743,7 @@ const MessageEditorDialog = ({
                   </button>
                   <button
                     onClick={() => {
-                      updateMessage(editingMessage.id, {
+                      updateMessageWithSync(editingMessage.id, {
                         utm_campaign: editingMessage.utm_campaign,
                         utm_source: editingMessage.utm_source,
                         utm_medium: editingMessage.utm_medium,

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon, Check, ChevronDown } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
+import { applyTextFormattingSpans } from '../utils/textFormatter';
 import ClaudeChat from './ClaudeChat';
 import TreeView from './TreeView';
 import KeywordEditor from './KeywordEditor';
@@ -260,6 +261,12 @@ const Matrix = ({
       try {
         await settings.ensureInitialized();
         const config = settings.getAll();
+        console.log('📋 Loading structures from settings:', {
+          hasFeedStructure: !!config.feedStructure,
+          hasPatterns: !!config.patterns,
+          hasFeedPatterns: !!config.patterns?.feed,
+          feedPatternsCount: config.patterns?.feed ? Object.keys(config.patterns.feed).length : 0
+        });
         if (config.treeStructure) {
           setTreeStructure(config.treeStructure);
         }
@@ -268,7 +275,12 @@ const Matrix = ({
         }
         // Load feed patterns from patterns.feed
         if (config.patterns?.feed) {
+          const patternKeys = Object.keys(config.patterns.feed);
+          console.log('📋 Setting feed patterns count:', patternKeys.length);
+          console.log('📋 All pattern names:', patternKeys);
           setFeedPatterns(config.patterns.feed);
+        } else {
+          console.warn('⚠️ No feed patterns found in settings.patterns.feed');
         }
       } catch (error) {
         console.error('Error loading structures:', error);
@@ -330,8 +342,8 @@ const Matrix = ({
 
   // Sync feedPatterns with feedStructure - ensure all columns have patterns
   useEffect(() => {
-    // Don't sync if patterns haven't loaded yet
-    if (!feedStructure || Object.keys(feedPatterns).length === 0) {
+    // Only sync if feedStructure exists - feedPatterns being empty is OK now due to smart fallback
+    if (!feedStructure) {
       return;
     }
 
@@ -339,23 +351,17 @@ const Matrix = ({
     const updatedPatterns = { ...feedPatterns };
     let needsUpdate = false;
 
-    // Add missing patterns for new columns
-    columns.forEach(colName => {
-      if (!updatedPatterns[colName]) {
-        // Create default pattern using normalized field name
-        const normalizedFieldName = colName.toLowerCase().replace(/[:\-\s]/g, '_');
-        updatedPatterns[colName] = `{{${normalizedFieldName}}}`;
-        needsUpdate = true;
-      }
-    });
-
-    // Remove patterns for columns that no longer exist
-    Object.keys(updatedPatterns).forEach(key => {
-      if (!columns.includes(key)) {
-        delete updatedPatterns[key];
-        needsUpdate = true;
-      }
-    });
+    // Only add patterns if feedPatterns has been initialized (has at least one entry)
+    // This prevents overwriting user-configured patterns
+    if (Object.keys(feedPatterns).length > 0) {
+      // Remove patterns for columns that no longer exist
+      Object.keys(updatedPatterns).forEach(key => {
+        if (!columns.includes(key)) {
+          delete updatedPatterns[key];
+          needsUpdate = true;
+        }
+      });
+    }
 
     if (needsUpdate) {
       setFeedPatterns(updatedPatterns);
@@ -419,11 +425,78 @@ const Matrix = ({
 
   // Generate feed data for state dialog and CSV export
   const feedData = useMemo(() => {
-    if (!feedStructure || Object.keys(feedPatterns).length === 0) {
+    if (!feedStructure) {
       return [];
     }
 
     const columns = feedStructure.split(',').map(col => col.trim());
+
+    // Smart fallback pattern mapping for common feed column formats
+    const getDefaultPattern = (name) => {
+      // Remove prefix like "Text:", "Asset:", "LP:" etc.
+      const cleanName = name.replace(/^[^:]+:/, '');
+      const cleanNameLower = cleanName.toLowerCase();
+
+      // Common mappings for feed columns to message fields (case-insensitive)
+      const commonMappings = {
+        // Text fields
+        'headline_text_1': '{{headline}}',
+        'headline_text': '{{headline}}',
+        'headline': '{{headline}}',
+        'copy_text_1': '{{copy1}}',
+        'copy1': '{{copy1}}',
+        'copy_text_2': '{{copy2}}',
+        'copy2': '{{copy2}}',
+        'click_text': '{{cta}}',
+        'cta_text_1': '{{cta}}',
+        'cta': '{{cta}}',
+        'flash_text': '{{flash}}',
+        'sticker_text_1': '{{flash}}',
+        'flash': '{{flash}}',
+        'disclaimer_text': '{{disclaimer}}',
+        'disclaimer': '{{disclaimer}}',
+        // Style fields
+        'headline_style_1': '{{headline_style}}',
+        'headline_style': '{{headline_style}}',
+        'copy_style_1': '{{copy1_style}}',
+        'copy1_style': '{{copy1_style}}',
+        'copy_style_2': '{{copy2_style}}',
+        'copy2_style': '{{copy2_style}}',
+        'flash_style': '{{flash_style}}',
+        'sticker_style_1': '{{flash_style}}',
+        'cta_style': '{{cta_style}}',
+        'cta_style_1': '{{cta_style}}',
+        'disclaimer_style': '{{disclaimer_style}}',
+        'css_styles': '{{css}}',
+        'css': '{{css}}',
+        // Other fields
+        'template_variant_class': '{{template_variant_classes}}',
+        'template_variant_classes': '{{template_variant_classes}}',
+        'messaging_card_id': '{{number}}',
+        'messaging_card_variant': '{{variant}}',
+        'advert_name': '{{name}}',
+        'name': '{{name}}',
+        'number': '{{number}}',
+        'variant': '{{variant}}',
+        'landingurl': '{{landingUrl}}',
+        'clicktag': '{{landingUrl}}',
+        // Image fields
+        'background_image_1': '{{image1}}',
+        'image1': '{{image1}}',
+        'background_image_2': '{{image2}}',
+        'image2': '{{image2}}',
+        'background_image_3': '{{image3}}',
+        'image3': '{{image3}}',
+        'background_image_4': '{{image4}}',
+        'image4': '{{image4}}',
+        'sticker_image_1': '{{image6}}',
+        'image6': '{{image6}}',
+        'background_image_logo': '{{image5}}',
+        'image5': '{{image5}}'
+      };
+
+      return commonMappings[cleanNameLower] || `{{${cleanNameLower}}}`;
+    };
 
     return messages.map((msg) => {
       const status = (msg.status || 'PLANNED').toUpperCase();
@@ -442,13 +515,43 @@ const Matrix = ({
       // Build feed row object
       const feedRow = {};
       columns.forEach(colName => {
-        const pattern = feedPatterns[colName] || `{{${colName.toLowerCase().replace(/[:\-\s]/g, '_')}}}`;
-        feedRow[colName] = evaluatePattern(pattern, context);
+        const pattern = feedPatterns[colName] || getDefaultPattern(colName);
+        let cellValue = evaluatePattern(pattern, context);
+
+        // Apply text formatting with spans for text fields (case-insensitive check)
+        const patternLower = pattern.toLowerCase();
+        const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+        const isTextField = textFields.some(field =>
+          patternLower.includes(`{{${field}}}`)
+        );
+
+        if (isTextField && cellValue) {
+          // Pass message object with multiple identifiers for MC scope matching
+          const msgIdentifiers = {
+            id: String(msg.id),
+            poms_id: msg.poms_id,
+            name: msg.name,
+            number: String(msg.number || ''),
+            variant: msg.variant || '',
+            numberVariant: `${msg.number || ''}${msg.variant || ''}`
+          };
+          cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers);
+        }
+
+        feedRow[colName] = cellValue;
       });
 
       return feedRow;
     });
-  }, [messages, audiences, topics, feedStructure, feedPatterns]);
+  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting]);
+
+  // Generate feedFields structure for saving
+  const feedFields = useMemo(() => {
+    if (!feedStructure) return [];
+
+    const columns = feedStructure.split(',').map(col => col.trim());
+    return columns.map(header => ({ header }));
+  }, [feedStructure]);
 
   // Download feed as CSV
   const downloadFeedCSV = () => {
@@ -674,7 +777,7 @@ const Matrix = ({
 
         // Actually save on step 1 (after "Preparing data")
         if (i === 0) {
-          await save(null, null, assets);
+          await save(feedData, feedFields, assets);
         }
       }
 
@@ -1246,14 +1349,21 @@ const Matrix = ({
             lookAndFeel={lookAndFeel}
           />
         ) : viewMode === 'feed' ? (
-          <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 97px - 57px)' }}>
+          <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 97px - 57px)', width: '100%' }}>
             {/* Feed Table */}
-            <div className="flex-1 overflow-auto">
-              <table className="w-full border-collapse">
+            <div className="flex-1 overflow-auto" style={{ width: '100%' }}>
+              {(() => {
+                console.log('🔍 FEED VIEW RENDERING');
+                console.log('Messages count:', messages.length);
+                console.log('Feed patterns count:', Object.keys(feedPatterns).length);
+                console.log('Feed structure:', feedStructure);
+                return null;
+              })()}
+              <table className="border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
                     {feedStructure.split(',').map((col, idx) => (
-                      <th key={idx} className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                      <th key={idx} className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700" style={{ whiteSpace: 'nowrap' }}>
                         {col.trim()}
                       </th>
                     ))}
@@ -1267,14 +1377,35 @@ const Matrix = ({
                       </td>
                     </tr>
                   ) : (
-                    messages
-                      .filter(msg => {
+                    (() => {
+                      const filteredMsgs = messages.filter(msg => {
                         // Filter by status if any status filters are selected
-                        if (statusFilters.length === 0) return true;
-                        const msgStatus = (msg.status || 'PLANNED').toUpperCase();
-                        return statusFilters.includes(msgStatus);
-                      })
-                      .map((msg) => {
+                        if (statusFilters.length > 0) {
+                          const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+                          if (!statusFilters.includes(msgStatus)) return false;
+                        }
+
+                        // Filter by product if any product filters are selected
+                        if (productFilters.length > 0) {
+                          const audience = audiences.find(a => a.key === msg.audience);
+                          const topic = topics.find(t => t.key === msg.topic);
+                          const audienceProduct = audience?.product;
+                          const topicProduct = topic?.product;
+
+                          // Message matches if either audience or topic product is in the filter
+                          const matchesProduct =
+                            (audienceProduct && productFilters.includes(audienceProduct)) ||
+                            (topicProduct && productFilters.includes(topicProduct));
+
+                          if (!matchesProduct) return false;
+                        }
+
+                        return true;
+                      });
+
+                      console.log('🔍 Filtered messages for feed:', filteredMsgs.length, 'of', messages.length);
+
+                      return filteredMsgs.map((msg, msgIdx) => {
                         const audience = audiences.find(a => a.key === msg.audience);
                         const topic = topics.find(t => t.key === msg.topic);
                         const status = (msg.status || 'PLANNED').toUpperCase();
@@ -1292,8 +1423,97 @@ const Matrix = ({
                           {feedStructure.split(',').map((col, idx) => {
                             const colName = col.trim();
 
-                            // Get pattern for this column - exact match only
-                            const pattern = feedPatterns[colName] || `{{${colName.toLowerCase().replace(/[:\-\s]/g, '_')}}}`;
+                            // Smart fallback pattern mapping for common feed column formats
+                            const getDefaultPattern = (name) => {
+                              // Remove prefix like "Text:", "Asset:", "LP:" etc.
+                              const cleanName = name.replace(/^[^:]+:/, '');
+                              const cleanNameLower = cleanName.toLowerCase();
+
+                              // Common mappings for feed columns to message fields (case-insensitive)
+                              const commonMappings = {
+                                // Text fields
+                                'headline_text_1': '{{headline}}',
+                                'headline_text': '{{headline}}',
+                                'headline': '{{headline}}',
+                                'copy_text_1': '{{copy1}}',
+                                'copy1': '{{copy1}}',
+                                'copy_text_2': '{{copy2}}',
+                                'copy2': '{{copy2}}',
+                                'click_text': '{{cta}}',
+                                'cta_text_1': '{{cta}}',
+                                'cta': '{{cta}}',
+                                'flash_text': '{{flash}}',
+                                'sticker_text_1': '{{flash}}',
+                                'flash': '{{flash}}',
+                                'disclaimer_text': '{{disclaimer}}',
+                                'disclaimer': '{{disclaimer}}',
+                                // Style fields
+                                'headline_style_1': '{{headline_style}}',
+                                'headline_style': '{{headline_style}}',
+                                'copy_style_1': '{{copy1_style}}',
+                                'copy1_style': '{{copy1_style}}',
+                                'copy_style_2': '{{copy2_style}}',
+                                'copy2_style': '{{copy2_style}}',
+                                'flash_style': '{{flash_style}}',
+                                'sticker_style_1': '{{flash_style}}',
+                                'cta_style': '{{cta_style}}',
+                                'cta_style_1': '{{cta_style}}',
+                                'disclaimer_style': '{{disclaimer_style}}',
+                                'css_styles': '{{css}}',
+                                'css': '{{css}}',
+                                // Other fields
+                                'template_variant_class': '{{template_variant_classes}}',
+                                'template_variant_classes': '{{template_variant_classes}}',
+                                'messaging_card_id': '{{number}}',
+                                'messaging_card_variant': '{{variant}}',
+                                'advert_name': '{{name}}',
+                                'name': '{{name}}',
+                                'number': '{{number}}',
+                                'variant': '{{variant}}',
+                                'landingurl': '{{landingUrl}}',
+                                'clicktag': '{{landingUrl}}',
+                                // Image fields
+                                'background_image_1': '{{image1}}',
+                                'image1': '{{image1}}',
+                                'background_image_2': '{{image2}}',
+                                'image2': '{{image2}}',
+                                'background_image_3': '{{image3}}',
+                                'image3': '{{image3}}',
+                                'background_image_4': '{{image4}}',
+                                'image4': '{{image4}}',
+                                'sticker_image_1': '{{image6}}',
+                                'image6': '{{image6}}',
+                                'background_image_logo': '{{image5}}',
+                                'image5': '{{image5}}'
+                              };
+
+                              return commonMappings[cleanNameLower] || `{{${cleanNameLower}}}`;
+                            };
+
+                            // Get pattern for this column - use feedPatterns first, then smart fallback
+                            let pattern = feedPatterns[colName];
+                            const usingFallback = !pattern;
+                            if (!pattern) {
+                              pattern = getDefaultPattern(colName);
+                            }
+
+                            // Debug: log columns for first message
+                            if (msgIdx === 0) {
+                              if (idx === 0) {
+                                console.log('\n🔍 Feed View Column Debugging (First Message):');
+                                console.log('Total feedPatterns loaded:', Object.keys(feedPatterns).length);
+                                if (Object.keys(feedPatterns).length > 0) {
+                                  console.log('Sample patterns:', Object.entries(feedPatterns).slice(0, 3));
+                                }
+                                console.log('Available msg fields:', Object.keys(msg).filter(k => !['id', 'topic', 'audience'].includes(k)));
+                                console.log('---');
+                              }
+                              console.log(`Column "${colName}":`, {
+                                pattern,
+                                usingFallback,
+                                hasInSettings: !!feedPatterns[colName]
+                              });
+                            }
 
                             // Build context for pattern evaluation
                             const context = {
@@ -1309,17 +1529,63 @@ const Matrix = ({
                             };
 
                             // Evaluate pattern to get cell value
-                            const cellValue = evaluatePattern(pattern, context);
+                            let cellValue = evaluatePattern(pattern, context);
+
+                            // Debug: log result for first message
+                            if (msgIdx === 0) {
+                              const fieldName = pattern.replace(/[{}]/g, '');
+                              console.log(`  → Result:`, cellValue ? `"${cellValue.substring(0, 40)}${cellValue.length > 40 ? '...' : ''}"` : '(EMPTY)');
+                              console.log(`  → msg.${fieldName}:`, msg[fieldName] !== undefined ? msg[fieldName] : '(undefined)');
+                            }
+
+                            // Truncate long fields for display (but keep full data in title)
+                            let displayValue = cellValue;
+                            if (cellValue) {
+                              // Truncate CSS to 20 chars
+                              if (pattern.includes('{{css}}')) {
+                                displayValue = cellValue.length > 20 ? cellValue.substring(0, 20) + '...' : cellValue;
+                              }
+                              // Truncate clickTAG/landing URL to 20 chars
+                              else if (colName.toLowerCase().includes('clicktag') || colName.toLowerCase().includes('landing')) {
+                                displayValue = cellValue.length > 20 ? cellValue.substring(0, 20) + '...' : cellValue;
+                              }
+                            }
+
+                            // Apply text formatting with spans for text fields (case-insensitive check)
+                            const patternLower = pattern.toLowerCase();
+                            const textFieldPatterns = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+                            const isTextField = textFieldPatterns.some(field =>
+                              patternLower.includes(`{{${field}}}`)
+                            );
+
+                            if (isTextField && cellValue) {
+                              const originalValue = cellValue;
+                              // Pass message object with multiple identifiers for MC scope matching
+                              const msgIdentifiers = {
+                                id: String(msg.id),
+                                poms_id: msg.poms_id,
+                                name: msg.name,
+                                number: String(msg.number || ''),
+                                variant: msg.variant || '',
+                                numberVariant: `${msg.number || ''}${msg.variant || ''}`
+                              };
+                              displayValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers);
+                              // Debug: log when spans are added
+                              // if (msgIdx === 0 && displayValue.includes('<span')) {
+                              //   console.log(`✨ Added spans to "${colName}":`, displayValue.substring(0, 100) + '...');
+                              // }
+                            }
 
                             return (
-                              <td key={idx} className="border border-gray-300 px-4 py-2 text-sm text-gray-700">
-                                {cellValue}
+                              <td key={idx} className="border border-gray-300 px-4 py-2 text-sm text-gray-700" title={displayValue}>
+                                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{displayValue}</div>
                               </td>
                             );
                           })}
                         </tr>
                       );
-                    })
+                    });
+                  })()
                   )}
                 </tbody>
               </table>
@@ -1588,6 +1854,8 @@ const Matrix = ({
         setActiveTab={setActiveTab}
         isGeneratingContent={isGeneratingContent}
         handleGenerateContent={handleGenerateContent}
+        selectedProducts={currentProducts}
+        selectedStatuses={currentStatuses}
       />
 
       {/* Audience Edit Dialog */}

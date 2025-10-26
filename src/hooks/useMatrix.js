@@ -99,6 +99,16 @@ export const useMatrix = () => {
           }
         });
 
+      // Debug: log feed data being saved
+      // if (feedData && feedData.length > 0) {
+      //   console.log('💾 Saving feed data to spreadsheet:', {
+      //     rowCount: feedData.length,
+      //     columnCount: feedFields?.length || 0,
+      //     firstRowSample: feedData[0],
+      //     hasSpans: JSON.stringify(feedData[0]).includes('<span')
+      //   });
+      // }
+
       await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData);
       setLastSync(new Date());
     } catch (err) {

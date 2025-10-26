@@ -107,22 +107,22 @@ const TemplatePreview = ({
           // Map all message fields including style and CSS with span-formatted text
           const fieldMap = {
             'headline': textFields.includes('headline') && msg.headline
-              ? applyTextFormattingSpans(msg.headline, textFormatting)
+              ? applyTextFormattingSpans(msg.headline, textFormatting, msg.id)
               : msg.headline,
             'copy1': textFields.includes('copy1') && msg.copy1
-              ? applyTextFormattingSpans(msg.copy1, textFormatting)
+              ? applyTextFormattingSpans(msg.copy1, textFormatting, msg.id)
               : msg.copy1,
             'copy2': textFields.includes('copy2') && msg.copy2
-              ? applyTextFormattingSpans(msg.copy2, textFormatting)
+              ? applyTextFormattingSpans(msg.copy2, textFormatting, msg.id)
               : msg.copy2,
             'flash': textFields.includes('flash') && msg.flash
-              ? applyTextFormattingSpans(msg.flash, textFormatting)
+              ? applyTextFormattingSpans(msg.flash, textFormatting, msg.id)
               : msg.flash,
             'cta': textFields.includes('cta') && msg.cta
-              ? applyTextFormattingSpans(msg.cta, textFormatting)
+              ? applyTextFormattingSpans(msg.cta, textFormatting, msg.id)
               : msg.cta,
             'disclaimer': textFields.includes('disclaimer') && msg.disclaimer
-              ? applyTextFormattingSpans(msg.disclaimer, textFormatting)
+              ? applyTextFormattingSpans(msg.disclaimer, textFormatting, msg.id)
               : msg.disclaimer,
             'image1': msg.image1,
             'image2': msg.image2,

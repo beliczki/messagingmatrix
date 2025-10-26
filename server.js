@@ -10,7 +10,7 @@ import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
 import sizeOf from 'image-size';
 import driveStorage from './src/services/driveStorage.js';
-import { applyTextFormattingSpans } from './utils/textFormatter.js';
+import { applyTextFormattingSpans } from './src/utils/textFormatter.js';
 
 dotenv.config();
 
@@ -273,7 +273,7 @@ app.post('/api/config', (req, res) => {
 // Add text formatting rule
 app.post('/api/textformatting', async (req, res) => {
   try {
-    const { text_original, text_formatted, formatting_scope } = req.body;
+    const { text_original, text_formatted, formatting_scope, formatting_mc_scope } = req.body;
 
     if (!text_original || !text_formatted) {
       return res.status(400).json({ error: 'text_original and text_formatted are required' });
@@ -296,7 +296,7 @@ app.post('/api/textformatting', async (req, res) => {
     // Read current textformats sheet
     const getResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'textformats!A:D'
+      range: 'textformats!A:E'
     });
 
     const currentData = getResponse.data.values || [];
@@ -313,13 +313,14 @@ app.post('/api/textformatting', async (req, res) => {
       nextId.toString(),
       text_original,
       text_formatted,
-      formatting_scope || ''
+      formatting_scope || '',
+      formatting_mc_scope || ''
     ];
 
     // Append new row
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'textformats!A:D',
+      range: 'textformats!A:E',
       valueInputOption: 'RAW',
       resource: {
         values: [newRow]
@@ -359,7 +360,7 @@ app.post('/api/textformatting/batch', async (req, res) => {
     // Read current textformats sheet
     const getResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'textformats!A:D'
+      range: 'textformats!A:E'
     });
 
     const currentData = getResponse.data.values || [];
@@ -377,7 +378,8 @@ app.post('/api/textformatting/batch', async (req, res) => {
         (nextId++).toString(),
         rule.text_original,
         rule.text_formatted,
-        rule.formatting_scope || ''
+        rule.formatting_scope || '',
+        rule.formatting_mc_scope || ''
       ];
       return row;
     });
@@ -385,7 +387,7 @@ app.post('/api/textformatting/batch', async (req, res) => {
     // Append all rows at once
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'textformats!A:D',
+      range: 'textformats!A:E',
       valueInputOption: 'RAW',
       resource: {
         values: newRows
@@ -484,7 +486,16 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
 
         // Apply span-based text formatting for text fields
         if (textFields.includes(fieldName) && value && textFormatting && textFormatting.length > 0) {
-          value = applyTextFormattingSpans(value, textFormatting);
+          // Build message identifiers for MC scope matching
+          const msgIdentifiers = {
+            id: String(messageData.id),
+            poms_id: messageData.poms_id,
+            name: messageData.name,
+            number: String(messageData.number || ''),
+            variant: messageData.variant || '',
+            numberVariant: `${messageData.number || ''}${messageData.variant || ''}`
+          };
+          value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers);
         }
 
         // Build full image URL if this is an image field
@@ -1799,14 +1810,17 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
 
       // Search in both assets and creatives folders
       let files = await driveStorage.searchFiles(fileIdOrName, 'assets');
+      console.log(`Assets search returned ${files.length} results`);
 
       if (files.length === 0) {
         // Try creatives folder if not found in assets
         files = await driveStorage.searchFiles(fileIdOrName, 'creatives');
+        console.log(`Creatives search returned ${files.length} results`);
       }
 
       if (files.length === 0) {
         console.error(`File not found: ${fileIdOrName}`);
+        console.log(`Attempted search in both assets and creatives folders`);
         return res.status(404).json({ error: `File not found: ${fileIdOrName}` });
       }
 

@@ -326,6 +326,17 @@ class SheetsService {
           feedFields.map(field => row[field.header] || '')
         )
       ];
+
+      // Debug: log first row being written to Feed sheet
+      // if (feedRows.length > 1) {
+      //   console.log('📊 Writing to Feed sheet:', {
+      //     headerCount: feedRows[0].length,
+      //     dataRowCount: feedRows.length - 1,
+      //     firstDataRow: feedRows[1],
+      //     hasSpansInFirstRow: feedRows[1].some(cell => typeof cell === 'string' && cell.includes('<span'))
+      //   });
+      // }
+
       promises.push(this.write('Feed', feedRows));
     }
 
@@ -633,11 +644,18 @@ class SheetsService {
           ? scopeStr.split(',').map(s => s.trim()).filter(s => s)
           : []; // Empty array means all sizes
 
+        const mcScopeStr = this.getValue(row, columnMap, 'Formatting_MC_Scope');
+        // Parse MC scope: empty = global (all MCs), comma-separated = specific MC IDs
+        const mcScope = mcScopeStr
+          ? mcScopeStr.split(',').map(s => s.trim()).filter(s => s)
+          : []; // Empty array means global (all messaging cards)
+
         return {
           id: this.getValue(row, columnMap, 'ID'),
           text_original: this.getValue(row, columnMap, 'Text_original'),
           text_formatted: this.getValue(row, columnMap, 'Text_formatted'),
-          formatting_scope: scope
+          formatting_scope: scope,
+          formatting_mc_scope: mcScope
         };
       })
       .filter(rule => rule.text_original); // Only include rules with original text
