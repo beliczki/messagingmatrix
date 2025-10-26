@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Check } from 'lucide-react';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -19,6 +19,29 @@ const CreativeLibraryItem = ({
   const isVideo = creative.extension === 'mp4';
   const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
   const isDynamic = creative.isDynamic && creative.extension === 'html';
+
+  // Progressive loading: start with thumbnail, upgrade to full res
+  const [displayUrl, setDisplayUrl] = useState(creative.url);
+
+  useEffect(() => {
+    // Reset to thumbnail when creative changes
+    setDisplayUrl(creative.url);
+
+    // Only upgrade if we have a different full resolution URL and this is an image
+    if (creative.fullResUrl && creative.fullResUrl !== creative.url && isImage && !isOutsideRange) {
+      // Preload the full resolution image in the background
+      const img = new Image();
+      img.onload = () => {
+        // Once loaded, upgrade to full resolution
+        setDisplayUrl(creative.fullResUrl);
+      };
+      img.onerror = () => {
+        // If full res fails to load, keep the thumbnail
+        console.warn(`Failed to load full res for ${creative.filename}, keeping thumbnail`);
+      };
+      img.src = creative.fullResUrl;
+    }
+  }, [creative.id, creative.url, creative.fullResUrl, isImage, isOutsideRange, creative.filename]);
 
   let longPressTimer = null;
   let isLongPress = false;
@@ -158,7 +181,7 @@ const CreativeLibraryItem = ({
         {/* Media Content */}
         {isImage && (
           <img
-            src={creative.url}
+            src={displayUrl}
             alt={creative.filename}
             className="w-full h-auto object-cover"
             loading="lazy"

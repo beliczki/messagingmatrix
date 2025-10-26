@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Info, ExternalLink } from 'lucide-react';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -15,10 +15,31 @@ const CreativePreview = ({
 }) => {
   const [infoOpen, setInfoOpen] = useState(false);
 
+  // Progressive loading: start with thumbnail, upgrade to full res
+  const [displayUrl, setDisplayUrl] = useState(creative?.url);
+
   if (!creative) return null;
 
   const isDynamic = creative.isDynamic && creative.extension === 'html';
   const isPng = creative.extension?.toLowerCase() === 'png';
+  const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(creative.extension);
+
+  useEffect(() => {
+    // Reset to initial URL when creative changes
+    setDisplayUrl(creative.url);
+
+    // Upgrade to full resolution if available
+    if (creative.fullResUrl && creative.fullResUrl !== creative.url && isImage) {
+      const img = new Image();
+      img.onload = () => {
+        setDisplayUrl(creative.fullResUrl);
+      };
+      img.onerror = () => {
+        console.warn(`Failed to load full res for ${creative.filename}, keeping thumbnail`);
+      };
+      img.src = creative.fullResUrl;
+    }
+  }, [creative.id, creative.url, creative.fullResUrl, isImage, creative.filename]);
 
   // Checkerboard pattern for transparent PNG images
   const checkerboardStyle = isPng ? {
@@ -337,7 +358,7 @@ const CreativePreview = ({
             <video src={creative.url} controls autoPlay className="max-w-full max-h-full rounded-lg" />
           ) : (
             <div className="flex items-center justify-center rounded-lg" style={checkerboardStyle}>
-              <img src={creative.url} alt={creative.filename} className="max-w-full max-h-full rounded-lg" style={{ display: 'block' }} />
+              <img src={displayUrl} alt={creative.filename} className="max-w-full max-h-full rounded-lg" style={{ display: 'block' }} />
             </div>
           )}
         </div>

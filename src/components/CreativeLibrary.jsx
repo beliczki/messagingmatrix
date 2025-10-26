@@ -245,11 +245,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         }
       }
 
+      // Progressive loading: start with thumbnail, upgrade to full res
+      const fullResUrl = creative.File_driveID ? `/api/drive/proxy/${creative.File_driveID}` : creative.File_DirectLink;
+      const thumbnailUrl = creative.File_thumbnail || fullResUrl;
+
       return {
         id: creative.File_driveID || creative.ID,
         filename: creative.File_name,
         extension: creative.File_format,
-        url: creative.File_driveID ? `/api/drive/proxy/${creative.File_driveID}` : creative.File_DirectLink,
+        url: thumbnailUrl, // Start with thumbnail
+        fullResUrl: fullResUrl, // Store full resolution URL for later upgrade
         product: creative.Product || creative.File_name,
         size: creative.File_dimensions || '',
         date: creative.File_date || '',
