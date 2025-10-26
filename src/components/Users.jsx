@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Users as UsersIcon, Key, X, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from './PageHeader';
+import AIAssistant from './AIAssistant';
 
-const Users = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
+const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const { getAllUsers, changePassword } = useAuth();
   const [users, setUsers] = useState([]);
   const [changingPasswordFor, setChangingPasswordFor] = useState(null);
@@ -241,6 +242,12 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           </div>
         </div>
       )}
+
+      {/* AI Assistant */}
+      <AIAssistant
+        moduleContext={{ module: 'users' }}
+        matrixData={matrixData}
+      />
     </div>
   );
 };

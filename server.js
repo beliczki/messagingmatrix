@@ -107,7 +107,9 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+// Increase JSON body size limit to 50MB for base64 images in AI Assistant
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Google Sheets API endpoints
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -436,6 +438,119 @@ app.post('/api/claude', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Server error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Assistant Prompts endpoints
+const promptsDir = __dirname; // Root directory
+
+// Map of module names to filenames
+const promptFileMap = {
+  'matrix': 'AIMatrixInstructions.txt',
+  'creative-library': 'AICreativeLibraryInstructions.txt',
+  'assets': 'AIAssetsInstructions.txt',
+  'monitoring': 'AIMonitoringInstructions.txt',
+  'templates': 'AITemplatesInstructions.txt',
+  'users': 'AIUsersInstructions.txt',
+  'tasks': 'AITasksInstructions.txt',
+  'settings': 'AISettingsInstructions.txt'
+};
+
+// Get AI prompt for a specific module
+app.get('/api/ai-prompts/:module', (req, res) => {
+  try {
+    const { module } = req.params;
+    const filename = promptFileMap[module];
+
+    if (!filename) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const filePath = path.join(promptsDir, filename);
+
+    // If file doesn't exist, return empty string (will use default)
+    if (!fs.existsSync(filePath)) {
+      return res.json({ prompt: '' });
+    }
+
+    const prompt = fs.readFileSync(filePath, 'utf8');
+    res.json({ prompt });
+  } catch (error) {
+    console.error('Error reading AI prompt:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save AI prompt for a specific module
+app.post('/api/ai-prompts/:module', (req, res) => {
+  try {
+    const { module } = req.params;
+    const { prompt } = req.body;
+    const filename = promptFileMap[module];
+
+    if (!filename) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const filePath = path.join(promptsDir, filename);
+
+    // Ensure prompt is a string
+    const promptStr = typeof prompt === 'string' ? prompt : '';
+
+    // If prompt is empty, delete the file (will revert to default)
+    if (!promptStr || promptStr.trim() === '') {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return res.json({ success: true, message: 'Prompt reset to default' });
+    }
+
+    // Save prompt to file
+    fs.writeFileSync(filePath, promptStr, 'utf8');
+    res.json({ success: true, message: 'Prompt saved successfully' });
+  } catch (error) {
+    console.error('Error saving AI prompt:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all AI prompts at once
+app.get('/api/ai-prompts', (req, res) => {
+  try {
+    const prompts = {};
+
+    Object.keys(promptFileMap).forEach(module => {
+      const filename = promptFileMap[module];
+      const filePath = path.join(promptsDir, filename);
+
+      if (fs.existsSync(filePath)) {
+        prompts[module] = fs.readFileSync(filePath, 'utf8');
+      } else {
+        prompts[module] = '';
+      }
+    });
+
+    res.json(prompts);
+  } catch (error) {
+    console.error('Error reading AI prompts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get AI data structure documentation
+app.get('/api/ai-data-structure', (req, res) => {
+  try {
+    const filePath = path.join(promptsDir, 'AIMessagingMatrixDataStructure.txt');
+
+    if (!fs.existsSync(filePath)) {
+      return res.json({ content: '' });
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    res.json({ content });
+  } catch (error) {
+    console.error('Error reading data structure file:', error);
     res.status(500).json({ error: error.message });
   }
 });

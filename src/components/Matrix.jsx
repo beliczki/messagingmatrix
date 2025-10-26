@@ -3,7 +3,7 @@ import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
-import ClaudeChat from './ClaudeChat';
+import AIAssistant from './AIAssistant';
 import TreeView from './TreeView';
 import KeywordEditor from './KeywordEditor';
 import MessageEditorDialog from './MessageEditorDialog';
@@ -1946,14 +1946,10 @@ const Matrix = ({
         />
       )}
 
-      {/* Claude Chat Module */}
-      <ClaudeChat
+      {/* AI Assistant */}
+      <AIAssistant
         ref={claudeChatRef}
-        matrixState={{
-          audiences,
-          topics,
-          messages
-        }}
+        matrixState={matrixData}
         onAddAudience={addAudience}
         onAddTopic={addTopic}
         onAddMessage={addMessage}

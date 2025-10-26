@@ -1,8 +1,9 @@
 import React from 'react';
 import { BarChart3 } from 'lucide-react';
 import PageHeader from './PageHeader';
+import AIAssistant from './AIAssistant';
 
-const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
+const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -22,6 +23,12 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
           </div>
         </div>
       </div>
+
+      {/* AI Assistant */}
+      <AIAssistant
+        moduleContext={{ module: 'monitoring' }}
+        matrixData={matrixData}
+      />
     </div>
   );
 };

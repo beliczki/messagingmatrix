@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Filter, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
+import AIAssistant from './AIAssistant';
 import CreativePreview from './CreativePreview';
 import AssetsMasonryView from './AssetsMasonryView';
 import MediaLibraryBase from './MediaLibraryBase';
@@ -10,6 +11,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   // Get assets from matrixData (loaded from spreadsheet)
   const { assets: spreadsheetAssets, setAssets: setSpreadsheetAssets } = matrixData;
   const [assets, setAssets] = useState([]);
+  const [filteredAssets, setFilteredAssets] = useState([]);
   const [driveEnabled, setDriveEnabled] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
@@ -166,6 +168,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Assets'}
         onMenuToggle={onMenuToggle}
+        onFilteredItemsChange={setFilteredAssets}
         getItemId={(asset) => asset.ID}
         getItemExtension={(asset) => asset.File_format}
         getItemUrl={(asset) => {
@@ -440,6 +443,19 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
           </div>
         </div>
       )}
+
+      {/* AI Assistant */}
+      <AIAssistant
+        moduleContext={{ module: 'assets' }}
+        matrixData={matrixData}
+        filteredItems={filteredAssets}
+        getItemUrl={(asset) => {
+          if (asset.File_driveID) {
+            return `/api/drive/proxy/${asset.File_driveID}`;
+          }
+          return asset.File_DirectLink || asset.File_thumbnail;
+        }}
+      />
     </>
   );
 };

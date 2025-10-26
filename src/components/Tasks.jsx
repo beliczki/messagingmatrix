@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
-import ClaudeChat from './ClaudeChat';
+import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
 
 const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
@@ -446,8 +446,8 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         buckets={buckets}
       />
 
-      {/* Claude Chat Module */}
-      <ClaudeChat
+      {/* AI Assistant */}
+      <AIAssistant
         ref={claudeChatRef}
         taskContext={{
           tasks,

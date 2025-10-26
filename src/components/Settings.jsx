@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles } from 'lucide-react';
 import settings from '../services/settings';
 import PageHeader, { getButtonStyle } from './PageHeader';
+import AIAssistant from './AIAssistant';
+import { callClaudeAPI } from '../api/claude-proxy';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -31,7 +33,7 @@ const parseStyle = (styleString) => {
   return styleObj;
 };
 
-const Settings = ({ onMenuToggle, currentModuleName }) => {
+const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [config, setConfig] = useState({
     patterns: {
       pmmid: '',
@@ -84,10 +86,36 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [aiPrompts, setAiPrompts] = useState({});
+  const [generatingModule, setGeneratingModule] = useState(null);
+  const [dataStructureDoc, setDataStructureDoc] = useState('');
+  const [readmeDoc, setReadmeDoc] = useState('');
 
   useEffect(() => {
     loadConfig();
+    loadAiPrompts();
+    loadContextDocuments();
   }, []);
+
+  const loadContextDocuments = async () => {
+    try {
+      // Load data structure documentation
+      const dataStructResponse = await fetch('/api/ai-data-structure');
+      if (dataStructResponse.ok) {
+        const { content } = await dataStructResponse.json();
+        setDataStructureDoc(content);
+      }
+
+      // Load README
+      const readmeResponse = await fetch('/README.md');
+      if (readmeResponse.ok) {
+        const readmeText = await readmeResponse.text();
+        setReadmeDoc(readmeText);
+      }
+    } catch (error) {
+      console.error('Error loading context documents:', error);
+    }
+  };
 
   const loadConfig = async () => {
     try {
@@ -104,12 +132,25 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
     }
   };
 
+  const loadAiPrompts = async () => {
+    try {
+      // Load all AI prompts from backend
+      const response = await fetch('/api/ai-prompts');
+      if (response.ok) {
+        const prompts = await response.json();
+        setAiPrompts(prompts);
+      }
+    } catch (error) {
+      console.error('Error loading AI prompts:', error);
+    }
+  };
+
   const saveConfig = async () => {
     try {
       setSaving(true);
       setMessage({ type: '', text: '' });
 
-      // Save to config.json via API
+      // Save config to config.json via API
       const success = await settings.save({
         spreadsheetId: config.spreadsheetId,
         googleDrive: config.googleDrive,
@@ -120,16 +161,33 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
         lookAndFeel: config.lookAndFeel
       });
 
-      if (success) {
-        setMessage({ type: 'success', text: 'Settings saved successfully to config.json' });
-      } else {
+      if (!success) {
         setMessage({ type: 'error', text: 'Failed to save configuration to file' });
+        setSaving(false);
+        return;
       }
 
+      // Save AI prompts to text files
+      console.log('💾 Saving AI Prompts - Current state:', aiPrompts);
+      const allModules = ['matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings'];
+      const savePromises = allModules.map(module => {
+        const promptValue = aiPrompts[module] || '';
+        console.log(`📝 Saving ${module}:`, promptValue.substring(0, 100) + (promptValue.length > 100 ? '...' : ''));
+        return fetch(`/api/ai-prompts/${module}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: promptValue })
+        });
+      });
+
+      await Promise.all(savePromises);
+      console.log('✅ All AI prompts saved');
+
+      setMessage({ type: 'success', text: 'Configuration and AI prompts saved successfully' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
-      console.error('Error saving config:', error);
-      setMessage({ type: 'error', text: 'Failed to save configuration' });
+      console.error('Error saving:', error);
+      setMessage({ type: 'error', text: 'Failed to save settings' });
     } finally {
       setSaving(false);
     }
@@ -156,6 +214,117 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
       current[keys[keys.length - 1]] = value;
       return newConfig;
     });
+  };
+
+  const handleAiPromptChange = (module, value) => {
+    // Update local state only (don't save to backend yet)
+    setAiPrompts(prev => ({ ...prev, [module]: value }));
+  };
+
+  const resetAiPrompt = async (module) => {
+    try {
+      // Save empty prompt to delete the file and revert to default
+      const response = await fetch(`/api/ai-prompts/${module}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: '' })
+      });
+
+      if (response.ok) {
+        setAiPrompts(prev => {
+          const updated = { ...prev };
+          delete updated[module];
+          return updated;
+        });
+        setMessage({ type: 'success', text: `Reset ${module} prompt to default` });
+      }
+    } catch (error) {
+      console.error('Error resetting AI prompt:', error);
+      setMessage({ type: 'error', text: `Failed to reset ${module} prompt` });
+    }
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+  };
+
+  const generateNewInstructions = async (module) => {
+    try {
+      setGeneratingModule(module);
+      setMessage({ type: '', text: '' });
+
+      // Get API key
+      const envKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      const savedKey = localStorage.getItem('ai_assistant_api_key');
+      const apiKey = envKey || savedKey;
+
+      if (!apiKey) {
+        setMessage({ type: 'error', text: 'Claude API key not configured. Please set it in AI Assistant.' });
+        setGeneratingModule(null);
+        return;
+      }
+
+      // Get current prompt
+      const currentPrompt = aiPrompts[module] || '';
+
+      // Build application context
+      const applicationContext = `
+# APPLICATION CONTEXT
+
+## Messaging Matrix Data Structure:
+${dataStructureDoc || 'Data structure documentation not available'}
+
+## Application README:
+${readmeDoc || 'README not available'}
+
+---
+
+This AI assistant will be helping users work with the "${module}" module of this Messaging Matrix application.
+The instructions should be specific to this application's data model and workflows.`;
+
+      // Build request to Claude
+      const systemPrompt = `You are a helpful AI that creates system instructions for AI assistants working in a Messaging Matrix application.
+
+Your task is to create ${currentPrompt ? 'improved' : 'new'} instructions for the "${module}" module.
+
+IMPORTANT CONTEXT:
+${applicationContext}
+
+Guidelines for creating instructions:
+- Make instructions SPECIFIC to the Messaging Matrix application (not generic)
+- Reference the actual data structures (audiences, topics, messages, etc.)
+- Include examples using the application's terminology
+- Explain how the AI should interact with this specific module
+- Add capabilities that leverage the application's features
+- Make response guidelines actionable and application-specific
+- Use the data model terminology consistently
+- Return ONLY the improved instructions, no explanation or meta-commentary`;
+
+      const userMessage = currentPrompt
+        ? `Here are the current instructions for the ${module} module. Please improve them to be more specific to the Messaging Matrix application:\n\n${currentPrompt}`
+        : `Please create comprehensive instructions for an AI assistant helping with the "${module}" module.`;
+
+      const response = await callClaudeAPI(apiKey, [
+        { role: 'user', content: systemPrompt },
+        { role: 'assistant', content: 'I understand. I will improve the AI assistant instructions and return only the improved version without any explanation.' },
+        { role: 'user', content: userMessage }
+      ]);
+
+      // Extract text from Claude API response
+      const improvedInstructions = response.content?.[0]?.text || '';
+
+      if (!improvedInstructions) {
+        throw new Error('No response from Claude API');
+      }
+
+      // Update the prompt with suggested improvements (in local state only)
+      handleAiPromptChange(module, improvedInstructions);
+      setMessage({ type: 'success', text: `Generated new instructions for ${module}. Click Save to apply.` });
+
+    } catch (error) {
+      console.error('Error generating instructions:', error);
+      setMessage({ type: 'error', text: 'Failed to generate new instructions' });
+    } finally {
+      setGeneratingModule(null);
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    }
   };
 
   // Parse feed structure to extract column names (full names with prefixes)
@@ -860,8 +1029,267 @@ const Settings = ({ onMenuToggle, currentModuleName }) => {
             </div>
           </div>
 
+          {/* AI Assistant Prompts Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <MessageSquare size={24} className="text-purple-600" />
+                AI Assistant Prompts
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Customize the system prompts and context that the AI assistant receives for each module
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Matrix Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Matrix Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('matrix')}
+                    disabled={generatingModule === 'matrix'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'matrix' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.matrix || ''}
+                  onChange={(e) => handleAiPromptChange('matrix', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Messaging matrix content improvement, audience/topic suggestions
+                </p>
+              </div>
+
+              {/* Creative Library Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Creative Library Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('creative-library')}
+                    disabled={generatingModule === 'creative-library'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'creative-library' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts['creative-library'] || ''}
+                  onChange={(e) => handleAiPromptChange('creative-library', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Creative asset management, naming conventions, organization
+                </p>
+              </div>
+
+              {/* Assets Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Assets Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('assets')}
+                    disabled={generatingModule === 'assets'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'assets' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.assets || ''}
+                  onChange={(e) => handleAiPromptChange('assets', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Media asset organization, file management, workflows
+                </p>
+              </div>
+
+              {/* Monitoring Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Monitoring Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('monitoring')}
+                    disabled={generatingModule === 'monitoring'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'monitoring' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.monitoring || ''}
+                  onChange={(e) => handleAiPromptChange('monitoring', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Performance analysis, anomaly detection, optimization suggestions
+                </p>
+              </div>
+
+              {/* Templates Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Templates Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('templates')}
+                    disabled={generatingModule === 'templates'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'templates' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.templates || ''}
+                  onChange={(e) => handleAiPromptChange('templates', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: HTML template management, code review, responsive design
+                </p>
+              </div>
+
+              {/* Users Module */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Users Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('users')}
+                    disabled={generatingModule === 'users'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'users' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.users || ''}
+                  onChange={(e) => handleAiPromptChange('users', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: User management, role assignments, access control
+                </p>
+              </div>
+
+              {/* Tasks Module */}
+              <div className="pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Tasks Module</h3>
+                  <button
+                    onClick={() => generateNewInstructions('tasks')}
+                    disabled={generatingModule === 'tasks'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'tasks' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts.tasks || ''}
+                  onChange={(e) => handleAiPromptChange('tasks', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="8"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Task management, workflow organization, email-to-task conversion
+                </p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
+
+      {/* AI Assistant */}
+      <AIAssistant
+        moduleContext={{ module: 'settings' }}
+        matrixData={matrixData}
+      />
     </div>
   );
 };

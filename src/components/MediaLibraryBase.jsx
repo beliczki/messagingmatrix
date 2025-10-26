@@ -34,6 +34,7 @@ const MediaLibraryBase = ({
   // Callbacks
   onMenuToggle = () => {},
   onItemClick = () => {},
+  onFilteredItemsChange = null, // (filteredItems) => void - called when filtered items change
   getItemId = (item) => item.id,
   getItemExtension = (item) => item.extension,
   getItemUrl = (item) => item.url || item.thumbnail,
@@ -440,6 +441,13 @@ const MediaLibraryBase = ({
     // console.log('✅ MediaLibraryBase - filtered result:', filtered?.length || 0, 'items');
     return filtered;
   }, [items, filterText]);
+
+  // Notify parent component when filtered items change
+  useEffect(() => {
+    if (onFilteredItemsChange) {
+      onFilteredItemsChange(allFilteredItems);
+    }
+  }, [allFilteredItems, onFilteredItemsChange]);
 
   // Build masonry with placeholders for visible chunks only
   useEffect(() => {

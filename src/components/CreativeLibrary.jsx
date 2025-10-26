@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
+import AIAssistant from './AIAssistant';
 import CreativeShare from './CreativeShare';
 import CreativePreview from './CreativePreview';
 import CreativeLibraryMasonryView from './CreativeLibraryMasonryView';
@@ -20,6 +21,7 @@ import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const [creatives, setCreatives] = useState([]);
+  const [filteredCreatives, setFilteredCreatives] = useState([]);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({});
@@ -479,6 +481,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Creative Library'}
         onMenuToggle={onMenuToggle}
+        onFilteredItemsChange={setFilteredCreatives}
         getItemId={(creative) => creative.id}
         getItemExtension={(creative) => creative.extension}
         getItemUrl={(creative) => creative.url}
@@ -866,6 +869,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           </div>
         </div>
       )}
+
+      {/* AI Assistant */}
+      <AIAssistant
+        moduleContext={{ module: 'creative-library' }}
+        matrixData={matrixData}
+        filteredItems={filteredCreatives}
+        getItemUrl={(creative) => {
+          // Use proxy URL if driveId is available to avoid CORS issues
+          if (creative.driveId) {
+            return `/api/drive/proxy/${creative.driveId}`;
+          }
+          return creative.url;
+        }}
+      />
     </>
   );
 };

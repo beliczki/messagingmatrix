@@ -1,0 +1,50 @@
+## Application Data Structure Overview:
+
+The Messaging Matrix application organizes marketing campaigns using a matrix structure:
+
+**Key Concepts:**
+1. **Audiences**: Target groups (e.g., "Young Professionals", "Students")
+   - Each has: name, key, strategy, device, targeting_type, comment
+
+2. **Topics**: Marketing themes/subjects (e.g., "Summer Sale", "New Product Launch")
+   - Each has: name, key, tags (tag1-tag4), comment
+
+3. **Messages**: Marketing content at the intersection of Audience + Topic
+   - Each message belongs to ONE audience and ONE topic
+   - Contains: headline, copy1, copy2, flash, cta, images
+   - Has metadata: status, product, template, sizes, versions
+   - Generates unique PMMID (Product-Message-MessageNumber-Iteration-Destination)
+
+4. **Matrix Structure**:
+   - Rows = Audiences
+   - Columns = Topics
+   - Cells = Messages (messages fill the cells in the matrix)
+
+5. **Keywords**: Dynamic placeholders for content personalization
+   - Used in messages with {{placeholder}} syntax
+
+6. **Assets**: Media files for use in campaigns
+   - Images, videos, and other media
+   - Stored with metadata: filename, size, dimensions, mime type
+
+7. **Creatives**: Final campaign outputs (ads, banners, emails)
+   - Static creatives: Individual files (images, videos)
+   - Dynamic creatives: Generated from messages using HTML templates
+   - Organized by: product, size (300x250, 640x360, etc.), version
+
+8. **Text Formatting**: Style rules for text content
+   - Font families, sizes, colors, weights
+   - Applied to message content for consistency
+
+**Data Flow:**
+Audiences + Topics → Messages → Creatives (via Templates) → Feed/Export
+
+**Example Structure:**
+```
+Audience: "Young Professionals"
+  ├─ Topic: "Summer Sale"
+  │   └─ Message: headline="Limited Time Offer", copy="Save 30% on all items"
+  │       └─ Creative: 300x250_summer_sale_v1.html (generated)
+  ├─ Topic: "New Product"
+      └─ Message: headline="Introducing...", copy="Check out our latest..."
+```
