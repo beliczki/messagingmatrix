@@ -158,6 +158,21 @@ export const filterAssets = (assets, filterText) => {
 
     const filterLower = filterText.toLowerCase();
 
+    // Helper to check a single term (handles dimension-specific filtering)
+    const matchesTerm = (term) => {
+      // For dimension patterns like "300x250", ONLY check dimension fields
+      if (/^\d+x\d+$/.test(term)) {
+        const dimensionFields = [
+          asset.size,
+          asset.File_dimensions,
+          asset.bannerSize ? `${asset.bannerSize.width}x${asset.bannerSize.height}` : null
+        ].filter(Boolean).join(' ').toLowerCase();
+        return dimensionFields.includes(term);
+      }
+      // For other terms, use includes (substring match)
+      return searchableText.includes(term);
+    };
+
     // Check if the filter contains 'or' operator
     if (filterLower.includes(' or ')) {
       // Split by ' or ' and check if any term matches
@@ -166,27 +181,18 @@ export const filterAssets = (assets, filterText) => {
         // Each term can still contain 'and' conditions
         if (term.includes(' and ')) {
           const andTerms = term.split(' and ').map(t => t.trim()).filter(t => t.length > 0);
-          return andTerms.every(andTerm => searchableText.includes(andTerm));
+          return andTerms.every(andTerm => matchesTerm(andTerm));
         }
-        return searchableText.includes(term);
+        return matchesTerm(term);
       });
     } else if (filterLower.includes(' and ')) {
       // Split by ' and ' and check if all terms match
       const andTerms = filterLower.split(' and ').map(t => t.trim()).filter(t => t.length > 0);
-      return andTerms.every(term => searchableText.includes(term));
+      return andTerms.every(term => matchesTerm(term));
     } else {
       // Default behavior: split by whitespace and use AND logic
       const terms = filterLower.split(/\s+/).filter(t => t.length > 0);
-      return terms.every(term => {
-        // For dimension patterns like "300x250", use word boundary matching
-        if (/^\d+x\d+$/.test(term)) {
-          // Match exact dimension (with word boundaries)
-          const dimRegex = new RegExp(`\\b${term}\\b`, 'i');
-          return dimRegex.test(searchableText);
-        }
-        // For other terms, use includes (substring match)
-        return searchableText.includes(term);
-      });
+      return terms.every(term => matchesTerm(term));
     }
   });
 };
