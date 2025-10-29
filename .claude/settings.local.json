@@ -45,7 +45,9 @@
       "Bash(head:*)",
       "Bash(done)",
       "Bash(python -m json.tool:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(for file in services/previewService.js utils/assetUtils.js utils/patternEvaluator.js utils/textFormatter.js utils/treeBuilder.js)",
+      "Bash(do echo \"--- $file ---\")"
     ],
     "deny": [],
     "ask": []

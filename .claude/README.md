@@ -238,7 +238,7 @@ Quick reference for current component sizes (as of v2.0.0):
 | MessageEditorDialog.jsx | 1,320 | Message editor |
 | PreviewView.jsx | 1,440 | Share gallery viewer |
 | TreeView.jsx | 902 | Decision tree |
-| ClaudeChat.jsx | 767 | AI integration |
+| AIAssistant.jsx | 1,400+ | AI integration with Chat/Context tabs |
 | **MediaLibraryBase.jsx** | **674** | **NEW: Shared base for Assets/Creatives** |
 | CreativeLibrary.jsx | 525 | Reduced from 931 |
 | Assets.jsx | 377 | Reduced from 1,103 |
@@ -264,6 +264,6 @@ If you find these context files helpful or have suggestions for improvement, ple
 
 ---
 
-**Last Updated**: 2025-10-25
+**Last Updated**: 2025-10-26
 **Version**: 2.0.0
-**Major Changes**: Added MediaLibraryBase, Google Drive integration, virtual scrolling, updated component line counts
+**Major Changes**: Added MediaLibraryBase, Google Drive integration, virtual scrolling, AIAssistant with module-specific contexts, updated component line counts

@@ -2,7 +2,7 @@
 
 Quick reference guide to all context files and where to find specific information.
 
-**Last Updated**: 2025-10-25 | **Version**: 2.0.0
+**Last Updated**: 2025-10-26 | **Version**: 2.0.0
 
 ## Quick Navigation
 
@@ -46,7 +46,7 @@ Quick reference guide to all context files and where to find specific informatio
 - **Asset Management**: `context-components.md` → Assets.jsx (377 lines) ✨ Refactored
 - **Creative Library**: `context-components.md` → CreativeLibrary.jsx (525 lines) ✨ Refactored
 - **MediaLibraryBase**: `context-components.md` → MediaLibraryBase.jsx (674 lines) 🆕
-- **AI Integration**: `context-components.md` → ClaudeChat.jsx (767 lines)
+- **AI Integration**: `context-components.md` → AIAssistant.jsx (1,400+ lines)
 - **useMatrix Hook**: `context-components.md` → useMatrix.js (355 lines)
 - **State Dialog**: `context-components.md` → StateManagementDialog.jsx
 
@@ -100,7 +100,7 @@ Quick reference guide to all context files and where to find specific informatio
 | MessageEditorDialog.jsx | 1,320 | ✓ | Message editor |
 | PreviewView.jsx | 1,440 | ✓ | Share gallery viewer |
 | TreeView.jsx | 902 | ✓ | Decision tree |
-| ClaudeChat.jsx | 767 | ✓ | AI integration |
+| AIAssistant.jsx | 1,400+ | ✓ | AI integration with Chat/Context tabs |
 | **MediaLibraryBase.jsx** | **674** | **🆕** | **Shared base for Assets/Creatives** |
 | CreativeLibrary.jsx | 525 | ✨ | Reduced from 931 |
 | Assets.jsx | 377 | ✨ | Reduced from 1,103 |
@@ -184,7 +184,7 @@ Legend: ✓ Stable | ✨ Refactored | 🆕 New
 
 ### "How do I add AI content generation?"
 → `context-workflows.md` → AI Content Generation Workflow
-→ `context-components.md` → ClaudeChat.jsx
+→ `context-components.md` → AIAssistant.jsx
 
 ### "How is authentication handled?"
 → `context-architecture.md` → Authentication Systems
@@ -365,6 +365,6 @@ When updating the codebase, check if these need updates:
 
 ---
 
-**Last Updated**: 2025-10-25
+**Last Updated**: 2025-10-26
 **Version**: 2.0.0
 **Maintainer**: Development Team

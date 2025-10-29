@@ -31,10 +31,11 @@ messagingmatrix/
 │   │   ├── TreeView.jsx         # (902 lines) - Decision tree visualization
 │   │   ├── PreviewView.jsx      # (1,440 lines) - Preview/share gallery
 │   │   ├── MessageEditorDialog.jsx # (1,320 lines) - Message editor
-│   │   ├── CreativeLibrary.jsx  # (930 lines) - Asset library
-│   │   ├── Assets.jsx           # (1,054 lines) - Asset management
+│   │   ├── MediaLibraryBase.jsx # (674 lines) - Shared base for Assets/Creatives
+│   │   ├── CreativeLibrary.jsx  # (525 lines) - Creative library
+│   │   ├── Assets.jsx           # (377 lines) - Asset management
 │   │   ├── Templates.jsx        # (1,107 lines) - Template management
-│   │   ├── ClaudeChat.jsx       # (767 lines) - AI integration
+│   │   ├── AIAssistant.jsx      # (1,400+ lines) - AI integration
 │   │   ├── Tasks.jsx            # (605 lines) - Task management
 │   │   └── Settings.jsx         # (797 lines) - Configuration UI
 │   ├── hooks/
@@ -42,7 +43,8 @@ messagingmatrix/
 │   ├── services/
 │   │   ├── sheets.js            # (520 lines) - Google Sheets integration
 │   │   ├── previewService.js    # Preview/share service
-│   │   └── settings.js          # Config management
+│   │   ├── settings.js          # Config management
+│   │   └── driveStorage.js      # Google Drive integration
 │   ├── utils/
 │   │   ├── patternEvaluator.js  # (240 lines) - Template evaluation
 │   │   ├── treeBuilder.js       # Tree structure generation

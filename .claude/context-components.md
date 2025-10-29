@@ -188,7 +188,7 @@ function MessageEditorDialog({ message, onSave, onClose, config }) {
     image1-6: ''
   });
   const [previewSize, setPreviewSize] = useState('300x250');
-  const [showClaudeChat, setShowClaudeChat] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   // Auto-generate trafficking fields
   useEffect(() => {
@@ -316,28 +316,40 @@ function Assets() {
 
 ---
 
-### ClaudeChat.jsx (AI Integration)
-**Lines**: 767
-**Location**: `src/components/ClaudeChat.jsx`
+### AIAssistant.jsx (AI Integration)
+**Lines**: 1,400+
+**Location**: `src/components/AIAssistant.jsx`
 
-**Purpose**: AI-powered content generation via Claude API
+**Purpose**: AI-powered content generation via Claude API with module-specific contexts
 
 **Key Features**:
-- Collapsible chat interface
-- Context-aware prompts
-- Message history
+- Module-specific AI contexts (Matrix, Assets, Creatives, Templates, etc.)
+- File-based instruction system (AIMatrixInstructions.txt, AICreativesInstructions.txt, etc.)
+- Chat & Context tabs for viewing conversation and full AI context
+- Generate new instructions using AI
+- Image upload and attachment support
+- Filtered creatives attachment to conversations
+- Context-aware prompts with full application data
+- API key management (localStorage or .env)
 - Resizable window
-- Task integration
-- API key configuration
+- Collapsible interface
 
 **Component Structure**:
 ```javascript
-function ClaudeChat({ context, onContentGenerated }) {
+function AIAssistant({ module, currentData, allData }) {
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'context'
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('claudeApiKey'));
+  const [instructions, setInstructions] = useState('');
+  const [uploadedImages, setUploadedImages] = useState([]);
+
+  // Load module-specific instructions from file
+  useEffect(() => {
+    loadInstructions(module);
+  }, [module]);
 
   const sendMessage = async () => {
     const response = await fetch('/api/claude', {
@@ -345,7 +357,8 @@ function ClaudeChat({ context, onContentGenerated }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [...messages, { role: 'user', content: input }],
-        context: context
+        context: buildContext(module, currentData, allData, instructions),
+        images: uploadedImages
       })
     });
     // Handle streaming response
@@ -353,16 +366,34 @@ function ClaudeChat({ context, onContentGenerated }) {
 }
 ```
 
+**Module-Specific Instructions**:
+- AIMatrixInstructions.txt - For message creation and editing
+- AICreativesInstructions.txt - For creative library management
+- AIAssetsInstructions.txt - For asset management
+- AITemplatesInstructions.txt - For template development
+
 **Context Format**:
 ```javascript
 {
-  audience: { name: '...', strategy: '...', product: '...' },
-  topic: { name: '...', tags: [...] },
-  message: { /* existing message fields */ }
+  instructions: "Module-specific instructions from file...",
+  currentData: {
+    // Current message, asset, creative, or template being edited
+  },
+  allData: {
+    audiences: [...],
+    topics: [...],
+    messages: [...],
+    assets: [...],
+    creatives: [...],
+    keywords: {...}
+  },
+  images: [
+    { type: 'image/png', data: 'base64...' }
+  ]
 }
 ```
 
-**File Reference**: `src/components/ClaudeChat.jsx:767`
+**File Reference**: `src/components/AIAssistant.jsx:1400`
 
 ---
 

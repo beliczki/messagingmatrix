@@ -82,12 +82,16 @@
 - **Proxy Serving**: Backend proxy for secure file delivery
 - **Filename Support**: Proxy works with both file IDs and filenames
 
-### AI Content Generation
-- **Claude API Integration**: Generate message variations using Anthropic's Claude
-- **Context-Aware**: Uses audience, topic, and targeting data for relevant suggestions
-- **Multi-field Generation**: Create headlines, copy, CTAs, and flash messages
-- **Interactive Chat**: Chat interface for iterative content refinement
-- **API Key Management**: Secure local storage of API credentials
+### AI Assistant
+- **Module-Specific Contexts**: AI assistant available across all modules with tailored contexts
+- **File-Based Instructions**: Editable AI prompts stored in text files (AIMatrixInstructions.txt, etc.)
+- **Claude API Integration**: Generate content using Anthropic's Claude 3.5 Sonnet
+- **Context-Aware**: Full application data passed to AI (audiences, topics, messages, assets, creatives)
+- **Chat & Context Tabs**: View conversation and inspect full AI context in real-time
+- **Generate New Instructions**: AI-powered instruction improvement using Claude
+- **Multi-field Generation**: Create headlines, copy, CTAs, flash messages, and more
+- **Image Upload**: Attach images and filtered creatives to AI conversations
+- **API Key Management**: Secure local storage or .env configuration
 
 ### Template System
 - **HTML5 Templates**: Support for dynamic HTML banner templates
@@ -171,7 +175,7 @@ messagingmatrix/
 │   │   ├── MediaLibraryBase.jsx          # Shared base for Assets/Creatives (674 lines)
 │   │   ├── Templates.jsx                 # Template management
 │   │   ├── PreviewView.jsx               # Share gallery viewer (1,440 lines)
-│   │   ├── ClaudeChat.jsx                # AI chat interface (767 lines)
+│   │   ├── AIAssistant.jsx               # AI assistant with Chat/Context tabs (1,400+ lines)
 │   │   ├── StateManagementDialog.jsx     # Application state viewer
 │   │   ├── Login.jsx                     # Authentication
 │   │   ├── Tasks.jsx                     # Task management
@@ -185,7 +189,8 @@ messagingmatrix/
 │   ├── services/
 │   │   ├── sheets.js                     # Google Sheets API (520 lines)
 │   │   ├── settings.js                   # Settings management
-│   │   └── previewService.js             # Share gallery service
+│   │   ├── previewService.js             # Share gallery service
+│   │   └── driveStorage.js               # Google Drive integration
 │   ├── utils/
 │   │   ├── patternEvaluator.js           # Pattern evaluation (240 lines)
 │   │   ├── treeBuilder.js                # Tree structure builder

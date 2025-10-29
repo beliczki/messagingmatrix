@@ -362,8 +362,6 @@ const MediaLibraryBase = ({
       const newItems = filtered.slice(newItemsStart, newItemsEnd);
 
       if (newItems.length > 0) {
-        console.log(`🔨 Appending ${newItems.length} new placeholders (items ${newItemsStart}-${newItemsEnd}) to masonry`);
-
         // Append new chunk placeholders to existing columns
         const { columns, heights, chunks } = appendChunkToMasonry(
           newItems,
@@ -473,8 +471,6 @@ const MediaLibraryBase = ({
     setLoadedEnd(initialLoadSize);
     setTotalVisible(initialLoadSize); // Only show what we've created placeholders for
     setNextItemIndex(0); // Start loading the first chunks
-
-    console.log(`📐 Built masonry with ${visibleItems.length} placeholders (first ${Math.ceil(visibleItems.length / loadChunkSize)} chunks) across ${columnCount} columns. Total items: ${filtered.length}`);
   }, [filterText, items, viewMode, columnCount, buildMasonryWithPlaceholders, loadChunkSize]);
 
   const totalItems = allFilteredItems.length;

@@ -70,11 +70,8 @@ const CreativeLibraryMasonryView = ({
               const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(item.extension);
               const isHtml = item.extension === 'html';
 
-              console.log(`🎯 Rendering hidden loader for item #${itemIndex}: ${item.filename} (${isVideo ? 'video' : isImage ? 'image' : isHtml ? 'html' : 'unknown'})`);
-
               // HTML creatives don't need preloading - calculate height from banner size
               if (isHtml && item.bannerSize) {
-                console.log(`✅ HTML creative detected, using banner size: ${item.bannerSize.width}x${item.bannerSize.height}`);
                 const fakeEvent = {
                   target: {
                     naturalWidth: item.bannerSize.width,
@@ -103,7 +100,6 @@ const CreativeLibraryMasonryView = ({
                         // Check if image already loaded (cached)
                         const itemId = `${itemIndex}-${item.filename}`;
                         if (el && el.complete && el.naturalHeight !== 0 && !loadedItemsRef.current.has(itemId)) {
-                          console.log(`✅ Image already loaded (cached): ${item.filename}`);
                           loadedItemsRef.current.add(itemId);
                           // Trigger the handler directly since onLoad won't fire
                           handleImageLoaded(item, itemIndex, { target: el });
@@ -112,7 +108,6 @@ const CreativeLibraryMasonryView = ({
                       src={item.url}
                       alt="loading"
                       onLoad={(e) => {
-                        console.log(`✅ onLoad fired for ${item.filename}`);
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
@@ -127,13 +122,11 @@ const CreativeLibraryMasonryView = ({
                         loadingImageRef.current = el;
                         // Check if video metadata already loaded
                         if (el && el.readyState >= 1) {
-                          console.log(`✅ Video metadata already loaded: ${item.filename}`);
                           handleImageLoaded(item, itemIndex, { target: el });
                         }
                       }}
                       src={item.url}
                       onLoadedMetadata={(e) => {
-                        console.log(`✅ onLoadedMetadata fired for ${item.filename}`);
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {

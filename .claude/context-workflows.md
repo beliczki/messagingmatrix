@@ -107,41 +107,45 @@ ERSTE_VAL_background_x_1_656x459_backgroundImage1_psd_v1.jpg
 
 ### 4. AI Content Generation Workflow
 
-**Location**: `ClaudeChat.jsx` + `MessageEditorDialog.jsx`
+**Location**: `AIAssistant.jsx` + Various modules
 
 **Steps**:
-1. User opens message in `MessageEditorDialog`
-2. Clicks Claude icon or opens chat panel
-3. `ClaudeChat` component expands
-4. User types prompt OR system auto-generates context:
+1. User opens AI Assistant from any module (Matrix, Assets, Creatives, Templates)
+2. System loads module-specific instructions from file (e.g., AIMatrixInstructions.txt)
+3. `AIAssistant` component displays with Chat and Context tabs
+4. User can:
+   - View full AI context in Context tab
+   - Upload images to attach to conversation
+   - Attach filtered creatives from library
+   - Generate new improved instructions using AI
+5. User types prompt and submits
+6. Frontend calls `/api/claude` with full context:
+   ```javascript
+   {
+     instructions: "Module-specific instructions...",
+     currentData: { /* current message/asset/creative */ },
+     allData: { audiences, topics, messages, assets, creatives },
+     images: [{ type: 'image/png', data: 'base64...' }]
+   }
    ```
-   Generate content for:
-   Audience: {{audience.name}}
-   Topic: {{topic.name}}
-   Product: {{product}}
-   Strategy: {{strategy}}
-   ```
-5. User submits prompt
-6. Frontend calls `/api/claude` (proxy endpoint)
 7. Backend calls Anthropic API with Claude SDK
 8. Response streamed back to chat
-9. User can click suggestions to populate message fields
-10. If message has number/variant, system offers to sync to other messages
+9. User can apply generated content to fields
+10. Instructions can be edited and saved to files
 
 **API Flow**:
 ```
-ClaudeChat → POST /api/claude → Anthropic API
-                               ↓
-                    Stream response chunks
-                               ↓
-                    Display in chat UI
+AIAssistant → POST /api/claude → Anthropic API
+                                ↓
+                     Stream response chunks
+                                ↓
+                     Display in chat UI
 ```
 
 **Key Files**:
-- `src/components/ClaudeChat.jsx:767`
-- `src/components/MessageEditorDialog.jsx:1320` - Integration
+- `src/components/AIAssistant.jsx:1400`
+- Module-specific instruction files (AIMatrixInstructions.txt, etc.)
 - `server.js` - `/api/claude` endpoint
-- `src/api/claude-proxy.js`
 
 ### 5. Template Management Workflow
 

@@ -31,9 +31,10 @@ messagingmatrix/
 │   │   ├── MessageEditorDialog.jsx (1,320)  # Message editor
 │   │   ├── TreeView.jsx (902)               # Decision tree
 │   │   ├── PreviewView.jsx (1,440)          # Share gallery
-│   │   ├── CreativeLibrary.jsx (930)        # Asset library
-│   │   ├── Assets.jsx (1,054)               # Asset management
-│   │   ├── ClaudeChat.jsx (767)             # AI integration
+│   │   ├── MediaLibraryBase.jsx (674)       # Shared base for Assets/Creatives
+│   │   ├── CreativeLibrary.jsx (525)        # Creative library
+│   │   ├── Assets.jsx (377)                 # Asset management
+│   │   ├── AIAssistant.jsx (1,400+)         # AI integration
 │   │   └── Templates.jsx (1,107)            # Template editor
 │   ├── hooks/
 │   │   └── useMatrix.js (355)               # Core data management
