@@ -35,7 +35,7 @@ const [config, setConfig] = useState(null);
 ---
 
 ### Matrix.jsx (Main Business Logic)
-**Lines**: 1,530
+**Lines**: 1,382 (refactored from 2,151 lines - 35.8% reduction)
 **Location**: `src/components/Matrix.jsx`
 
 **Purpose**: Core matrix grid interface for organizing messages by topic and audience
@@ -49,6 +49,14 @@ const [config, setConfig] = useState(null);
 - Search functionality
 - Claude chat integration
 - State management dialog
+
+**Recent Refactoring** (5 Phases):
+Matrix.jsx was refactored to extract large components into separate files:
+1. OrphanedMessagesDialog.jsx - Error correction dialog
+2. MatrixControlPanel.jsx - View controls (zoom, display mode, view mode)
+3. FeedTableView.jsx - Feed table rendering with pattern evaluation
+4. MatrixGridView.jsx - Main matrix grid table
+5. SaveProgressDialog.jsx - Save progress modal (moved to StateManagementDialog)
 
 **Component Structure**:
 ```javascript
@@ -101,7 +109,204 @@ function Matrix({ onViewStateChange, initialViewState, config, onConfigChange })
 - `Ctrl + Drag` - Copy message
 - `Drag` - Move message
 
-**File Reference**: `src/components/Matrix.jsx:1530`
+**File Reference**: `src/components/Matrix.jsx:1382`
+
+---
+
+### MatrixGridView.jsx (Matrix Grid Rendering)
+**Lines**: 287
+**Location**: `src/components/MatrixGridView.jsx`
+
+**Purpose**: Renders the main matrix grid table with audiences, topics, and message cells
+
+**Key Features**:
+- Pan and zoom transforms
+- Filter inputs for audiences and topics
+- Audience header row with edit buttons and status colors
+- Topic rows with cells containing draggable message cards
+- Drag-and-drop message management
+- Add Audience, Add Topic, and Add Message buttons
+- Status-based message coloring
+- Conditional button hiding during pan/zoom mode
+
+**Props**:
+```javascript
+{
+  matrixContainerRef,
+  matrixZoom,
+  matrixPan,
+  spacePressed,
+  displayMode,
+  audienceFilter,
+  topicFilter,
+  filteredAudiences,
+  filteredTopics,
+  lookAndFeel,
+  getStatusColors,
+  getMessages,
+  statusFilters,
+  draggedMsg,
+  onWheel,
+  onPanStart,
+  onPanMove,
+  onPanEnd,
+  onAudienceFilterChange,
+  onTopicFilterChange,
+  onEditAudience,
+  onAddAudience,
+  onEditTopic,
+  onAddTopic,
+  onAddMessage,
+  onEditMessage,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  setDraggedMsg,
+  setActiveTab
+}
+```
+
+**File Reference**: `src/components/MatrixGridView.jsx:287`
+
+---
+
+### MatrixControlPanel.jsx (View Controls)
+**Lines**: 202
+**Location**: `src/components/MatrixControlPanel.jsx`
+
+**Purpose**: Renders all view controls for matrix, tree, and feed views
+
+**Key Features**:
+- Matrix zoom controls (+ / - buttons with percentage display)
+- Display mode toggle (Informative / Minimal)
+- Tree zoom controls
+- Tree connector type toggle (Elbow / Curved)
+- View mode toggle (Matrix / Tree / Feed)
+- Context-aware rendering (only shows relevant controls per view)
+
+**Props**:
+```javascript
+{
+  viewMode,
+  displayMode,
+  matrixZoom,
+  treeZoom,
+  treeConnectorType,
+  lookAndFeel,
+  onViewModeChange,
+  onDisplayModeChange,
+  onMatrixZoomChange,
+  onTreeZoomChange,
+  onTreeConnectorTypeChange
+}
+```
+
+**File Reference**: `src/components/MatrixControlPanel.jsx:202`
+
+---
+
+### FeedTableView.jsx (Feed Table Rendering)
+**Lines**: 216
+**Location**: `src/components/FeedTableView.jsx`
+
+**Purpose**: Renders messages as a table with pattern-based column mapping
+
+**Key Features**:
+- Smart fallback pattern mapping for common feed column formats
+- Message filtering by status and product
+- Pattern evaluation with context (uses `evaluatePattern` utility)
+- Text formatting with spans (uses `applyTextFormattingSpans` utility)
+- Truncation for long fields (CSS, URLs)
+- Clickable rows to open message editor
+
+**Smart Mapping Examples**:
+```javascript
+'headline_text_1' → '{{headline}}'
+'copy_text_1' → '{{copy1}}'
+'cta_text_1' → '{{cta}}'
+'background_image_1' → '{{image1}}'
+'template_variant_class' → '{{template_variant_classes}}'
+```
+
+**Props**:
+```javascript
+{
+  messages,
+  audiences,
+  topics,
+  feedStructure,
+  feedPatterns,
+  statusFilters,
+  productFilters,
+  textFormatting,
+  getStatusColors,
+  onMessageClick
+}
+```
+
+**File Reference**: `src/components/FeedTableView.jsx:216`
+
+---
+
+### OrphanedMessagesDialog.jsx (Error Correction)
+**Lines**: 149
+**Location**: `src/components/OrphanedMessagesDialog.jsx`
+
+**Purpose**: Dialog for correcting messages with invalid topic/audience keys
+
+**Key Features**:
+- Detects messages that can't be placed in matrix due to invalid keys
+- Shows MC number, variant, and which keys are invalid
+- Provides dropdowns to select correct topic and audience keys
+- Auto-dismisses when all messages are corrected
+- Save button disabled until valid keys are selected
+
+**Props**:
+```javascript
+{
+  show,
+  orphanedMessages,
+  topics,
+  audiences,
+  correctingMessage,
+  setCorrectingMessage,
+  onCorrect,
+  onClose
+}
+```
+
+**Orphaned Message Detection**:
+Messages are detected as orphaned in Matrix.jsx via useEffect that checks if audience/topic keys exist in the current audiences/topics arrays.
+
+**File Reference**: `src/components/OrphanedMessagesDialog.jsx:149`
+
+---
+
+### SaveProgressDialog.jsx (Save Progress Modal)
+**Lines**: 53
+**Location**: `src/components/SaveProgressDialog.jsx`
+
+**Purpose**: Full-screen modal showing save progress for spreadsheet operations
+
+**Key Features**:
+- Progress bar with step counter
+- Icon states (spinning for in-progress, check for success, error icon for failure)
+- Used by StateManagementDialog during save operations
+- Auto-shows during multi-step save process
+
+**Props**:
+```javascript
+{
+  saveProgress: {
+    step: number,
+    total: number,
+    message: string,
+    error?: boolean
+  }
+}
+```
+
+**File Reference**: `src/components/SaveProgressDialog.jsx:53`
 
 ---
 

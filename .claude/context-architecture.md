@@ -26,18 +26,23 @@
 ```
 messagingmatrix/
 ├── src/
-│   ├── components/        # 39 React components (~17.7KB total)
-│   │   ├── Matrix.jsx           # (1,530 lines) - Main grid interface
-│   │   ├── TreeView.jsx         # (902 lines) - Decision tree visualization
-│   │   ├── PreviewView.jsx      # (1,440 lines) - Preview/share gallery
-│   │   ├── MessageEditorDialog.jsx # (1,320 lines) - Message editor
-│   │   ├── MediaLibraryBase.jsx # (674 lines) - Shared base for Assets/Creatives
-│   │   ├── CreativeLibrary.jsx  # (525 lines) - Creative library
-│   │   ├── Assets.jsx           # (377 lines) - Asset management
-│   │   ├── Templates.jsx        # (1,107 lines) - Template management
-│   │   ├── AIAssistant.jsx      # (1,400+ lines) - AI integration
-│   │   ├── Tasks.jsx            # (605 lines) - Task management
-│   │   └── Settings.jsx         # (797 lines) - Configuration UI
+│   ├── components/        # 44 React components (~18.2KB total)
+│   │   ├── Matrix.jsx                # (1,382 lines) - Main grid interface [REFACTORED]
+│   │   ├── MatrixGridView.jsx        # (287 lines) - Matrix grid rendering [NEW]
+│   │   ├── MatrixControlPanel.jsx    # (202 lines) - View controls [NEW]
+│   │   ├── FeedTableView.jsx         # (216 lines) - Feed table rendering [NEW]
+│   │   ├── OrphanedMessagesDialog.jsx # (149 lines) - Error correction [NEW]
+│   │   ├── SaveProgressDialog.jsx    # (53 lines) - Save progress modal [NEW]
+│   │   ├── TreeView.jsx              # (902 lines) - Decision tree visualization
+│   │   ├── PreviewView.jsx           # (1,440 lines) - Preview/share gallery
+│   │   ├── MessageEditorDialog.jsx   # (1,320 lines) - Message editor
+│   │   ├── MediaLibraryBase.jsx      # (674 lines) - Shared base for Assets/Creatives
+│   │   ├── CreativeLibrary.jsx       # (525 lines) - Creative library
+│   │   ├── Assets.jsx                # (377 lines) - Asset management
+│   │   ├── Templates.jsx             # (1,107 lines) - Template management
+│   │   ├── AIAssistant.jsx           # (1,400+ lines) - AI integration
+│   │   ├── Tasks.jsx                 # (605 lines) - Task management
+│   │   └── Settings.jsx              # (797 lines) - Configuration UI
 │   ├── hooks/
 │   │   └── useMatrix.js         # (355 lines) - Core data hook
 │   ├── services/
@@ -293,3 +298,79 @@ Based on last 20 commits:
 3. ZIP download for static HTML ads
 4. Template overlay system for references
 5. CreativeLibrary scaling methods
+6. **Matrix.jsx Refactoring** - 5 Phase Component Extraction (see below)
+
+## Matrix.jsx Refactoring (Component Extraction)
+
+**Objective**: Reduce Matrix.jsx from 2,151 lines to improve maintainability and code organization.
+
+**Result**: Matrix.jsx reduced to 1,382 lines (35.8% reduction, 769 lines saved)
+
+### Phase 1: OrphanedMessagesDialog
+**Extracted**: 149 lines
+**Purpose**: Dialog for correcting messages with invalid topic/audience keys
+- Detects orphaned messages via useEffect in Matrix.jsx
+- Shows MC number, variant, and invalid keys
+- Provides dropdowns for correction
+- Auto-dismisses when resolved
+
+### Phase 2: MatrixControlPanel
+**Extracted**: 202 lines
+**Purpose**: All view controls (zoom, display mode, view mode toggles)
+- Matrix zoom controls (± buttons with percentage)
+- Display mode toggle (Informative/Minimal)
+- Tree zoom and connector type controls
+- View mode toggle (Matrix/Tree/Feed)
+- Context-aware rendering per view
+
+### Phase 3: FeedTableView
+**Extracted**: 216 lines
+**Purpose**: Feed table rendering with pattern-based column mapping
+- Smart fallback pattern mapping for common feed columns
+- Message filtering by status and product
+- Pattern evaluation using `evaluatePattern()` utility
+- Text formatting with `applyTextFormattingSpans()` utility
+- Truncation for long fields (CSS, URLs)
+
+### Phase 4: MatrixGridView
+**Extracted**: 287 lines (largest component)
+**Purpose**: Main matrix grid table rendering
+- Pan and zoom transforms
+- Filter inputs for audiences and topics
+- Audience headers with edit buttons and status colors
+- Topic rows with draggable message cells
+- Add Audience/Topic/Message buttons
+- Conditional button hiding during pan/zoom
+
+### Phase 5: SaveProgressDialog
+**Extracted**: 53 lines
+**Purpose**: Save progress modal for spreadsheet operations
+- Progress bar with step counter
+- Icon states (spinning/success/error)
+- Moved from Matrix.jsx to StateManagementDialog (logical grouping)
+- Auto-shows during multi-step save process
+
+### Component Hierarchy After Refactoring
+
+```
+Matrix.jsx (1,382 lines)
+├── MatrixGridView.jsx (287 lines)
+├── MatrixControlPanel.jsx (202 lines)
+├── FeedTableView.jsx (216 lines)
+├── OrphanedMessagesDialog.jsx (149 lines)
+├── MessageEditorDialog.jsx (1,320 lines)
+├── TreeView.jsx (902 lines)
+├── AudienceEditorDialog.jsx
+├── TopicEditorDialog.jsx
+├── KeywordEditor.jsx
+├── StateManagementDialog.jsx
+│   └── SaveProgressDialog.jsx (53 lines)
+└── AIAssistant.jsx (1,400+ lines)
+```
+
+### Benefits
+1. **Improved Maintainability**: Each component has single responsibility
+2. **Better Code Organization**: Related UI logic grouped together
+3. **Easier Testing**: Smaller components easier to test in isolation
+4. **Reduced Cognitive Load**: Developers can focus on specific functionality
+5. **Reusability**: Extracted components can be reused if needed
