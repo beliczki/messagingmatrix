@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { X, RefreshCw, Save, Loader, ExternalLink, Download } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
+import SaveProgressDialog from './SaveProgressDialog';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -261,6 +262,9 @@ const StateManagementDialog = ({
           </div>
         </div>
       </div>
+
+      {/* Save Progress Modal */}
+      <SaveProgressDialog saveProgress={saveProgress} />
     </div>
   );
 };
