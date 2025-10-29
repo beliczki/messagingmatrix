@@ -10,6 +10,7 @@ import MessageEditorDialog from './MessageEditorDialog';
 import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
 import OrphanedMessagesDialog from './OrphanedMessagesDialog';
+import MatrixControlPanel from './MatrixControlPanel';
 import PageHeader, { getButtonStyle } from './PageHeader';
 
 // Module-level persistent refs to survive component re-renders/remounts
@@ -1179,183 +1180,20 @@ const Matrix = ({
           )
         }
       >
-        {/* Matrix Zoom Controls - Only show in matrix view */}
-        {viewMode === 'matrix' && (
-          <div className="flex items-center gap-1 rounded p-0.5"
-               style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-            <button
-              onClick={() => setMatrixZoom(Math.max(matrixZoom * 0.8, 0.1))}
-              className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
-              title="Zoom Out"
-            >
-              −
-            </button>
-            <span className="text-white text-xs font-mono min-w-[45px] text-center">
-              {Math.round(matrixZoom * 100)}%
-            </span>
-            <button
-              onClick={() => setMatrixZoom(Math.min(matrixZoom * 1.2, 3))}
-              className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
-              title="Zoom In"
-            >
-              +
-            </button>
-          </div>
-        )}
-
-        {/* Display Mode Toggle - Only show in matrix view */}
-        {viewMode === 'matrix' && (
-          <div className="flex items-center rounded p-0.5 gap-0.5"
-               style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-            <button
-              onClick={() => setDisplayMode('informative')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
-                displayMode === 'informative'
-                  ? 'bg-white shadow-sm'
-                  : 'text-white hover:bg-white hover:bg-opacity-20'
-              }`}
-              style={displayMode === 'informative' ? {
-                backgroundColor: 'white',
-                color: lookAndFeel?.headerColor || '#2870ed'
-              } : {}}
-            >
-              <Eye size={20} />
-              <span className="text-sm font-medium">Informative</span>
-            </button>
-            <button
-              onClick={() => setDisplayMode('minimal')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
-                displayMode === 'minimal'
-                  ? 'bg-white shadow-sm'
-                  : 'text-white hover:bg-white hover:bg-opacity-20'
-              }`}
-              style={displayMode === 'minimal' ? {
-                backgroundColor: 'white',
-                color: lookAndFeel?.headerColor || '#2870ed'
-              } : {}}
-            >
-              <Eye size={14} />
-              <span className="text-sm font-medium">Minimal</span>
-            </button>
-          </div>
-        )}
-
-        {/* Tree View Controls - Only show in tree view */}
-        {viewMode === 'tree' && (
-          <>
-            {/* Hint text */}
-            <span className="text-white text-xs opacity-80">
-              Press space bar to zoom and pan
-            </span>
-
-            {/* Zoom controls */}
-            <div className="flex items-center gap-1 rounded p-0.5"
-                 style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-              <button
-                onClick={() => setTreeZoom(Math.max(treeZoom * 0.8, 0.1))}
-                className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
-                title="Zoom Out"
-              >
-                −
-              </button>
-              <span className="text-white text-xs font-mono min-w-[45px] text-center">
-                {Math.round(treeZoom * 100)}%
-              </span>
-              <button
-                onClick={() => setTreeZoom(Math.min(treeZoom * 1.2, 3))}
-                className="px-3 py-1.5 text-white rounded hover:bg-white hover:bg-opacity-20 transition-all font-bold text-sm"
-                title="Zoom In"
-              >
-                +
-              </button>
-            </div>
-
-            {/* Connector type toggle */}
-            <div className="flex items-center rounded p-0.5 gap-0.5"
-                 style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-              <button
-                onClick={() => setTreeConnectorType('elbow')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
-                  treeConnectorType === 'elbow'
-                    ? 'bg-white shadow-sm'
-                    : 'text-white hover:bg-white hover:bg-opacity-20'
-                }`}
-                style={treeConnectorType === 'elbow' ? {
-                  backgroundColor: 'white',
-                  color: lookAndFeel?.headerColor || '#2870ed'
-                } : {}}
-                title="Elbow Connectors"
-              >
-                <span className="text-sm font-medium">⌐⌐</span>
-              </button>
-              <button
-                onClick={() => setTreeConnectorType('curved')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded transition-all ${
-                  treeConnectorType === 'curved'
-                    ? 'bg-white shadow-sm'
-                    : 'text-white hover:bg-white hover:bg-opacity-20'
-                }`}
-                style={treeConnectorType === 'curved' ? {
-                  backgroundColor: 'white',
-                  color: lookAndFeel?.headerColor || '#2870ed'
-                } : {}}
-                title="Curved Connectors"
-              >
-                <span className="text-sm font-medium">~</span>
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* View Mode Toggle */}
-        <div className="flex items-center rounded p-0.5 gap-0.5"
-             style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}>
-          <button
-            onClick={() => setViewMode('matrix')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              viewMode === 'matrix'
-                ? 'bg-white shadow-sm'
-                : 'text-white hover:bg-white hover:bg-opacity-20'
-            }`}
-            style={viewMode === 'matrix' ? {
-              backgroundColor: 'white',
-              color: lookAndFeel?.headerColor || '#2870ed'
-            } : {}}
-            title="Matrix View"
-          >
-            <Table size={16} />
-          </button>
-          <button
-            onClick={() => setViewMode('tree')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              viewMode === 'tree'
-                ? 'bg-white shadow-sm'
-                : 'text-white hover:bg-white hover:bg-opacity-20'
-            }`}
-            style={viewMode === 'tree' ? {
-              backgroundColor: 'white',
-              color: lookAndFeel?.headerColor || '#2870ed'
-            } : {}}
-            title="Tree View"
-          >
-            <GitBranch size={16} />
-          </button>
-          <button
-            onClick={() => setViewMode('feed')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              viewMode === 'feed'
-                ? 'bg-white shadow-sm'
-                : 'text-white hover:bg-white hover:bg-opacity-20'
-            }`}
-            style={viewMode === 'feed' ? {
-              backgroundColor: 'white',
-              color: lookAndFeel?.headerColor || '#2870ed'
-            } : {}}
-            title="Feed View"
-          >
-            <List size={16} />
-          </button>
-        </div>
+        {/* Matrix/Tree/Feed Controls */}
+        <MatrixControlPanel
+          viewMode={viewMode}
+          displayMode={displayMode}
+          matrixZoom={matrixZoom}
+          treeZoom={treeZoom}
+          treeConnectorType={treeConnectorType}
+          lookAndFeel={lookAndFeel}
+          onViewModeChange={setViewMode}
+          onDisplayModeChange={setDisplayMode}
+          onMatrixZoomChange={setMatrixZoom}
+          onTreeZoomChange={setTreeZoom}
+          onTreeConnectorTypeChange={setTreeConnectorType}
+        />
 
         <button
           onClick={() => {
