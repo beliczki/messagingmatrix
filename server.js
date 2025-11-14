@@ -1702,6 +1702,7 @@ app.get('/api/assets/stats', async (req, res) => {
 // Initialize Drive Storage
 async function initializeDriveStorage() {
   try {
+    console.log('🔄 Initializing Google Drive storage...');
     const configPath = path.join(__dirname, 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
@@ -1709,11 +1710,19 @@ async function initializeDriveStorage() {
       const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
       const fullPath = path.join(__dirname, serviceAccountPath);
 
-      await driveStorage.initialize(
-        fullPath,
-        config.googleDrive.assetsFolderId,
-        config.googleDrive.creativesFolderId
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Drive initialization timeout (10s)')), 10000)
       );
+
+      await Promise.race([
+        driveStorage.initialize(
+          fullPath,
+          config.googleDrive.assetsFolderId,
+          config.googleDrive.creativesFolderId
+        ),
+        timeoutPromise
+      ]);
 
       console.log('✓ Google Drive storage initialized');
     } else {
@@ -1721,6 +1730,7 @@ async function initializeDriveStorage() {
     }
   } catch (error) {
     console.error('✗ Failed to initialize Google Drive storage:', error.message);
+    console.error('   Server will continue without Drive integration');
   }
 }
 
@@ -2048,13 +2058,22 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
 
 const server = app.listen(PORT, () => {
   console.log(`\n✓ Server running on http://localhost:${PORT}`);
+  console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✓ Make sure VITE_ANTHROPIC_API_KEY is set in your .env file\n`);
-  // Initialize Google Drive storage
-  initializeDriveStorage().catch(console.error);
+
+  // Initialize Google Drive storage (non-blocking)
+  initializeDriveStorage().catch(err => {
+    console.error('✗ Drive init failed, but server is running:', err.message);
+  });
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n✗ ERROR: Port ${PORT} is already in use!`);
-    console.error(`  Run 'npm run kill' to free up the port, then try again.\n`);
+    console.error(`  Please stop the running Node.js process on port ${PORT} first.\n`);
+    if (process.platform === 'win32') {
+      console.error(`  Windows: Run 'npm run kill' to free up the port.\n`);
+    } else {
+      console.error(`  Linux/Mac: Run 'lsof -ti:${PORT} | xargs kill -9'\n`);
+    }
     process.exit(1);
   } else {
     console.error('\n✗ Server error:', err);
