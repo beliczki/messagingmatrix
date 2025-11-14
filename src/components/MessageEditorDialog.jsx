@@ -65,6 +65,17 @@ const MessageEditorDialog = ({
     localStorage.setItem('messageEditor_skipAnimation', skipAnimation);
   }, [skipAnimation]);
 
+  // Status sync mode state (persisted to localStorage)
+  const [statusSyncMode, setStatusSyncMode] = useState(() => {
+    const saved = localStorage.getItem('messageEditor_statusSyncMode');
+    return saved || 'all'; // 'all' or 'unique'
+  });
+
+  // Persist statusSyncMode to localStorage
+  useEffect(() => {
+    localStorage.setItem('messageEditor_statusSyncMode', statusSyncMode);
+  }, [statusSyncMode]);
+
   // Track which formatting scope is selected for each field
   const [selectedFormattingScopes, setSelectedFormattingScopes] = useState({
     headline: 'default',
@@ -542,11 +553,38 @@ const MessageEditorDialog = ({
     // Update the main message
     updateMessage(messageId, updates);
 
-    // Sync to all variant copies (excluding audience and pmmid)
+    // Sync to all variant copies (excluding audience-specific and unique-mode fields)
     if (syncedMessages.length > 0) {
       syncedMessages.forEach(syncedMsg => {
-        // Create a copy of updates but exclude audience-specific fields
-        const { audience, pmmid, ...syncUpdates } = updates;
+        // Fields that should always be unique per message (never synced)
+        const excludeFields = [
+          'audience',     // Each message has a unique audience
+          'pmmid',        // Auto-generated from audience + other fields
+          'id',           // Numeric ID - unique per message
+          'version',      // Auto-increments per message
+          // Trafficking fields are computed from PMMID, so they're unique per message
+          'utm_campaign',
+          'utm_source',
+          'utm_medium',
+          'utm_content',
+          'utm_term',
+          'utm_cd26',
+          'final_trafficked_url'
+        ];
+
+        // If status sync mode is 'unique', also exclude status from sync
+        if (statusSyncMode === 'unique') {
+          excludeFields.push('status');
+        }
+
+        // Filter out excluded fields
+        const syncUpdates = Object.keys(updates)
+          .filter(key => !excludeFields.includes(key))
+          .reduce((obj, key) => {
+            obj[key] = updates[key];
+            return obj;
+          }, {});
+
         updateMessage(syncedMsg.id, syncUpdates);
       });
     }
@@ -905,7 +943,33 @@ const MessageEditorDialog = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm font-medium text-gray-700">Status</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setStatusSyncMode('all')}
+                          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                            statusSyncMode === 'all'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title="Sync status to all variant copies"
+                        >
+                          all
+                        </button>
+                        <button
+                          onClick={() => setStatusSyncMode('unique')}
+                          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                            statusSyncMode === 'unique'
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title="Keep status unique per audience"
+                        >
+                          unique
+                        </button>
+                      </div>
+                    </div>
                     {(() => {
                       const keywordValues = keywords.messages && keywords.messages.status;
                       const statusOptions = keywordValues && keywordValues.length > 0

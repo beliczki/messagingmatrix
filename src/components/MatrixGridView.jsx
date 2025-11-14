@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Edit2, Eye } from 'lucide-react';
+import { Plus, Edit2, Eye, Check, Copy, Move, X } from 'lucide-react';
 
 const MatrixGridView = ({
   matrixContainerRef,
@@ -31,8 +31,17 @@ const MatrixGridView = ({
   onDragStart,
   onDragOver,
   onDrop,
+  onDragEnd,
   setDraggedMsg,
-  setActiveTab
+  setActiveTab,
+  isSelectMode,
+  selectedMessages,
+  isDraggingSelected,
+  isCopyMode,
+  dragHoverCell,
+  dragOriginCell,
+  onMessageMouseDown,
+  onMessageMouseUp
 }) => {
   return (
     <div
@@ -112,7 +121,7 @@ const MatrixGridView = ({
                 );
               })}
               <th className="border border-gray-300 p-2">
-                {!spacePressed && (
+                {!spacePressed && !isDraggingSelected && (
                   <button
                     onClick={onAddAudience}
                     className="w-full h-full p-2 text-blue-500 hover:bg-blue-50 rounded"
@@ -166,13 +175,58 @@ const MatrixGridView = ({
                           return statusFilters.includes(msgStatus);
                         });
 
+                    // Check if this cell is the drag hover target
+                    const isHoverCell = dragHoverCell && dragHoverCell.topic === topic.key && dragHoverCell.audience === aud.key;
+                    const isDragging = draggedMsg !== null || isDraggingSelected;
+
+                    // Check if this is the origin cell
+                    const isOriginCell = dragOriginCell && dragOriginCell.topic === topic.key && dragOriginCell.audience === aud.key;
+
+                    // Determine if this is a valid drop zone
+                    const isValidDropZone = isDragging && draggedMsg && draggedMsg.topic === topic.key && !isOriginCell;
+
                     return (
                       <td
                         key={aud.key}
-                        className={`border border-gray-300 ${displayMode === 'minimal' ? 'p-1' : 'p-2'} align-top`}
-                        onDragOver={onDragOver}
+                        className={`border ${displayMode === 'minimal' ? 'p-1' : 'p-2'} align-top transition-colors relative ${
+                          isHoverCell && isOriginCell
+                            ? 'border-gray-400 bg-gray-100 border-2'
+                            : isHoverCell && isValidDropZone
+                            ? isCopyMode
+                              ? 'border-blue-500 bg-blue-50 border-2'
+                              : 'border-green-500 bg-green-50 border-2'
+                            : isHoverCell && !isValidDropZone
+                            ? 'border-red-500 bg-red-50 border-2'
+                            : 'border-gray-300'
+                        }`}
+                        onDragOver={(e) => onDragOver(e, topic.key, aud.key)}
                         onDrop={(e) => onDrop(e, topic.key, aud.key)}
                       >
+                        {/* Show mode indicator badge when hovering */}
+                        {isHoverCell && isValidDropZone && (
+                          <div className={`absolute top-1 right-1 flex items-center gap-1 px-2 py-1 rounded text-xs font-bold ${
+                            isCopyMode ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
+                          }`}>
+                            {isCopyMode ? (
+                              <>
+                                <Copy size={12} />
+                                <span>COPY</span>
+                              </>
+                            ) : (
+                              <>
+                                <Move size={12} />
+                                <span>MOVE</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {/* Show "no drop" indicator on origin cell */}
+                        {isHoverCell && isOriginCell && (
+                          <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-gray-400 text-white">
+                            <X size={12} />
+                            <span>ORIGIN</span>
+                          </div>
+                        )}
                         <div className={`${displayMode === 'minimal' ? 'min-h-[40px]' : 'min-h-[100px]'} ${displayMode === 'minimal' ? 'flex flex-wrap gap-1' : 'space-y-2'}`}>
                           {cellMsgs.map((msg) => {
                             // Determine status and color from settings
@@ -183,23 +237,46 @@ const MatrixGridView = ({
                             const bgColor = `${statusColorHex}33`;
                             const borderColor = statusColorHex;
 
+                            // Check if this message is selected
+                            const isSelected = selectedMessages && selectedMessages.has(msg.id);
+
                             return (
                               <div
                                 key={msg.id}
-                                draggable
+                                draggable={!isSelectMode || isSelected}
                                 onDragStart={(e) => onDragStart(e, msg)}
-                                onDragEnd={() => setDraggedMsg(null)}
-                                onDoubleClick={() => {
-                                  onEditMessage(msg);
-                                  setActiveTab('naming');
+                                onDragEnd={() => {
+                                  setDraggedMsg(null);
+                                  onDragEnd && onDragEnd();
                                 }}
-                                className={`border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} cursor-move hover:shadow group`}
+                                onMouseDown={(e) => onMessageMouseDown && onMessageMouseDown(e, msg)}
+                                onMouseUp={(e) => onMessageMouseUp && onMessageMouseUp(e, msg)}
+                                onDoubleClick={() => {
+                                  if (!isSelectMode) {
+                                    onEditMessage(msg);
+                                    setActiveTab('naming');
+                                  }
+                                }}
+                                className={`border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} hover:shadow group relative ${
+                                  isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                                } ${
+                                  isSelectMode ? 'cursor-pointer' : 'cursor-move'
+                                }`}
                                 style={{
-                                  backgroundColor: bgColor,
-                                  borderColor: borderColor
+                                  backgroundColor: isSelected ? '#EFF6FF' : bgColor,
+                                  borderColor: isSelected ? '#3B82F6' : borderColor,
+                                  borderWidth: isSelected ? '2px' : '1px'
                                 }}
                               >
                                 <div className="flex items-start gap-2">
+                                  {/* Selection indicator */}
+                                  {isSelectMode && (
+                                    <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                      isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-300 bg-white'
+                                    }`}>
+                                      {isSelected && <Check size={14} className="text-white" />}
+                                    </div>
+                                  )}
                                   <div className="flex-1">
                                     <div className="flex items-center justify-between gap-1 mb-1">
                                       <div className="flex items-center gap-1">
@@ -242,7 +319,7 @@ const MatrixGridView = ({
                             );
                           })}
 
-                          {!spacePressed && (
+                          {!spacePressed && !isDraggingSelected && (
                             <button
                               onClick={() => onAddMessage(topic.key, aud.key)}
                               className={`${displayMode === 'minimal' ? 'w-auto px-2' : 'w-full'} border-2 border-dashed border-gray-300 rounded p-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50`}
@@ -262,7 +339,7 @@ const MatrixGridView = ({
 
             <tr>
               <td className="border border-gray-300 p-2">
-                {!spacePressed && (
+                {!spacePressed && !isDraggingSelected && (
                   <button
                     onClick={onAddTopic}
                     className="w-full h-full p-2 text-green-500 hover:bg-green-50 rounded"
