@@ -253,6 +253,35 @@ app.get('/api/config', (req, res) => {
   }
 });
 
+// Diagnostic endpoint - check service account setup
+app.get('/api/diagnostics', (req, res) => {
+  try {
+    const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
+    const fullPath = path.join(__dirname, serviceAccountPath);
+
+    const diagnostics = {
+      serviceAccountPath: serviceAccountPath,
+      fullPath: fullPath,
+      fileExists: fs.existsSync(fullPath),
+      hasServiceAccount: !!serviceAccount,
+      serviceAccountEmail: serviceAccount?.client_email || 'not loaded',
+      hasAccessToken: !!accessToken,
+      tokenExpiry: tokenExpiry ? new Date(tokenExpiry).toISOString() : 'no token',
+      __dirname: __dirname,
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: process.env.PORT,
+        GOOGLE_SERVICE_ACCOUNT_PATH: process.env.GOOGLE_SERVICE_ACCOUNT_PATH
+      }
+    };
+
+    res.json(diagnostics);
+  } catch (error) {
+    console.error('Error in diagnostics:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
 // Update config
 app.post('/api/config', (req, res) => {
   try {
