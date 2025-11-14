@@ -19,6 +19,7 @@ const initializeUsers = async () => {
     // Create default users with hashed passwords
     const adminPassword = await hashPassword('temporary123');
     const demoPassword = await hashPassword('vegtelenlove');
+    const csengePassword = await hashPassword('vegtelenlove');
 
     const defaultUsers = [
       {
@@ -33,6 +34,13 @@ const initializeUsers = async () => {
         email: 'demo@messagingmatrix.ai',
         password: demoPassword,
         role: 'demo',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: '3',
+        email: 'csenge.barabas@mediaco.hu',
+        password: csengePassword,
+        role: 'user',
         createdAt: new Date().toISOString()
       }
     ];
@@ -119,12 +127,40 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const createUser = async (email, password, role = 'user') => {
+    try {
+      const users = JSON.parse(localStorage.getItem('app_users') || '[]');
+
+      // Check if user already exists
+      if (users.find(u => u.email === email)) {
+        throw new Error('User with this email already exists');
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const newUser = {
+        id: String(users.length + 1),
+        email,
+        password: hashedPassword,
+        role,
+        createdAt: new Date().toISOString()
+      };
+
+      users.push(newUser);
+      localStorage.setItem('app_users', JSON.stringify(users));
+
+      return { success: true, user: { ...newUser, password: undefined } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
   const value = {
     currentUser,
     login,
     logout,
     getAllUsers,
     changePassword,
+    createUser,
     loading,
     hashPassword
   };

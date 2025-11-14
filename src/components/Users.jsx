@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Users as UsersIcon, Key, X, Check, AlertCircle } from 'lucide-react';
+import { Users as UsersIcon, Key, X, Check, AlertCircle, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from './PageHeader';
 import AIAssistant from './AIAssistant';
 
 const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
-  const { getAllUsers, changePassword } = useAuth();
+  const { getAllUsers, changePassword, createUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [changingPasswordFor, setChangingPasswordFor] = useState(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('user');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -72,6 +77,55 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     setSuccess('');
   };
 
+  const handleCreateUser = async () => {
+    setError('');
+    setSuccess('');
+
+    // Validation
+    if (!newUserEmail || !newUserPassword || !newUserConfirmPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    if (newUserPassword !== newUserConfirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    // Create user
+    const result = await createUser(newUserEmail, newUserPassword, newUserRole);
+
+    if (result.success) {
+      setSuccess(`User ${newUserEmail} created successfully`);
+      setTimeout(() => {
+        setShowCreateDialog(false);
+        setNewUserEmail('');
+        setNewUserPassword('');
+        setNewUserConfirmPassword('');
+        setNewUserRole('user');
+        setSuccess('');
+        loadUsers();
+      }, 2000);
+    } else {
+      setError(result.error || 'Failed to create user');
+    }
+  };
+
+  const handleCancelCreate = () => {
+    setShowCreateDialog(false);
+    setNewUserEmail('');
+    setNewUserPassword('');
+    setNewUserConfirmPassword('');
+    setNewUserRole('user');
+    setError('');
+    setSuccess('');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -85,9 +139,18 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
       <div className="p-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-lg shadow-sm p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <UsersIcon size={32} className="text-purple-600" />
-              <h2 className="text-xl font-bold text-gray-800">User Management</h2>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <UsersIcon size={32} className="text-purple-600" />
+                <h2 className="text-xl font-bold text-gray-800">User Management</h2>
+              </div>
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+              >
+                <UserPlus size={20} />
+                Add User
+              </button>
             </div>
 
             {/* Users Table */}
@@ -149,6 +212,131 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
           </div>
         </div>
       </div>
+
+      {/* Create User Dialog */}
+      {showCreateDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Dialog Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Create New User</h3>
+              </div>
+              <button
+                onClick={handleCancelCreate}
+                className="p-2 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Dialog Body */}
+            <div className="p-6 space-y-4">
+              {/* Success Message */}
+              {success && (
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+                  <Check size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-green-800 text-sm">{success}</p>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                  <AlertCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-red-800 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* Email Field */}
+              <div>
+                <label htmlFor="newUserEmail" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
+                </label>
+                <input
+                  id="newUserEmail"
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="user@example.com"
+                  autoComplete="email"
+                />
+              </div>
+
+              {/* Role Field */}
+              <div>
+                <label htmlFor="newUserRole" className="block text-sm font-medium text-gray-700 mb-2">
+                  Role
+                </label>
+                <select
+                  id="newUserRole"
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                  <option value="demo">Demo</option>
+                </select>
+              </div>
+
+              {/* Password Field */}
+              <div>
+                <label htmlFor="newUserPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <input
+                  id="newUserPassword"
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="Enter password"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              {/* Confirm Password Field */}
+              <div>
+                <label htmlFor="newUserConfirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  id="newUserConfirmPassword"
+                  type="password"
+                  value={newUserConfirmPassword}
+                  onChange={(e) => setNewUserConfirmPassword(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Password must be at least 6 characters long
+              </p>
+            </div>
+
+            {/* Dialog Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={handleCancelCreate}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+              >
+                <UserPlus size={16} />
+                Create User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password Dialog */}
       {changingPasswordFor && (
