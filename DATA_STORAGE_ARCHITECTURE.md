@@ -148,6 +148,108 @@ The application uses **THREE different storage locations** for different types o
 
 ---
 
+## 4. File System (Text Files for AI Prompts)
+
+**Location:** `src/prompts/*.txt` (on server)
+
+**What's Stored:**
+- AI Assistant custom instructions per module
+- Data structure documentation for AI context
+
+**Files:**
+- `AIMatrixInstructions.txt` - Matrix module AI prompt
+- `AICreativeLibraryInstructions.txt` - Creative Library AI prompt
+- `AIAssetsInstructions.txt` - Assets AI prompt
+- `AIMonitoringInstructions.txt` - Monitoring AI prompt
+- `AITemplatesInstructions.txt` - Templates AI prompt
+- `AIUsersInstructions.txt` - Users AI prompt
+- `AITasksInstructions.txt` - Tasks AI prompt
+- `AISettingsInstructions.txt` - Settings AI prompt
+- `AIMessagingMatrixDataStructure.txt` - Data structure docs for AI
+
+**How It Works:**
+- Text files store module-specific AI prompts
+- Loaded via `GET /api/ai-prompts/:module`
+- Saved via `POST /api/ai-prompts/:module`
+- Edited in Settings module
+- Provides context to AI Assistant
+
+**Service:** `src/prompts/` directory
+- **Not migrated to SQLite** (intentionally kept as text files for easy editing)
+
+---
+
+## Settings Module Data Storage
+
+### What the Settings Module Manages
+
+**Location:** Settings module (`src/components/Settings.jsx`)
+
+**Data Types:**
+
+#### 1. Application Config (SQLite)
+**Stored in:** SQLite `config` table
+
+**Includes:**
+- `spreadsheetId` - Google Sheets spreadsheet ID
+- `googleDrive` - Drive folder configuration
+  - `enabled` - Drive integration on/off
+  - `assetsFolderId` - Assets folder ID
+  - `creativesFolderId` - Creatives folder ID
+- `patterns` - Dynamic pattern templates
+  - `pmmid` - PMMID generation pattern
+  - `topicKey` - Topic key generation pattern
+  - `trafficking` - UTM and trafficking patterns
+  - `feed` - Feed field patterns
+- `imageBaseUrls` - Base URLs for images
+- `treeStructure` - Tree view hierarchy definition
+- `feedStructure` - Feed CSV column structure
+- `lookAndFeel` - UI theming
+  - `logo` - Logo URL
+  - `headerColor` - Header background color
+  - `logoStyle` - CSS for logo
+  - `buttonColor` - Button color
+  - `buttonStyle` - Button CSS
+  - `secondaryColor1/2/3` - Additional theme colors
+  - `statusColors` - Status badge colors
+
+**How It's Stored:**
+- Settings service (`src/services/settings.js`) fetches from `/api/config`
+- Server reads from SQLite `config` table
+- Saved via `POST /api/config` → SQLite `config` table
+- **Auto-saved immediately** when you click "Save Settings"
+
+#### 2. AI Prompts (Text Files)
+**Stored in:** `src/prompts/*.txt` files (file system)
+
+**Includes:**
+- Module-specific AI instructions
+- Data structure documentation
+- Custom prompts per module
+
+**How It's Stored:**
+- Loaded from text files via `/api/ai-prompts`
+- Saved to text files via `POST /api/ai-prompts/:module`
+- **Saved to disk immediately** when you click "Save Settings"
+- Files edited directly by Settings module
+
+### Settings Save Operation
+
+**What happens when you click "Save Settings":**
+
+1. **Config data** → Saved to SQLite via `POST /api/config`
+2. **AI prompts** → Saved to text files via `POST /api/ai-prompts/:module`
+3. Settings service cache updated
+4. Success message shown
+
+**Important:**
+- ✅ Settings are **immediately persisted** (no "working state")
+- ✅ Changes survive page refresh
+- ✅ No need to click "Save" in Matrix State Panel
+- Settings ≠ Matrix Data (different save operations)
+
+---
+
 ## Matrix State System
 
 ### What is "Matrix State"?
@@ -280,10 +382,13 @@ POST /api/cache/sync
 
 | Data Type | Storage | Persists On | Cleared By |
 |-----------|---------|-------------|------------|
-| Audiences, Topics, Messages | Google Sheets | Save button | Never (manual deletion) |
+| Audiences, Topics, Messages | Google Sheets | Matrix "Save" button | Never (manual deletion) |
 | Matrix working state | Memory | Nothing | Reload/Page refresh |
 | UI view preferences | localStorage | Auto (on change) | Manual clear |
-| Config, Users, Tasks | SQLite | API calls | Database delete |
+| **Settings config** | **SQLite** | **Settings "Save" button** | **Database delete** |
+| **AI prompts** | **Text files** | **Settings "Save" button** | **Manual file deletion** |
+| Users, Tasks | SQLite | API calls | Database delete |
+| Share galleries | SQLite | API calls | Database delete |
 | Cache (sheets data) | SQLite | Cache sync | Cache clear |
 | User session | localStorage | Login | Logout |
 
