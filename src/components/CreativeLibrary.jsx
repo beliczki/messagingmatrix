@@ -44,8 +44,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [hasAutoSynced, setHasAutoSynced] = useState(false);
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
 
-  // Filter states
-  const [productFilter, setProductFilter] = useState([]);
+  // Filter states (load from localStorage if available)
+  const [productFilter, setProductFilter] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_productFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [typeFilter, setTypeFilter] = useState(['Dynamic HTML', 'Adobe generated']); // Both selected by default
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -559,6 +562,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   }, [availableProducts, productFilter.length]);
 
+  // Save product filter to localStorage
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_productFilter', JSON.stringify(productFilter));
+  }, [productFilter]);
+
   // Type filter options (Adobe generated = Drive synced/static creatives)
   const typeOptions = ['Dynamic HTML', 'Adobe generated'];
 
@@ -948,7 +956,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
         // Custom floating actions
         renderFloatingActions={({ showDebugInfo, setShowDebugInfo, debugInfo }) => (
-          <div className="fixed bottom-8 right-8 z-40">
+          <div className="fixed bottom-[68px] right-8 z-40">
             <button
               onClick={() => setShowDebugInfo(!showDebugInfo)}
               className={`p-3 rounded-full shadow-lg transition-all ${
@@ -962,9 +970,45 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             </button>
 
             {showDebugInfo && (
-              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 whitespace-nowrap border border-gray-200">
+              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 border border-gray-200 min-w-64">
+                {/* Drive Sync Status */}
+                {syncProgress && (
+                  <div className="mb-4 pb-4 border-b border-gray-200">
+                    <div className="font-semibold mb-2 flex items-center gap-2">
+                      {syncProgress.type === 'loading' && (
+                        <Loader size={16} className="text-blue-600 animate-spin" />
+                      )}
+                      {syncProgress.type === 'success' && (
+                        <CheckCircle size={16} className="text-green-600" />
+                      )}
+                      {syncProgress.type === 'error' && (
+                        <AlertCircle size={16} className="text-red-600" />
+                      )}
+                      <span className={
+                        syncProgress.type === 'loading' ? 'text-blue-600' :
+                        syncProgress.type === 'success' ? 'text-green-600' :
+                        'text-red-600'
+                      }>
+                        {syncProgress.type === 'loading' && 'Syncing with Drive...'}
+                        {syncProgress.type === 'success' && 'Sync Successful'}
+                        {syncProgress.type === 'error' && 'Sync Failed'}
+                      </span>
+                    </div>
+                    <div className="text-gray-600 whitespace-pre-line">{syncProgress.message}</div>
+                    {syncProgress.type === 'error' && (
+                      <button
+                        onClick={() => setSyncProgress(null)}
+                        className="mt-2 text-xs text-red-600 hover:text-red-700 underline"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Virtual Scrolling Info */}
                 <div className="font-semibold mb-2 text-blue-600">Virtual Scrolling Info</div>
-                <div>{debugInfo}</div>
+                <div className="whitespace-nowrap">{debugInfo}</div>
               </div>
             )}
           </div>
@@ -1008,50 +1052,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         templateName="html"
         textFormatting={matrixData?.textFormatting || []}
       />
-
-      {/* Sync Progress Overlay */}
-      {syncProgress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-            <div className="flex items-start gap-4">
-              {/* Icon */}
-              <div className="flex-shrink-0">
-                {syncProgress.type === 'loading' && (
-                  <Loader size={24} className="text-blue-600 animate-spin" />
-                )}
-                {syncProgress.type === 'success' && (
-                  <CheckCircle size={24} className="text-green-600" />
-                )}
-                {syncProgress.type === 'error' && (
-                  <AlertCircle size={24} className="text-red-600" />
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  {syncProgress.type === 'loading' && 'Syncing with Google Drive...'}
-                  {syncProgress.type === 'success' && 'Sync Successful'}
-                  {syncProgress.type === 'error' && 'Sync Failed'}
-                </h3>
-                <p className="text-sm text-gray-600 whitespace-pre-line">
-                  {syncProgress.message}
-                </p>
-              </div>
-
-              {/* Close button for error */}
-              {syncProgress.type === 'error' && (
-                <button
-                  onClick={() => setSyncProgress(null)}
-                  className="flex-shrink-0 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={20} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* AI Assistant */}
       <AIAssistant
