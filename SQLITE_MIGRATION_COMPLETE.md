@@ -4,6 +4,8 @@
 
 Successfully implemented **Option A** - all server API endpoints and frontend integration to migrate from JSON files and localStorage to SQLite database.
 
+**📖 For detailed architecture information, see [DATA_STORAGE_ARCHITECTURE.md](./DATA_STORAGE_ARCHITECTURE.md)**
+
 ## What Was Changed
 
 ### 1. Server API Endpoints (server.js)

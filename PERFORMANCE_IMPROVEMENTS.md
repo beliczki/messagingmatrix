@@ -2,6 +2,8 @@
 
 This document outlines the performance improvements implemented in the `caching-and-sqlite` branch.
 
+**📖 For complete data storage architecture, see [DATA_STORAGE_ARCHITECTURE.md](./DATA_STORAGE_ARCHITECTURE.md)**
+
 ## 🎯 Quick Wins Implemented
 
 ### 1. ✅ SQLite Read Cache Layer
