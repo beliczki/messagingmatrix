@@ -175,7 +175,8 @@ const MatrixStatePanel = ({
           Clear & Reload
         </button>
 
-        {onRegenerateTopicKeys && (
+        {/* Regenerate Topic Keys button - commented out for now */}
+        {/* {onRegenerateTopicKeys && (
           <button
             onClick={onRegenerateTopicKeys}
             className="flex items-center gap-2 px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
@@ -184,7 +185,7 @@ const MatrixStatePanel = ({
             <Sparkles size={14} />
             Regen Keys
           </button>
-        )}
+        )} */}
 
         <button
           onClick={onSave}
