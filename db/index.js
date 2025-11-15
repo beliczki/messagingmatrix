@@ -276,6 +276,24 @@ class DatabaseService {
       )
     `);
 
+    // Create uploaded_assets table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS uploaded_assets (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        original_filename TEXT,
+        upload_date TEXT DEFAULT CURRENT_TIMESTAMP,
+        last_modified TEXT DEFAULT CURRENT_TIMESTAMP,
+        metadata TEXT,
+        tags TEXT,
+        platforms TEXT,
+        status TEXT DEFAULT 'active',
+        directory TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('✅ Database tables created');
   }
 
@@ -299,7 +317,9 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_tasks_bucket ON tasks(bucket)',
       'CREATE INDEX IF NOT EXISTS idx_config_category ON config(category)',
       'CREATE INDEX IF NOT EXISTS idx_share_galleries_created_by ON share_galleries(created_by)',
-      'CREATE INDEX IF NOT EXISTS idx_processed_emails_uid ON processed_emails(uid)'
+      'CREATE INDEX IF NOT EXISTS idx_processed_emails_uid ON processed_emails(uid)',
+      'CREATE INDEX IF NOT EXISTS idx_uploaded_assets_filename ON uploaded_assets(filename)',
+      'CREATE INDEX IF NOT EXISTS idx_uploaded_assets_status ON uploaded_assets(status)'
     ];
 
     indexes.forEach(index => {

@@ -204,6 +204,23 @@ export const processedEmails = sqliteTable('processed_emails', {
   tasks_created: integer('tasks_created').default(0)
 });
 
+// Uploaded assets registry table - migrated from assets.json
+// Tracks locally uploaded assets (different from Google Sheets assets cache)
+export const uploadedAssets = sqliteTable('uploaded_assets', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  original_filename: text('original_filename'),
+  upload_date: text('upload_date').default(sql`CURRENT_TIMESTAMP`),
+  last_modified: text('last_modified').default(sql`CURRENT_TIMESTAMP`),
+  metadata: text('metadata'), // JSON: brand, product, type, visualKeyword, visualDescription, dimensions, placeholderName, croppingTemplate, version, format
+  tags: text('tags'), // JSON array
+  platforms: text('platforms'), // JSON array
+  status: text('status').default('active'),
+  directory: text('directory'),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
 // Indexes for performance
 export const messageIndexes = {
   cellIndex: sql`CREATE INDEX IF NOT EXISTS idx_messages_cell ON messages(topic, audience)`,

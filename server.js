@@ -2039,16 +2039,9 @@ app.post('/api/assets/confirm-upload', async (req, res) => {
 
     await fsPromises.rename(tempPath, finalPath);
 
-    // Update assets.json registry
+    // Update assets registry (SQLite)
     try {
-      const assetsJsonPath = path.join(__dirname, 'assets.json');
-      let assetsRegistry = { assets: [] };
-
-      // Read existing registry
-      if (fs.existsSync(assetsJsonPath)) {
-        const existingData = await fsPromises.readFile(assetsJsonPath, 'utf8');
-        assetsRegistry = JSON.parse(existingData);
-      }
+      const sqlite = db.getSqlite();
 
       // Create new asset record
       const assetRecord = {
@@ -2075,15 +2068,30 @@ app.post('/api/assets/confirm-upload', async (req, res) => {
         directory: targetDir
       };
 
-      // Add to registry
-      assetsRegistry.assets.push(assetRecord);
+      // Insert into SQLite
+      const stmt = sqlite.prepare(`
+        INSERT INTO uploaded_assets (
+          id, filename, original_filename, upload_date, last_modified,
+          metadata, tags, platforms, status, directory
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
-      // Write back to file
-      await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+      stmt.run(
+        assetRecord.id,
+        assetRecord.filename,
+        assetRecord.originalFilename,
+        assetRecord.uploadDate,
+        assetRecord.lastModified,
+        JSON.stringify(assetRecord.metadata),
+        JSON.stringify(assetRecord.tags),
+        JSON.stringify(assetRecord.platforms),
+        assetRecord.status,
+        assetRecord.directory
+      );
 
       console.log('Asset added to registry:', assetRecord);
     } catch (registryError) {
-      console.error('Error updating assets.json:', registryError);
+      console.error('Error updating assets registry:', registryError);
       // Continue even if registry update fails
     }
 
@@ -2143,26 +2151,39 @@ app.get('/api/assets/temp-preview/:filename', (req, res) => {
   }
 });
 
-// Get assets registry (assets.json)
+// Get assets registry (from SQLite)
 app.get('/api/assets/registry', async (req, res) => {
   try {
-    const assetsJsonPath = path.join(__dirname, 'assets.json');
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT * FROM uploaded_assets ORDER BY upload_date DESC');
+    const assets = stmt.all();
 
-    if (!fs.existsSync(assetsJsonPath)) {
-      return res.json({ assets: [] });
-    }
+    // Parse JSON fields
+    const parsedAssets = assets.map(asset => ({
+      id: asset.id,
+      filename: asset.filename,
+      originalFilename: asset.original_filename,
+      uploadDate: asset.upload_date,
+      lastModified: asset.last_modified,
+      metadata: asset.metadata ? JSON.parse(asset.metadata) : {},
+      tags: asset.tags ? JSON.parse(asset.tags) : [],
+      platforms: asset.platforms ? JSON.parse(asset.platforms) : [],
+      status: asset.status,
+      directory: asset.directory
+    }));
 
-    const data = await fsPromises.readFile(assetsJsonPath, 'utf8');
-    const registry = JSON.parse(data);
-
-    res.json(registry);
+    res.json({
+      assets: parsedAssets,
+      version: '1.0.0',
+      lastUpdated: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error reading assets registry:', error);
     res.status(500).json({ error: 'Failed to read assets registry' });
   }
 });
 
-// Add/Update asset in registry
+// Add/Update asset in registry (using SQLite)
 app.post('/api/assets/registry', async (req, res) => {
   try {
     const assetRecord = req.body;
@@ -2171,45 +2192,50 @@ app.post('/api/assets/registry', async (req, res) => {
       return res.status(400).json({ error: 'Filename is required' });
     }
 
-    const assetsJsonPath = path.join(__dirname, 'assets.json');
-    let assetsRegistry = { assets: [] };
+    const sqlite = db.getSqlite();
 
-    // Read existing registry
-    if (fs.existsSync(assetsJsonPath)) {
-      const existingData = await fsPromises.readFile(assetsJsonPath, 'utf8');
-      assetsRegistry = JSON.parse(existingData);
+    // Generate ID if not provided
+    if (!assetRecord.id) {
+      assetRecord.id = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
     }
 
-    // Check if asset already exists
-    const existingIndex = assetsRegistry.assets.findIndex(a => a.id === assetRecord.id || a.filename === assetRecord.filename);
+    // Prepare data
+    const uploadDate = assetRecord.uploadDate || new Date().toISOString();
+    const lastModified = new Date().toISOString();
+    const metadata = JSON.stringify(assetRecord.metadata || {});
+    const tags = JSON.stringify(assetRecord.tags || []);
+    const platforms = JSON.stringify(assetRecord.platforms || []);
 
-    if (existingIndex >= 0) {
-      // Update existing record
-      assetRecord.lastModified = new Date().toISOString();
-      assetsRegistry.assets[existingIndex] = assetRecord;
-    } else {
-      // Add new record
-      if (!assetRecord.id) {
-        assetRecord.id = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      }
-      if (!assetRecord.uploadDate) {
-        assetRecord.uploadDate = new Date().toISOString();
-      }
-      assetRecord.lastModified = new Date().toISOString();
-      assetsRegistry.assets.push(assetRecord);
-    }
+    // Insert or replace
+    const stmt = sqlite.prepare(`
+      INSERT OR REPLACE INTO uploaded_assets (
+        id, filename, original_filename, upload_date, last_modified,
+        metadata, tags, platforms, status, directory, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-    // Write back to file
-    await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+    stmt.run(
+      assetRecord.id,
+      assetRecord.filename,
+      assetRecord.originalFilename || assetRecord.filename,
+      uploadDate,
+      lastModified,
+      metadata,
+      tags,
+      platforms,
+      assetRecord.status || 'active',
+      assetRecord.directory || 'assets',
+      lastModified
+    );
 
-    res.json({ success: true, asset: assetRecord });
+    res.json({ success: true, asset: { ...assetRecord, id: assetRecord.id, uploadDate, lastModified } });
   } catch (error) {
     console.error('Error updating assets registry:', error);
     res.status(500).json({ error: 'Failed to update assets registry' });
   }
 });
 
-// Delete asset from registry
+// Delete asset from registry (using SQLite)
 app.delete('/api/assets/registry', async (req, res) => {
   try {
     const { id } = req.body;
@@ -2218,25 +2244,19 @@ app.delete('/api/assets/registry', async (req, res) => {
       return res.status(400).json({ error: 'Asset ID is required' });
     }
 
-    const assetsJsonPath = path.join(__dirname, 'assets.json');
+    const sqlite = db.getSqlite();
 
-    if (!fs.existsSync(assetsJsonPath)) {
-      return res.status(404).json({ error: 'Registry not found' });
-    }
+    // Check if asset exists
+    const checkStmt = sqlite.prepare('SELECT id FROM uploaded_assets WHERE id = ?');
+    const existing = checkStmt.get(id);
 
-    const data = await fsPromises.readFile(assetsJsonPath, 'utf8');
-    const assetsRegistry = JSON.parse(data);
-
-    // Remove asset from registry
-    const originalLength = assetsRegistry.assets.length;
-    assetsRegistry.assets = assetsRegistry.assets.filter(a => a.id !== id);
-
-    if (assetsRegistry.assets.length === originalLength) {
+    if (!existing) {
       return res.status(404).json({ error: 'Asset not found in registry' });
     }
 
-    // Write back to file
-    await fsPromises.writeFile(assetsJsonPath, JSON.stringify(assetsRegistry, null, 2), 'utf8');
+    // Delete asset
+    const deleteStmt = sqlite.prepare('DELETE FROM uploaded_assets WHERE id = ?');
+    deleteStmt.run(id);
 
     res.json({ success: true });
   } catch (error) {
