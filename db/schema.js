@@ -142,6 +142,68 @@ export const cacheMetadata = sqliteTable('cache_metadata', {
   error_message: text('error_message')
 });
 
+// ========================================
+// Application Data Tables
+// ========================================
+
+// Users table - migrated from localStorage
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  password: text('password').notNull(), // SHA-256 hashed
+  role: text('role').default('user'), // 'admin', 'user', 'demo'
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Tasks table - migrated from tasks.json
+export const tasks = sqliteTable('tasks', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  priority: text('priority'), // 'High', 'Medium', 'Low'
+  due_date: text('due_date'),
+  source: text('source'),
+  from: text('from'),
+  status: text('status').default('pending'), // 'pending', 'completed', 'in_progress'
+  email_uid: integer('email_uid'),
+  bucket: text('bucket').default('backlog'), // 'backlog', 'review', 'done'
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Config table - migrated from config.json
+// Stores key-value configuration with JSON support
+export const config = sqliteTable('config', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(), // JSON stringified for complex values
+  category: text('category'), // 'pattern', 'lookAndFeel', 'googleDrive', etc.
+  description: text('description'),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Share galleries table - migrated from public/share/*/share.json
+export const shareGalleries = sqliteTable('share_galleries', {
+  id: text('id').primaryKey(), // The share ID
+  title: text('title'),
+  description: text('description'),
+  created_by: text('created_by'),
+  creative_ids: text('creative_ids'), // JSON array of creative IDs
+  asset_ids: text('asset_ids'), // JSON array of asset IDs
+  metadata: text('metadata'), // JSON for additional data
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
+// Processed emails table - migrated from processed-emails.json
+export const processedEmails = sqliteTable('processed_emails', {
+  uid: integer('uid').primaryKey(),
+  email_from: text('email_from'),
+  subject: text('subject'),
+  processed_at: text('processed_at').default(sql`CURRENT_TIMESTAMP`),
+  tasks_created: integer('tasks_created').default(0)
+});
+
 // Indexes for performance
 export const messageIndexes = {
   cellIndex: sql`CREATE INDEX IF NOT EXISTS idx_messages_cell ON messages(topic, audience)`,

@@ -209,6 +209,73 @@ class DatabaseService {
       )
     `);
 
+    // Create users table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create tasks table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT,
+        due_date TEXT,
+        source TEXT,
+        "from" TEXT,
+        status TEXT DEFAULT 'pending',
+        email_uid INTEGER,
+        bucket TEXT DEFAULT 'backlog',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create config table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        category TEXT,
+        description TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create share_galleries table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS share_galleries (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        created_by TEXT,
+        creative_ids TEXT,
+        asset_ids TEXT,
+        metadata TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create processed_emails table
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS processed_emails (
+        uid INTEGER PRIMARY KEY,
+        email_from TEXT,
+        subject TEXT,
+        processed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        tasks_created INTEGER DEFAULT 0
+      )
+    `);
+
     console.log('✅ Database tables created');
   }
 
@@ -226,7 +293,13 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_assets_drive_id ON assets(file_drive_id)',
       'CREATE INDEX IF NOT EXISTS idx_creatives_brand ON creatives(brand)',
       'CREATE INDEX IF NOT EXISTS idx_creatives_product ON creatives(product)',
-      'CREATE INDEX IF NOT EXISTS idx_creatives_drive_id ON creatives(file_drive_id)'
+      'CREATE INDEX IF NOT EXISTS idx_creatives_drive_id ON creatives(file_drive_id)',
+      'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_bucket ON tasks(bucket)',
+      'CREATE INDEX IF NOT EXISTS idx_config_category ON config(category)',
+      'CREATE INDEX IF NOT EXISTS idx_share_galleries_created_by ON share_galleries(created_by)',
+      'CREATE INDEX IF NOT EXISTS idx_processed_emails_uid ON processed_emails(uid)'
     ];
 
     indexes.forEach(index => {
