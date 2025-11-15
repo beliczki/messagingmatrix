@@ -22,8 +22,8 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    const allUsers = getAllUsers();
+  const loadUsers = async () => {
+    const allUsers = await getAllUsers();
     setUsers(allUsers);
   };
 
