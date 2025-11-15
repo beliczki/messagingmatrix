@@ -1051,13 +1051,6 @@ app.post('/api/shares', async (req, res) => {
       new Date().toISOString()
     );
 
-    // Also write share.json for backward compatibility with static file serving
-    fs.writeFileSync(
-      path.join(shareDir, 'share.json'),
-      JSON.stringify(shareData, null, 2),
-      'utf8'
-    );
-
     // Build full share URL
     // Use APP_BASE_URL from environment (for production)
     // or FRONTEND_URL (for development), defaulting to localhost:5173
@@ -1118,12 +1111,6 @@ app.post('/api/shares/:shareId/comments', (req, res) => {
       new Date().toISOString(),
       shareId
     );
-
-    // Also update share.json for backward compatibility
-    const sharePath = path.join(sharesDir, shareId, 'share.json');
-    if (fs.existsSync(sharePath)) {
-      fs.writeFileSync(sharePath, JSON.stringify(shareData, null, 2), 'utf8');
-    }
 
     res.json({ comment });
   } catch (error) {
@@ -1391,57 +1378,7 @@ app.post('/api/emails/:uid/mark-read', async (req, res) => {
   }
 });
 
-// Task endpoints
-const tasksFilePath = path.join(__dirname, 'tasks.json');
-const processedEmailsFilePath = path.join(__dirname, 'processed-emails.json');
-
-// Helper function to read tasks
-function readTasks() {
-  try {
-    if (fs.existsSync(tasksFilePath)) {
-      const data = fs.readFileSync(tasksFilePath, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error reading tasks:', error);
-  }
-  return [];
-}
-
-// Helper function to write tasks
-function writeTasks(tasks) {
-  try {
-    fs.writeFileSync(tasksFilePath, JSON.stringify(tasks, null, 2), 'utf8');
-    return true;
-  } catch (error) {
-    console.error('Error writing tasks:', error);
-    return false;
-  }
-}
-
-// Helper function to read processed emails
-function readProcessedEmails() {
-  try {
-    if (fs.existsSync(processedEmailsFilePath)) {
-      const data = fs.readFileSync(processedEmailsFilePath, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error reading processed emails:', error);
-  }
-  return [];
-}
-
-// Helper function to write processed emails
-function writeProcessedEmails(emailUids) {
-  try {
-    fs.writeFileSync(processedEmailsFilePath, JSON.stringify(emailUids, null, 2), 'utf8');
-    return true;
-  } catch (error) {
-    console.error('Error writing processed emails:', error);
-    return false;
-  }
-}
+// Task endpoints (SQLite-backed)
 
 // Get all tasks (from SQLite)
 app.get('/api/tasks', (req, res) => {
@@ -2352,8 +2289,21 @@ app.get('/api/assets/stats', async (req, res) => {
 async function initializeDriveStorage() {
   try {
     console.log('🔄 Initializing Google Drive storage...');
-    const configPath = path.join(__dirname, 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+    // Get config from SQLite
+    const sqlite = db.getSqlite();
+    const configStmt = sqlite.prepare('SELECT * FROM config');
+    const configRows = configStmt.all();
+
+    // Rebuild config object from key-value pairs
+    const config = {};
+    configRows.forEach(row => {
+      try {
+        config[row.key] = JSON.parse(row.value);
+      } catch {
+        config[row.key] = row.value;
+      }
+    });
 
     if (config.googleDrive && config.googleDrive.enabled) {
       const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
