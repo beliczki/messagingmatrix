@@ -545,15 +545,39 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   };
 
-  // Get unique products from matrixData audiences
+  // Get unique products from both matrixData audiences and creatives
   const availableProducts = React.useMemo(() => {
-    if (!matrixData?.audiences) return [];
     const products = new Set();
-    matrixData.audiences.forEach(aud => {
-      if (aud.product) products.add(aud.product);
+
+    // Add products from audiences
+    if (matrixData?.audiences) {
+      matrixData.audiences.forEach(aud => {
+        if (aud.product) products.add(aud.product);
+      });
+    }
+
+    // Add products from creatives (including static/Drive creatives)
+    let hasUndefinedProduct = false;
+    creatives.forEach(creative => {
+      if (creative.product && creative.product.trim()) {
+        products.add(creative.product);
+      } else {
+        hasUndefinedProduct = true;
+      }
     });
-    return Array.from(products).sort();
-  }, [matrixData?.audiences]);
+
+    // Add "N/A" option if there are creatives without products
+    if (hasUndefinedProduct) {
+      products.add('N/A');
+    }
+
+    return Array.from(products).sort((a, b) => {
+      // Keep N/A at the end
+      if (a === 'N/A') return 1;
+      if (b === 'N/A') return -1;
+      return a.localeCompare(b);
+    });
+  }, [matrixData?.audiences, creatives]);
 
   // Set all products selected by default when availableProducts changes
   useEffect(() => {
@@ -574,8 +598,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const filteredByFilters = React.useMemo(() => {
     return creatives.filter(creative => {
       // Product filter
-      const matchesProduct = productFilter.length === 0 ||
-        (creative.product && productFilter.includes(creative.product));
+      let matchesProduct = productFilter.length === 0;
+      if (!matchesProduct) {
+        if (creative.product && creative.product.trim()) {
+          // Creative has a product - check if it's in the filter
+          matchesProduct = productFilter.includes(creative.product);
+        } else {
+          // Creative has no product - check if "N/A" is in the filter
+          matchesProduct = productFilter.includes('N/A');
+        }
+      }
 
       // Type filter
       let matchesType = true;
