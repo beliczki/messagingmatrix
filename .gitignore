@@ -33,3 +33,10 @@ SECRETS_SETUP.md
 secrets.local.js
 config.local.js
 service-account.jsonnul
+
+# SQLite database and cache
+db/*.db
+db/*.db-shm
+db/*.db-wal
+cache/drive/*
+!cache/drive/.gitkeep

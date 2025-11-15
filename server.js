@@ -11,8 +11,14 @@ import multer from 'multer';
 import sizeOf from 'image-size';
 import driveStorage from './src/services/driveStorage.js';
 import { applyTextFormattingSpans } from './src/utils/textFormatter.js';
+import db from './db/index.js';
+import syncService from './services/syncService.js';
 
 dotenv.config();
+
+// Initialize SQLite database
+console.log('🔄 Initializing SQLite cache database...');
+db.initialize();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -250,6 +256,123 @@ app.get('/api/config', (req, res) => {
   } catch (error) {
     console.error('Error reading config:', error);
     res.status(500).json({ error: 'Failed to read config file' });
+  }
+});
+
+// ========================================
+// SQLite Cache Layer Endpoints
+// ========================================
+
+// Get cached data from SQLite (faster than Sheets)
+app.get('/api/cache/:table', async (req, res) => {
+  try {
+    const { table } = req.params;
+    const sqlite = db.getSqlite();
+
+    // Validate table name (security)
+    const validTables = ['audiences', 'topics', 'messages', 'assets', 'creatives', 'text_formatting'];
+    if (!validTables.includes(table)) {
+      return res.status(400).json({ error: 'Invalid table name' });
+    }
+
+    // Check if cache is stale
+    const isStale = db.isCacheStale(table, 15); // 15 minutes
+    const metadata = db.getCacheMetadata(table);
+
+    // Get data from SQLite
+    const stmt = sqlite.prepare(`SELECT * FROM ${table}`);
+    const rows = stmt.all();
+
+    res.json({
+      data: rows,
+      cached: true,
+      cacheAge: metadata?.last_sync || null,
+      isStale,
+      count: rows.length
+    });
+  } catch (error) {
+    console.error(`Error reading cache for ${req.params.table}:`, error);
+    res.status(500).json({ error: 'Failed to read cache' });
+  }
+});
+
+// Sync Google Sheets to SQLite cache
+app.post('/api/cache/sync', async (req, res) => {
+  try {
+    const { spreadsheetId } = req.body;
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'spreadsheetId required' });
+    }
+
+    console.log('🔄 Syncing Google Sheets to SQLite cache...');
+
+    // Fetch all sheets data
+    const token = await getAccessToken();
+    const baseUrl = `${SHEETS_BASE_URL}/${spreadsheetId}/values`;
+
+    const [audiences, topics, messages, assets, creatives, textFormatting] = await Promise.all([
+      fetch(`${baseUrl}/Audiences`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []),
+
+      fetch(`${baseUrl}/Topics`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []),
+
+      fetch(`${baseUrl}/Messages`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []),
+
+      fetch(`${baseUrl}/Assets`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []),
+
+      fetch(`${baseUrl}/Creatives`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []),
+
+      fetch(`${baseUrl}/textformats`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.json()).then(d => d.values || []).catch(() => [])
+    ]);
+
+    // Sync to SQLite
+    const results = await syncService.syncAll({
+      audiences,
+      topics,
+      messages,
+      assets,
+      creatives,
+      textFormatting
+    });
+
+    res.json({
+      success: true,
+      message: 'Cache synced successfully',
+      results: results.results,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error syncing cache:', error);
+    res.status(500).json({ error: 'Failed to sync cache', details: error.message });
+  }
+});
+
+// Get cache status/metadata
+app.get('/api/cache/status', (req, res) => {
+  try {
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT * FROM cache_metadata');
+    const metadata = stmt.all();
+
+    res.json({
+      tables: metadata,
+      databaseSize: fs.statSync(path.join(__dirname, 'db', 'messaging-matrix.db')).size
+    });
+  } catch (error) {
+    console.error('Error getting cache status:', error);
+    res.status(500).json({ error: 'Failed to get cache status' });
   }
 });
 
@@ -1958,6 +2081,59 @@ app.post('/api/drive/upload-batch', upload.array('files'), async (req, res) => {
   }
 });
 
+// Helper function to get cached Drive file
+async function getCachedDriveFile(fileId, metadata) {
+  const cacheDir = path.join(__dirname, 'cache', 'drive');
+  const cachePath = path.join(cacheDir, `${fileId}.cache`);
+  const metaPath = path.join(cacheDir, `${fileId}.meta.json`);
+
+  // Ensure cache directory exists
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+
+  // Check if cached file exists
+  if (fs.existsSync(cachePath) && fs.existsSync(metaPath)) {
+    try {
+      const cachedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+
+      // Check if cache is still valid (compare modified times)
+      if (cachedMeta.modifiedTime === metadata.modifiedTime) {
+        console.log(`✅ Cache HIT for ${fileId}`);
+        return fs.readFileSync(cachePath);
+      } else {
+        console.log(`⚠️ Cache STALE for ${fileId} (modified time changed)`);
+      }
+    } catch (error) {
+      console.warn(`Cache read error for ${fileId}:`, error.message);
+    }
+  } else {
+    console.log(`❌ Cache MISS for ${fileId}`);
+  }
+
+  // Cache miss or stale - download from Drive
+  console.log(`⬇️ Downloading ${fileId} from Drive...`);
+  const fileData = await driveStorage.downloadFile(fileId);
+
+  // Save to cache
+  try {
+    fs.writeFileSync(cachePath, fileData);
+    fs.writeFileSync(metaPath, JSON.stringify({
+      fileId,
+      modifiedTime: metadata.modifiedTime,
+      mimeType: metadata.mimeType,
+      name: metadata.name,
+      size: fileData.length,
+      cachedAt: new Date().toISOString()
+    }));
+    console.log(`💾 Cached ${fileId} to disk (${fileData.length} bytes)`);
+  } catch (error) {
+    console.warn(`Failed to cache ${fileId}:`, error.message);
+  }
+
+  return fileData;
+}
+
 // Proxy endpoint to serve Drive files (supports both file IDs and filenames)
 app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
   try {
@@ -2013,8 +2189,8 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
       return;
     }
 
-    // Download file from Drive
-    const fileData = await driveStorage.downloadFile(fileId);
+    // Get file from cache or download from Drive
+    const fileData = await getCachedDriveFile(fileId, metadata);
     const fileSize = fileData.length;
 
     // Handle byte-range requests (crucial for video seeking and caching)

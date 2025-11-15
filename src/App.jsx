@@ -1,20 +1,32 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
 import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
-import Matrix from './components/Matrix';
-import CreativeLibrary from './components/CreativeLibrary';
-import Assets from './components/Assets';
-import Monitoring from './components/Monitoring';
-import Templates from './components/Templates';
-import Tasks from './components/Tasks';
-import Users from './components/Users';
-import Settings from './components/Settings';
-import Login from './components/Login';
-import PreviewView from './components/PreviewView';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
 import settings from './services/settings';
 import './App.css';
+
+// Lazy load heavy components for better code splitting
+const Matrix = lazy(() => import('./components/Matrix'));
+const CreativeLibrary = lazy(() => import('./components/CreativeLibrary'));
+const Assets = lazy(() => import('./components/Assets'));
+const Monitoring = lazy(() => import('./components/Monitoring'));
+const Templates = lazy(() => import('./components/Templates'));
+const Tasks = lazy(() => import('./components/Tasks'));
+const Users = lazy(() => import('./components/Users'));
+const Settings = lazy(() => import('./components/Settings'));
+const Login = lazy(() => import('./components/Login'));
+const PreviewView = lazy(() => import('./components/PreviewView'));
+
+// Loading component
+const LoadingFallback = () => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="text-center">
+      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+      <div className="text-gray-600">Loading...</div>
+    </div>
+  </div>
+);
 
 // Component to wrap PreviewView
 const PreviewViewWrapper = () => {
@@ -146,22 +158,25 @@ const App = () => {
   // Show login if not authenticated
   if (!currentUser) {
     return (
-      <Routes>
-        <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   // Authenticated app layout - inline JSX to prevent remounting
   return (
-    <Routes>
-      {/* Public preview route - no authentication required */}
-      <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
+    <Suspense fallback={<LoadingFallback />}>
+      <Routes>
+        {/* Public preview route - no authentication required */}
+        <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
 
-      {/* All other routes require authentication */}
-      <Route path="*" element={
-        <div className="flex h-screen overflow-hidden bg-gray-50">
+        {/* All other routes require authentication */}
+        <Route path="*" element={
+          <div className="flex h-screen overflow-hidden bg-gray-50">
           {/* Slide-in Menu */}
           <div
             className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col ${
@@ -229,21 +244,31 @@ const App = () => {
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Module Content */}
+            {/* Module Content with Suspense for lazy-loaded components */}
             <div className="flex-1 overflow-auto">
-              <CurrentModuleComponent
-                onMenuToggle={() => setMenuOpen(!menuOpen)}
-                currentModuleName={modules.find(m => m.id === currentModule)?.name}
-                matrixData={matrixData}
-                lookAndFeel={lookAndFeel}
-                matrixViewState={matrixViewState}
-                setMatrixViewState={setMatrixViewState}
-              />
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                    <div className="text-gray-600 text-sm">Loading module...</div>
+                  </div>
+                </div>
+              }>
+                <CurrentModuleComponent
+                  onMenuToggle={() => setMenuOpen(!menuOpen)}
+                  currentModuleName={modules.find(m => m.id === currentModule)?.name}
+                  matrixData={matrixData}
+                  lookAndFeel={lookAndFeel}
+                  matrixViewState={matrixViewState}
+                  setMatrixViewState={setMatrixViewState}
+                />
+              </Suspense>
             </div>
           </div>
         </div>
-      } />
-    </Routes>
+        } />
+      </Routes>
+    </Suspense>
   );
 };
 
