@@ -111,7 +111,11 @@ const CreativeLibraryMasonryView = ({
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ onError fired for ${item.filename}`, e);
+                        console.error(`❌ Failed to load creative:`, {
+                          filename: item.filename,
+                          url: item.url,
+                          item: item
+                        });
                         setNextItemIndex(itemIndex + 1);
                       }}
                     />
@@ -130,7 +134,11 @@ const CreativeLibraryMasonryView = ({
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ onError fired for ${item.filename}`, e);
+                        console.error(`❌ Failed to load creative:`, {
+                          filename: item.filename,
+                          url: item.url,
+                          item: item
+                        });
                         setNextItemIndex(itemIndex + 1);
                       }}
                       preload="metadata"
