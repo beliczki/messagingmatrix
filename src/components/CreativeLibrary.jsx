@@ -126,13 +126,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     };
   }, []);
 
-  // Set all products selected by default when availableProducts changes
-  useEffect(() => {
-    if (availableProducts.length > 0 && productFilter.length === 0) {
-      setProductFilter(availableProducts);
-    }
-  }, [availableProducts]);
-
   // Sync with Google Drive
   const syncWithDrive = async () => {
     try {
@@ -558,6 +551,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     });
     return Array.from(products).sort();
   }, [matrixData?.audiences]);
+
+  // Set all products selected by default when availableProducts changes
+  useEffect(() => {
+    if (availableProducts.length > 0 && productFilter.length === 0) {
+      setProductFilter(availableProducts);
+    }
+  }, [availableProducts, productFilter.length]);
 
   // Type filter options (Adobe generated = Drive synced/static creatives)
   const typeOptions = ['Dynamic HTML', 'Adobe generated'];
