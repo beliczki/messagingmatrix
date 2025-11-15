@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import sheets from '../services/sheets';
 import settings from '../services/settings';
-import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
+import { generatePMMID, generateTopicKey, generateTraffickingFields } from '../utils/patternEvaluator';
 
 // Module-level cache to persist across hook calls
 let cachedMatrixResult = null;
@@ -306,14 +306,46 @@ export const useMatrix = () => {
 
   // Update topic (by id)
   const updateTopic = useCallback((id, updates) => {
-    setTopics(prev => prev.map(t =>
-      t.id === id ? { ...t, ...updates } : t
-    ));
+    setTopics(prev => prev.map(t => {
+      if (t.id !== id) return t;
+
+      const updatedTopic = { ...t, ...updates };
+
+      // Auto-regenerate topic key if tag or product fields changed
+      const keyFieldsChanged =
+        updates.hasOwnProperty('tag1') ||
+        updates.hasOwnProperty('tag2') ||
+        updates.hasOwnProperty('tag3') ||
+        updates.hasOwnProperty('tag4') ||
+        updates.hasOwnProperty('product');
+
+      if (keyFieldsChanged) {
+        const topicKeyPattern = settings.getPattern('topicKey');
+        if (topicKeyPattern) {
+          updatedTopic.key = generateTopicKey(updatedTopic, topicKeyPattern);
+        }
+      }
+
+      return updatedTopic;
+    }));
   }, []);
 
   // Delete topic (by id)
   const deleteTopic = useCallback((id) => {
     setTopics(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Regenerate all topic keys based on current pattern
+  const regenerateTopicKeys = useCallback(() => {
+    const topicKeyPattern = settings.getPattern('topicKey');
+    if (!topicKeyPattern) return;
+
+    setTopics(prev => prev.map(topic => ({
+      ...topic,
+      key: generateTopicKey(topic, topicKeyPattern)
+    })));
+
+    console.log('🔄 Regenerated all topic keys based on pattern:', topicKeyPattern);
   }, []);
 
   // Get messages for cell - O(1) lookup instead of O(n) filtering
@@ -424,6 +456,7 @@ export const useMatrix = () => {
       updateTopic,
       deleteAudience,
       deleteTopic,
+      regenerateTopicKeys,
       getMessages,
       getUrl: () => sheets.getUrl(),
       getSpreadsheetId: () => sheets.spreadsheetId

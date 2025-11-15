@@ -101,6 +101,7 @@ const Matrix = ({
     updateTopic = () => {},
     deleteAudience = () => {},
     deleteTopic = () => {},
+    regenerateTopicKeys = () => {},
     getMessages = () => [],
     getUrl = () => '',
     getSpreadsheetId = () => ''
@@ -1634,6 +1635,7 @@ const Matrix = ({
           // Reload the page to fetch fresh data from spreadsheet
           window.location.reload();
         }}
+        onRegenerateTopicKeys={regenerateTopicKeys}
         downloadFeedCSV={downloadFeedCSV}
       />
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, GripHorizontal, RefreshCw, Save, Loader, ExternalLink, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, GripHorizontal, RefreshCw, Save, Loader, ExternalLink, Download, Sparkles } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 import SaveProgressDialog from './SaveProgressDialog';
@@ -31,6 +31,7 @@ const MatrixStatePanel = ({
   saveProgress,
   onSave,
   onClearReload,
+  onRegenerateTopicKeys,
   downloadFeedCSV
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
@@ -173,6 +174,17 @@ const MatrixStatePanel = ({
           <RefreshCw size={14} />
           Clear & Reload
         </button>
+
+        {onRegenerateTopicKeys && (
+          <button
+            onClick={onRegenerateTopicKeys}
+            className="flex items-center gap-2 px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+            title="Regenerate all topic keys based on the current pattern in Settings"
+          >
+            <Sparkles size={14} />
+            Regen Keys
+          </button>
+        )}
 
         <button
           onClick={onSave}
