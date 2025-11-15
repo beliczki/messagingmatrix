@@ -247,15 +247,29 @@ app.get('/api/sheets/:spreadsheetId', async (req, res) => {
   }
 });
 
-// Get config
+// Get config (from SQLite)
 app.get('/api/config', (req, res) => {
   try {
-    const configPath = path.join(__dirname, 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT * FROM config');
+    const rows = stmt.all();
+
+    // Rebuild config object from key-value pairs
+    const config = {};
+    rows.forEach(row => {
+      try {
+        // Try to parse as JSON (for complex values like googleDrive, patterns, etc.)
+        config[row.key] = JSON.parse(row.value);
+      } catch {
+        // If not JSON, use as string
+        config[row.key] = row.value;
+      }
+    });
+
     res.json(config);
   } catch (error) {
     console.error('Error reading config:', error);
-    res.status(500).json({ error: 'Failed to read config file' });
+    res.status(500).json({ error: 'Failed to read config from database' });
   }
 });
 
@@ -405,22 +419,44 @@ app.get('/api/diagnostics', (req, res) => {
   }
 });
 
-// Update config
+// Update config (to SQLite)
 app.post('/api/config', (req, res) => {
   try {
-    const configPath = path.join(__dirname, 'config.json');
     const newConfig = req.body;
+    const sqlite = db.getSqlite();
 
-    // Add lastUpdated timestamp
-    newConfig.lastUpdated = new Date().toISOString();
+    // Prepare update statement
+    const stmt = sqlite.prepare(`
+      INSERT OR REPLACE INTO config (key, value, category, description, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
 
-    // Write to file with pretty formatting
-    fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf8');
+    // Update all config keys
+    const transaction = sqlite.transaction((config) => {
+      Object.keys(config).forEach(key => {
+        const value = config[key];
+        const jsonValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+        // Determine category based on key
+        let category = 'general';
+        if (key === 'spreadsheetId') category = 'googleSheets';
+        else if (key === 'googleDrive') category = 'googleDrive';
+        else if (key === 'patterns') category = 'patterns';
+        else if (key === 'treeStructure') category = 'ui';
+        else if (key === 'feedStructure') category = 'feed';
+        else if (key === 'lookAndFeel') category = 'ui';
+        else if (key.includes('imageBaseUrl')) category = 'assets';
+
+        stmt.run(key, jsonValue, category, null, new Date().toISOString());
+      });
+    });
+
+    transaction(newConfig);
 
     res.json({ success: true, config: newConfig });
   } catch (error) {
     console.error('Error writing config:', error);
-    res.status(500).json({ error: 'Failed to write config file' });
+    res.status(500).json({ error: 'Failed to write config to database' });
   }
 });
 
@@ -715,17 +751,32 @@ if (!fs.existsSync(sharesDir)) {
   fs.mkdirSync(sharesDir, { recursive: true });
 }
 
-// Get share by ID
+// Get share by ID (from SQLite)
 app.get('/api/shares/:shareId', (req, res) => {
   try {
     const { shareId } = req.params;
-    const sharePath = path.join(sharesDir, shareId, 'share.json');
+    const sqlite = db.getSqlite();
 
-    if (!fs.existsSync(sharePath)) {
+    const stmt = sqlite.prepare('SELECT * FROM share_galleries WHERE id = ?');
+    const share = stmt.get(shareId);
+
+    if (!share) {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    const shareData = JSON.parse(fs.readFileSync(sharePath, 'utf8'));
+    // Parse JSON fields
+    const shareData = {
+      shareId: share.id,
+      title: share.title,
+      description: share.description,
+      createdBy: share.created_by,
+      assetIds: share.asset_ids ? JSON.parse(share.asset_ids) : [],
+      assets: share.metadata ? JSON.parse(share.metadata).assets : [],
+      createdAt: share.created_at,
+      baseColor: share.metadata ? JSON.parse(share.metadata).baseColor : null,
+      comments: share.metadata ? JSON.parse(share.metadata).comments || [] : []
+    };
+
     res.json(shareData);
   } catch (error) {
     console.error('Error reading share:', error);
@@ -791,9 +842,21 @@ app.post('/api/shares', async (req, res) => {
   try {
     const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [] } = req.body;
 
-    // Load config to get image base URLs
-    const configPath = path.join(__dirname, 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    // Load config from SQLite to get image base URLs
+    const sqlite = db.getSqlite();
+    const configStmt = sqlite.prepare('SELECT * FROM config');
+    const configRows = configStmt.all();
+
+    // Rebuild config object from key-value pairs
+    const config = {};
+    configRows.forEach(row => {
+      try {
+        config[row.key] = JSON.parse(row.value);
+      } catch {
+        config[row.key] = row.value;
+      }
+    });
+
     const imageBaseUrls = config.imageBaseUrls || {};
 
     // Generate unique share ID
@@ -971,7 +1034,24 @@ app.post('/api/shares', async (req, res) => {
       comments: []
     };
 
-    // Write share.json
+    // Save to SQLite database (sqlite already declared above for config)
+    const shareStmt = sqlite.prepare(`
+      INSERT INTO share_galleries (id, title, description, created_by, creative_ids, asset_ids, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    shareStmt.run(
+      shareId,
+      title || null,
+      null, // description
+      null, // created_by
+      null, // creative_ids (deprecated in favor of metadata)
+      JSON.stringify(assetIds),
+      JSON.stringify(shareData), // Store full shareData in metadata for backward compatibility
+      new Date().toISOString()
+    );
+
+    // Also write share.json for backward compatibility with static file serving
     fs.writeFileSync(
       path.join(shareDir, 'share.json'),
       JSON.stringify(shareData, null, 2),
@@ -997,18 +1077,22 @@ app.post('/api/shares', async (req, res) => {
   }
 });
 
-// Add comment to share
+// Add comment to share (SQLite)
 app.post('/api/shares/:shareId/comments', (req, res) => {
   try {
     const { shareId } = req.params;
     const { author, text } = req.body;
-    const sharePath = path.join(sharesDir, shareId, 'share.json');
+    const sqlite = db.getSqlite();
 
-    if (!fs.existsSync(sharePath)) {
+    // Get share from database
+    const getStmt = sqlite.prepare('SELECT metadata FROM share_galleries WHERE id = ?');
+    const share = getStmt.get(shareId);
+
+    if (!share) {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    const shareData = JSON.parse(fs.readFileSync(sharePath, 'utf8'));
+    const shareData = JSON.parse(share.metadata);
 
     const comment = {
       id: Date.now().toString(),
@@ -1017,9 +1101,29 @@ app.post('/api/shares/:shareId/comments', (req, res) => {
       timestamp: new Date().toISOString()
     };
 
+    if (!shareData.comments) {
+      shareData.comments = [];
+    }
     shareData.comments.push(comment);
 
-    fs.writeFileSync(sharePath, JSON.stringify(shareData, null, 2), 'utf8');
+    // Update database
+    const updateStmt = sqlite.prepare(`
+      UPDATE share_galleries
+      SET metadata = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    updateStmt.run(
+      JSON.stringify(shareData),
+      new Date().toISOString(),
+      shareId
+    );
+
+    // Also update share.json for backward compatibility
+    const sharePath = path.join(sharesDir, shareId, 'share.json');
+    if (fs.existsSync(sharePath)) {
+      fs.writeFileSync(sharePath, JSON.stringify(shareData, null, 2), 'utf8');
+    }
 
     res.json({ comment });
   } catch (error) {
@@ -1339,10 +1443,13 @@ function writeProcessedEmails(emailUids) {
   }
 }
 
-// Get all tasks
+// Get all tasks (from SQLite)
 app.get('/api/tasks', (req, res) => {
   try {
-    const tasks = readTasks();
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT * FROM tasks ORDER BY created_at DESC');
+    const tasks = stmt.all();
+
     res.json({ tasks });
   } catch (error) {
     console.error('Error getting tasks:', error);
@@ -1350,7 +1457,7 @@ app.get('/api/tasks', (req, res) => {
   }
 });
 
-// Save tasks
+// Save tasks (bulk replace - to SQLite)
 app.post('/api/tasks', (req, res) => {
   try {
     const { tasks } = req.body;
@@ -1358,22 +1465,185 @@ app.post('/api/tasks', (req, res) => {
       return res.status(400).json({ error: 'tasks must be an array' });
     }
 
-    const success = writeTasks(tasks);
-    if (success) {
-      res.json({ success: true, tasks });
-    } else {
-      res.status(500).json({ error: 'Failed to save tasks' });
-    }
+    const sqlite = db.getSqlite();
+
+    // Replace all tasks with transaction
+    const transaction = sqlite.transaction(() => {
+      // Clear existing tasks
+      sqlite.prepare('DELETE FROM tasks').run();
+
+      // Insert new tasks
+      const stmt = sqlite.prepare(`
+        INSERT INTO tasks (
+          id, title, description, priority, due_date,
+          source, "from", status, email_uid, bucket, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      tasks.forEach(task => {
+        stmt.run(
+          task.id,
+          task.title,
+          task.description || null,
+          task.priority || null,
+          task.dueDate || null,
+          task.source || null,
+          task.from || null,
+          task.status || 'pending',
+          task.emailUid || null,
+          task.bucket || 'backlog',
+          task.createdAt || new Date().toISOString()
+        );
+      });
+    });
+
+    transaction();
+
+    res.json({ success: true, tasks });
   } catch (error) {
     console.error('Error saving tasks:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get processed email UIDs
+// Create a single task
+app.post('/api/tasks/create', (req, res) => {
+  try {
+    const task = req.body;
+
+    if (!task.title) {
+      return res.status(400).json({ error: 'title is required' });
+    }
+
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare(`
+      INSERT INTO tasks (
+        id, title, description, priority, due_date,
+        source, "from", status, email_uid, bucket, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    stmt.run(
+      taskId,
+      task.title,
+      task.description || null,
+      task.priority || null,
+      task.dueDate || null,
+      task.source || null,
+      task.from || null,
+      task.status || 'pending',
+      task.emailUid || null,
+      task.bucket || 'backlog',
+      task.createdAt || new Date().toISOString()
+    );
+
+    res.json({ success: true, task: { ...task, id: taskId } });
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a single task
+app.put('/api/tasks/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const sqlite = db.getSqlite();
+
+    // Build dynamic update query
+    const fields = [];
+    const values = [];
+
+    if (updates.title !== undefined) {
+      fields.push('title = ?');
+      values.push(updates.title);
+    }
+    if (updates.description !== undefined) {
+      fields.push('description = ?');
+      values.push(updates.description);
+    }
+    if (updates.priority !== undefined) {
+      fields.push('priority = ?');
+      values.push(updates.priority);
+    }
+    if (updates.dueDate !== undefined) {
+      fields.push('due_date = ?');
+      values.push(updates.dueDate);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.bucket !== undefined) {
+      fields.push('bucket = ?');
+      values.push(updates.bucket);
+    }
+    if (updates.source !== undefined) {
+      fields.push('source = ?');
+      values.push(updates.source);
+    }
+    if (updates.from !== undefined) {
+      fields.push('"from" = ?');
+      values.push(updates.from);
+    }
+
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(id);
+
+    const stmt = sqlite.prepare(`
+      UPDATE tasks
+      SET ${fields.join(', ')}
+      WHERE id = ?
+    `);
+
+    const result = stmt.run(...values);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating task:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a single task
+app.delete('/api/tasks/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const sqlite = db.getSqlite();
+
+    const stmt = sqlite.prepare('DELETE FROM tasks WHERE id = ?');
+    const result = stmt.run(id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get processed email UIDs (from SQLite)
 app.get('/api/processed-emails', (req, res) => {
   try {
-    const processedEmails = readProcessedEmails();
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT uid FROM processed_emails');
+    const rows = stmt.all();
+
+    // Return just the UIDs for backward compatibility
+    const processedEmails = rows.map(row => row.uid);
+
     res.json({ processedEmails });
   } catch (error) {
     console.error('Error getting processed emails:', error);
@@ -1381,25 +1651,281 @@ app.get('/api/processed-emails', (req, res) => {
   }
 });
 
-// Add processed email UIDs
+// Add processed email UIDs (to SQLite)
 app.post('/api/processed-emails', (req, res) => {
   try {
-    const { emailUids } = req.body;
-    if (!Array.isArray(emailUids)) {
-      return res.status(400).json({ error: 'emailUids must be an array' });
+    const { emailUids, emailData } = req.body;
+
+    if (!Array.isArray(emailUids) && !emailData) {
+      return res.status(400).json({ error: 'emailUids array or emailData required' });
     }
 
-    const existingProcessed = readProcessedEmails();
-    const updated = [...new Set([...existingProcessed, ...emailUids])];
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare(`
+      INSERT OR IGNORE INTO processed_emails (uid, email_from, subject, tasks_created)
+      VALUES (?, ?, ?, ?)
+    `);
 
-    const success = writeProcessedEmails(updated);
-    if (success) {
-      res.json({ success: true, processedEmails: updated });
-    } else {
-      res.status(500).json({ error: 'Failed to save processed emails' });
+    // If emailData provided (more detailed), use it
+    if (emailData) {
+      stmt.run(
+        emailData.uid,
+        emailData.from || null,
+        emailData.subject || null,
+        emailData.tasksCreated || 0
+      );
     }
+    // Otherwise, batch insert UIDs only
+    else if (emailUids) {
+      const transaction = sqlite.transaction((uids) => {
+        uids.forEach(uid => {
+          stmt.run(uid, null, null, 0);
+        });
+      });
+      transaction(emailUids);
+    }
+
+    // Return all processed UIDs
+    const allStmt = sqlite.prepare('SELECT uid FROM processed_emails');
+    const processedEmails = allStmt.all().map(row => row.uid);
+
+    res.json({ success: true, processedEmails });
   } catch (error) {
     console.error('Error saving processed emails:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// User management endpoints (SQLite-backed, replaces localStorage)
+
+// Get all users (for admin)
+app.get('/api/users', (req, res) => {
+  try {
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT id, email, role, created_at, updated_at FROM users');
+    const users = stmt.all();
+
+    res.json({ users });
+  } catch (error) {
+    console.error('Error getting users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Register new user
+app.post('/api/users/register', (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const sqlite = db.getSqlite();
+
+    // Check if user already exists
+    const existingUser = sqlite.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+
+    // Generate user ID
+    const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Insert user (password is already hashed on client side)
+    const stmt = sqlite.prepare(`
+      INSERT INTO users (id, email, password, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      userId,
+      email,
+      password, // Already hashed by client
+      role || 'user',
+      new Date().toISOString(),
+      new Date().toISOString()
+    );
+
+    res.json({
+      success: true,
+      user: {
+        id: userId,
+        email,
+        role: role || 'user'
+      }
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Login user
+app.post('/api/users/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const sqlite = db.getSqlite();
+
+    // Find user by email
+    const stmt = sqlite.prepare('SELECT id, email, password, role FROM users WHERE email = ?');
+    const user = stmt.get(email);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check password (password is already hashed on client side)
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Return user without password
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single user by ID
+app.get('/api/users/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const sqlite = db.getSqlite();
+
+    const stmt = sqlite.prepare('SELECT id, email, role, created_at, updated_at FROM users WHERE id = ?');
+    const user = stmt.get(id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user });
+  } catch (error) {
+    console.error('Error getting user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user
+app.put('/api/users/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const sqlite = db.getSqlite();
+
+    // Build dynamic update query
+    const fields = [];
+    const values = [];
+
+    if (updates.email !== undefined) {
+      fields.push('email = ?');
+      values.push(updates.email);
+    }
+    if (updates.password !== undefined) {
+      fields.push('password = ?');
+      values.push(updates.password);
+    }
+    if (updates.role !== undefined) {
+      fields.push('role = ?');
+      values.push(updates.role);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(id);
+
+    const stmt = sqlite.prepare(`
+      UPDATE users
+      SET ${fields.join(', ')}
+      WHERE id = ?
+    `);
+
+    const result = stmt.run(...values);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const sqlite = db.getSqlite();
+
+    const stmt = sqlite.prepare('DELETE FROM users WHERE id = ?');
+    const result = stmt.run(id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Migrate users from localStorage (client-side migration endpoint)
+app.post('/api/users/migrate', (req, res) => {
+  try {
+    const { users } = req.body;
+
+    if (!Array.isArray(users)) {
+      return res.status(400).json({ error: 'users must be an array' });
+    }
+
+    const sqlite = db.getSqlite();
+
+    const transaction = sqlite.transaction((userList) => {
+      const stmt = sqlite.prepare(`
+        INSERT OR IGNORE INTO users (id, email, password, role, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+
+      userList.forEach(user => {
+        stmt.run(
+          user.id,
+          user.email,
+          user.password,
+          user.role || 'user',
+          user.createdAt || new Date().toISOString(),
+          new Date().toISOString()
+        );
+      });
+    });
+
+    transaction(users);
+
+    res.json({ success: true, migrated: users.length });
+  } catch (error) {
+    console.error('Error migrating users:', error);
     res.status(500).json({ error: error.message });
   }
 });

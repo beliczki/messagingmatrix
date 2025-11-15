@@ -2,6 +2,8 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+
 // Simple hash function for password storage (using Web Crypto API)
 const hashPassword = async (password) => {
   const encoder = new TextEncoder();
@@ -11,41 +13,68 @@ const hashPassword = async (password) => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-// Initialize users storage with default users
+// Initialize users - migrate from localStorage to API if needed, or create default users
 const initializeUsers = async () => {
-  const users = JSON.parse(localStorage.getItem('app_users') || '[]');
+  try {
+    // Check if users exist in API
+    const response = await fetch(`${API_URL}/api/users`);
+    const { users } = await response.json();
 
-  if (users.length === 0) {
-    // Create default users with hashed passwords
-    const adminPassword = await hashPassword('temporary123');
-    const demoPassword = await hashPassword('vegtelenlove');
-    const csengePassword = await hashPassword('vegtelenlove');
+    if (users.length === 0) {
+      // No users in API - check localStorage for migration
+      const localStorageUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
 
-    const defaultUsers = [
-      {
-        id: '1',
-        email: 'beliczki.robert@gmail.com',
-        password: adminPassword,
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: '2',
-        email: 'demo@messagingmatrix.ai',
-        password: demoPassword,
-        role: 'demo',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: '3',
-        email: 'csenge.barabas@mediaco.hu',
-        password: csengePassword,
-        role: 'user',
-        createdAt: new Date().toISOString()
+      if (localStorageUsers.length > 0) {
+        // Migrate from localStorage
+        console.log('Migrating users from localStorage to database...');
+        const migrateResponse = await fetch(`${API_URL}/api/users/migrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: localStorageUsers })
+        });
+
+        if (migrateResponse.ok) {
+          console.log('Users migrated successfully');
+          // Clear localStorage after successful migration
+          localStorage.removeItem('app_users');
+        }
+      } else {
+        // Create default users
+        console.log('Creating default users...');
+        const adminPassword = await hashPassword('temporary123');
+        const demoPassword = await hashPassword('vegtelenlove');
+        const csengePassword = await hashPassword('vegtelenlove');
+
+        const defaultUsers = [
+          {
+            email: 'beliczki.robert@gmail.com',
+            password: adminPassword,
+            role: 'admin'
+          },
+          {
+            email: 'demo@messagingmatrix.ai',
+            password: demoPassword,
+            role: 'demo'
+          },
+          {
+            email: 'csenge.barabas@mediaco.hu',
+            password: csengePassword,
+            role: 'user'
+          }
+        ];
+
+        // Create each user via API
+        for (const user of defaultUsers) {
+          await fetch(`${API_URL}/api/users/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(user)
+          });
+        }
       }
-    ];
-
-    localStorage.setItem('app_users', JSON.stringify(defaultUsers));
+    }
+  } catch (error) {
+    console.error('Error initializing users:', error);
   }
 };
 
@@ -57,7 +86,7 @@ export const AuthProvider = ({ children }) => {
     // Initialize users on first load
     initializeUsers();
 
-    // Check if user is already logged in
+    // Check if user is already logged in (stored in localStorage for session persistence)
     const savedUser = localStorage.getItem('current_user');
     if (savedUser) {
       setCurrentUser(JSON.parse(savedUser));
@@ -67,23 +96,25 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const users = JSON.parse(localStorage.getItem('app_users') || '[]');
-      const user = users.find(u => u.email === email);
-
-      if (!user) {
-        throw new Error('Invalid email or password');
-      }
-
       const hashedPassword = await hashPassword(password);
-      if (user.password !== hashedPassword) {
-        throw new Error('Invalid email or password');
+
+      const response = await fetch(`${API_URL}/api/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: hashedPassword })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
       }
 
-      // Store current user (without password)
+      // Store current user session in localStorage
       const userWithoutPassword = {
-        id: user.id,
-        email: user.email,
-        createdAt: user.createdAt
+        id: data.user.id,
+        email: data.user.email,
+        role: data.user.role
       };
 
       localStorage.setItem('current_user', JSON.stringify(userWithoutPassword));
@@ -100,26 +131,32 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
-  const getAllUsers = () => {
-    const users = JSON.parse(localStorage.getItem('app_users') || '[]');
-    // Return users without passwords
-    return users.map(({ password, ...user }) => user);
+  const getAllUsers = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/users`);
+      const { users } = await response.json();
+      return users;
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
   };
 
   const changePassword = async (userId, newPassword) => {
     try {
-      const users = JSON.parse(localStorage.getItem('app_users') || '[]');
-      const userIndex = users.findIndex(u => u.id === userId);
-
-      if (userIndex === -1) {
-        throw new Error('User not found');
-      }
-
       const hashedPassword = await hashPassword(newPassword);
-      users[userIndex].password = hashedPassword;
-      users[userIndex].updatedAt = new Date().toISOString();
 
-      localStorage.setItem('app_users', JSON.stringify(users));
+      const response = await fetch(`${API_URL}/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: hashedPassword })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Password change failed');
+      }
 
       return { success: true };
     } catch (error) {
@@ -129,26 +166,21 @@ export const AuthProvider = ({ children }) => {
 
   const createUser = async (email, password, role = 'user') => {
     try {
-      const users = JSON.parse(localStorage.getItem('app_users') || '[]');
+      const hashedPassword = await hashPassword(password);
 
-      // Check if user already exists
-      if (users.find(u => u.email === email)) {
-        throw new Error('User with this email already exists');
+      const response = await fetch(`${API_URL}/api/users/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: hashedPassword, role })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'User creation failed');
       }
 
-      const hashedPassword = await hashPassword(password);
-      const newUser = {
-        id: String(users.length + 1),
-        email,
-        password: hashedPassword,
-        role,
-        createdAt: new Date().toISOString()
-      };
-
-      users.push(newUser);
-      localStorage.setItem('app_users', JSON.stringify(users));
-
-      return { success: true, user: { ...newUser, password: undefined } };
+      return { success: true, user: data.user };
     } catch (error) {
       return { success: false, error: error.message };
     }
