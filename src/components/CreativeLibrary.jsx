@@ -278,8 +278,24 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       }
 
       // Progressive loading: start with thumbnail, upgrade to full res
-      const fullResUrl = creative.File_driveID ? `/api/drive/proxy/${creative.File_driveID}` : creative.File_DirectLink;
+      const fullResUrl = creative.File_driveID
+        ? `/api/drive/proxy/${creative.File_driveID}`
+        : (creative.File_DirectLink && (creative.File_DirectLink.startsWith('http') || creative.File_DirectLink.startsWith('/'))
+          ? creative.File_DirectLink
+          : null);
+
       const thumbnailUrl = creative.File_thumbnail || fullResUrl;
+
+      // Skip creatives with no valid URL
+      if (!fullResUrl && !thumbnailUrl) {
+        console.warn(`⚠️ Skipping creative with no valid URL:`, {
+          filename: creative.File_name,
+          driveId: creative.File_driveID,
+          directLink: creative.File_DirectLink,
+          thumbnail: creative.File_thumbnail
+        });
+        return null;
+      }
 
       return {
         id: creative.File_driveID || creative.ID,
@@ -297,7 +313,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         driveId: creative.File_driveID,
         source: 'drive'
       };
-    });
+    }).filter(Boolean); // Remove null entries (creatives with invalid URLs)
 
     // Generate dynamic message creatives for ALL messages if matrixData is available
     if (matrixData?.messages && matrixData.messages.length > 0) {

@@ -232,6 +232,16 @@ const MediaLibraryBase = ({
   const handleImageLoaded = useCallback((item, itemIndex, event) => {
     const itemId = getItemId(item);
 
+    // Check if this was an error event
+    const isError = event.type === 'error';
+    if (isError) {
+      console.error(`❌ Failed to load creative:`, {
+        filename: getItemFilename(item),
+        url: getItemUrl(item),
+        item: item
+      });
+    }
+
     if (processedItems.current.has(itemId)) {
       // console.log(`⚠️ Item #${itemIndex} already processed, skipping: ${getItemFilename(item)}`);
       setNextItemIndex(itemIndex + 1);
@@ -255,6 +265,12 @@ const MediaLibraryBase = ({
 
     // Expand the loaded range to include this item
     setLoadedEnd(prev => Math.max(prev, itemIndex + 1));
+
+    // For error events, skip dimension calculation
+    if (isError) {
+      setNextItemIndex(itemIndex + 1);
+      return;
+    }
 
     // Store actual dimensions for reference (optional, for future use)
     const extension = getItemExtension(item);
