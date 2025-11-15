@@ -113,6 +113,16 @@ The application uses **THREE different storage locations** for different types o
   - `GET /api/processed-emails` - Get processed UIDs
   - `POST /api/processed-emails` - Mark email as processed
 
+#### `uploaded_assets` table
+- **Stores:** Registry of locally uploaded assets (different from Google Sheets assets cache)
+- **Replaces:** Old `assets.json` file
+- **Structure:** Asset metadata (filename, upload date, brand, product, type, dimensions, tags, platforms, status)
+- **API Endpoints:**
+  - `GET /api/assets/registry` - Get all uploaded assets
+  - `POST /api/assets/registry` - Add/update uploaded asset
+  - `DELETE /api/assets/registry` - Delete uploaded asset
+  - Updated on: `POST /api/assets/confirm-upload` (after asset upload)
+
 ---
 
 ## 3. Browser localStorage (UI Preferences)
@@ -389,6 +399,7 @@ POST /api/cache/sync
 | **AI prompts** | **Text files** | **Settings "Save" button** | **Manual file deletion** |
 | Users, Tasks | SQLite | API calls | Database delete |
 | Share galleries | SQLite | API calls | Database delete |
+| **Uploaded assets registry** | **SQLite** | **Asset upload** | **Database delete** |
 | Cache (sheets data) | SQLite | Cache sync | Cache clear |
 | User session | localStorage | Login | Logout |
 
@@ -402,6 +413,7 @@ POST /api/cache/sync
 - Processed Emails → `processed-emails.json` file
 - Users → `localStorage.app_users`
 - Share Galleries → `public/share/*/share.json` files
+- Uploaded Assets Registry → `assets.json` file
 
 ### New System (After SQLite)
 - Config → SQLite `config` table
@@ -409,8 +421,11 @@ POST /api/cache/sync
 - Processed Emails → SQLite `processed_emails` table
 - Users → SQLite `users` table (auth via API)
 - Share Galleries → SQLite `share_galleries` table
+- Uploaded Assets Registry → SQLite `uploaded_assets` table
 
-**Migration Script:** `scripts/migrateJsonToSqlite.js` (already run)
+**Migration Scripts:**
+- `scripts/migrateJsonToSqlite.js` - Migrated config, tasks, emails, shares (already run)
+- `scripts/migrateAssetsJsonToSqlite.js` - Migrated uploaded assets (already run)
 
 ---
 
