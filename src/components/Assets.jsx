@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Filter, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
+import MatrixStatePanel from './MatrixStatePanel';
 import CreativePreview from './CreativePreview';
 import AssetsMasonryView from './AssetsMasonryView';
 import MediaLibraryBase from './MediaLibraryBase';
@@ -15,6 +16,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   const [driveEnabled, setDriveEnabled] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
+  const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -159,6 +161,45 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
     `,
     backgroundSize: '10px 10px',
     backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px'
+  };
+
+  // Save with progress tracking
+  const handleSaveWithProgress = async () => {
+    const steps = [
+      'Preparing data for save...',
+      'Saving assets to spreadsheet...',
+      'Finalizing save operation...',
+      'Save complete!'
+    ];
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        setSaveProgress({ step: i + 1, total: steps.length, message: steps[i] });
+
+        // Small delay to show each step
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Actually save on step 1 (after "Preparing data")
+        if (i === 0) {
+          await matrixData.save(null, null, spreadsheetAssets);
+        }
+      }
+
+      // Keep success message visible for a moment
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSaveProgress(null);
+    } catch (error) {
+      setSaveProgress({
+        step: 0,
+        total: steps.length,
+        message: `Error: ${error.message}`,
+        error: true
+      });
+
+      // Show error for 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setSaveProgress(null);
+    }
   };
 
   return (
@@ -455,6 +496,39 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
           }
           return asset.File_DirectLink || asset.File_thumbnail;
         }}
+      />
+
+      {/* Matrix State Panel */}
+      <MatrixStatePanel
+        audiences={matrixData?.audiences || []}
+        topics={matrixData?.topics || []}
+        messages={matrixData?.messages || []}
+        keywords={matrixData?.keywords || {}}
+        assets={spreadsheetAssets || []}
+        creatives={matrixData?.creatives || []}
+        textFormatting={matrixData?.textFormatting || []}
+        feedData={[]}
+        lastSync={matrixData?.lastSync}
+        isSaving={matrixData?.isSaving}
+        saveProgress={saveProgress}
+        onSave={handleSaveWithProgress}
+        onClearReload={() => {
+          // Preserve authentication data
+          const currentUser = localStorage.getItem('current_user');
+          const appUsers = localStorage.getItem('app_users');
+
+          // Clear all localStorage
+          localStorage.clear();
+
+          // Restore authentication data
+          if (currentUser) localStorage.setItem('current_user', currentUser);
+          if (appUsers) localStorage.setItem('app_users', appUsers);
+
+          // Reload the page to fetch fresh data from spreadsheet
+          window.location.reload();
+        }}
+        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+        downloadFeedCSV={() => {}}
       />
     </>
   );

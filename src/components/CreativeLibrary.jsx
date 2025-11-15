@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
+import MatrixStatePanel from './MatrixStatePanel';
 import CreativeShare from './CreativeShare';
 import CreativePreview from './CreativePreview';
 import CreativeLibraryMasonryView from './CreativeLibraryMasonryView';
@@ -41,6 +42,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
   const [hasAutoSynced, setHasAutoSynced] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
+
+  // Filter states
+  const [productFilter, setProductFilter] = useState([]);
+  const [typeFilter, setTypeFilter] = useState([]);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+
+  // Refs for dropdown click-outside detection
+  const productDropdownRef = useRef(null);
+  const typeDropdownRef = useRef(null);
 
   // MC Template supported banner sizes (from src/templates/html/*.css)
   const bannerSizes = [
@@ -96,6 +108,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driveEnabled, matrixData, hasAutoSynced]);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+        setShowProductDropdown(false);
+      }
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
+        setShowTypeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -474,10 +503,87 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     e.preventDefault();
   };
 
+  // Save with progress tracking
+  const handleSaveWithProgress = async () => {
+    const steps = [
+      'Preparing data for save...',
+      'Saving creatives to spreadsheet...',
+      'Finalizing save operation...',
+      'Save complete!'
+    ];
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        setSaveProgress({ step: i + 1, total: steps.length, message: steps[i] });
+
+        // Small delay to show each step
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Actually save on step 1 (after "Preparing data")
+        if (i === 0) {
+          await matrixData.save(null, null, null, matrixData.creatives);
+        }
+      }
+
+      // Keep success message visible for a moment
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSaveProgress(null);
+    } catch (error) {
+      setSaveProgress({
+        step: 0,
+        total: steps.length,
+        message: `Error: ${error.message}`,
+        error: true
+      });
+
+      // Show error for 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setSaveProgress(null);
+    }
+  };
+
+  // Get unique products from matrixData audiences
+  const availableProducts = React.useMemo(() => {
+    if (!matrixData?.audiences) return [];
+    const products = new Set();
+    matrixData.audiences.forEach(aud => {
+      if (aud.product) products.add(aud.product);
+    });
+    return Array.from(products).sort();
+  }, [matrixData?.audiences]);
+
+  // Type filter options
+  const typeOptions = ['All', 'Dynamic HTML', 'Adobe generated'];
+
+  // Filter creatives based on product and type
+  const filteredByFilters = React.useMemo(() => {
+    return creatives.filter(creative => {
+      // Product filter
+      const matchesProduct = productFilter.length === 0 ||
+        (creative.product && productFilter.includes(creative.product));
+
+      // Type filter
+      let matchesType = true;
+      if (typeFilter.length > 0 && !typeFilter.includes('All')) {
+        const isDynamicHTML = creative.isDynamic || creative.extension === 'html';
+
+        if (typeFilter.includes('Dynamic HTML') && typeFilter.includes('Adobe generated')) {
+          matchesType = true; // Both selected = show all
+        } else if (typeFilter.includes('Dynamic HTML')) {
+          matchesType = isDynamicHTML;
+        } else if (typeFilter.includes('Adobe generated')) {
+          matchesType = !isDynamicHTML;
+        }
+      }
+
+      return matchesProduct && matchesType;
+    });
+  }, [creatives, productFilter, typeFilter]);
+
   return (
     <>
       <MediaLibraryBase
-        items={creatives}
+        items={filteredByFilters}
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Creative Library'}
         onMenuToggle={onMenuToggle}
@@ -501,6 +607,84 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
               viewModes={viewModes}
               titleFilters={
                 <>
+                  {/* Product Filter Dropdown */}
+                  <div className="relative" ref={productDropdownRef}>
+                    <button
+                      onClick={() => setShowProductDropdown(!showProductDropdown)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                    >
+                      <span>
+                        {productFilter.length === 0
+                          ? `Products(${availableProducts.length})`
+                          : `Products(${productFilter.length})`}
+                      </span>
+                      <ChevronDown size={16} />
+                    </button>
+                    {showProductDropdown && (
+                      <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
+                        {availableProducts.map((product) => (
+                          <button
+                            key={product}
+                            onClick={() => {
+                              if (productFilter.includes(product)) {
+                                setProductFilter(productFilter.filter(p => p !== product));
+                              } else {
+                                setProductFilter([...productFilter, product]);
+                              }
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
+                          >
+                            <Check size={16} className={productFilter.includes(product) ? 'text-blue-600' : 'text-transparent'} />
+                            <span className="text-gray-900">{product}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Type Filter Dropdown */}
+                  <div className="relative" ref={typeDropdownRef}>
+                    <button
+                      onClick={() => setShowTypeDropdown(!showTypeDropdown)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
+                    >
+                      <span>
+                        {typeFilter.length === 0
+                          ? 'Type(All)'
+                          : `Type(${typeFilter.length})`}
+                      </span>
+                      <ChevronDown size={16} />
+                    </button>
+                    {showTypeDropdown && (
+                      <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[180px] z-50">
+                        {typeOptions.map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => {
+                              if (type === 'All') {
+                                setTypeFilter([]);
+                              } else {
+                                if (typeFilter.includes(type)) {
+                                  setTypeFilter(typeFilter.filter(t => t !== type));
+                                } else {
+                                  setTypeFilter([...typeFilter.filter(t => t !== 'All'), type]);
+                                }
+                              }
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
+                          >
+                            <Check size={16} className={
+                              type === 'All'
+                                ? (typeFilter.length === 0 ? 'text-blue-600' : 'text-transparent')
+                                : (typeFilter.includes(type) ? 'text-blue-600' : 'text-transparent')
+                            } />
+                            <span className="text-gray-900">{type}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Filter Input */}
                   <div className="flex items-center gap-2">
                     <Filter size={18} className="text-white" />
@@ -882,6 +1066,39 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           }
           return creative.url;
         }}
+      />
+
+      {/* Matrix State Panel */}
+      <MatrixStatePanel
+        audiences={matrixData?.audiences || []}
+        topics={matrixData?.topics || []}
+        messages={matrixData?.messages || []}
+        keywords={matrixData?.keywords || {}}
+        assets={matrixData?.assets || []}
+        creatives={matrixData?.creatives || []}
+        textFormatting={matrixData?.textFormatting || []}
+        feedData={[]}
+        lastSync={matrixData?.lastSync}
+        isSaving={matrixData?.isSaving}
+        saveProgress={saveProgress}
+        onSave={handleSaveWithProgress}
+        onClearReload={() => {
+          // Preserve authentication data
+          const currentUser = localStorage.getItem('current_user');
+          const appUsers = localStorage.getItem('app_users');
+
+          // Clear all localStorage
+          localStorage.clear();
+
+          // Restore authentication data
+          if (currentUser) localStorage.setItem('current_user', currentUser);
+          if (appUsers) localStorage.setItem('app_users', appUsers);
+
+          // Reload the page to fetch fresh data from spreadsheet
+          window.location.reload();
+        }}
+        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+        downloadFeedCSV={() => {}}
       />
     </>
   );

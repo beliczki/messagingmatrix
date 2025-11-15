@@ -1,9 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import PageHeader from './PageHeader';
 import AIAssistant from './AIAssistant';
+import MatrixStatePanel from './MatrixStatePanel';
 
 const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
+  const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
+
+  // Save with progress tracking
+  const handleSaveWithProgress = async () => {
+    const steps = [
+      'Preparing data for save...',
+      'Saving to spreadsheet...',
+      'Finalizing save operation...',
+      'Save complete!'
+    ];
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        setSaveProgress({ step: i + 1, total: steps.length, message: steps[i] });
+
+        // Small delay to show each step
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Actually save on step 1 (after "Preparing data")
+        if (i === 0) {
+          await matrixData.save();
+        }
+      }
+
+      // Keep success message visible for a moment
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSaveProgress(null);
+    } catch (error) {
+      setSaveProgress({
+        step: 0,
+        total: steps.length,
+        message: `Error: ${error.message}`,
+        error: true
+      });
+
+      // Show error for 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setSaveProgress(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -28,6 +70,39 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
       <AIAssistant
         moduleContext={{ module: 'monitoring' }}
         matrixData={matrixData}
+      />
+
+      {/* Matrix State Panel */}
+      <MatrixStatePanel
+        audiences={matrixData?.audiences || []}
+        topics={matrixData?.topics || []}
+        messages={matrixData?.messages || []}
+        keywords={matrixData?.keywords || {}}
+        assets={matrixData?.assets || []}
+        creatives={matrixData?.creatives || []}
+        textFormatting={matrixData?.textFormatting || []}
+        feedData={[]}
+        lastSync={matrixData?.lastSync}
+        isSaving={matrixData?.isSaving}
+        saveProgress={saveProgress}
+        onSave={handleSaveWithProgress}
+        onClearReload={() => {
+          // Preserve authentication data
+          const currentUser = localStorage.getItem('current_user');
+          const appUsers = localStorage.getItem('app_users');
+
+          // Clear all localStorage
+          localStorage.clear();
+
+          // Restore authentication data
+          if (currentUser) localStorage.setItem('current_user', currentUser);
+          if (appUsers) localStorage.setItem('app_users', appUsers);
+
+          // Reload the page to fetch fresh data from spreadsheet
+          window.location.reload();
+        }}
+        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+        downloadFeedCSV={() => {}}
       />
     </div>
   );

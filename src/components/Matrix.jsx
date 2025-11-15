@@ -166,7 +166,14 @@ const Matrix = ({
   const setTopicFilter = (value) => setMatrixViewState({ ...matrixViewState, topicFilter: value });
   const setAudienceFilter = (value) => setMatrixViewState({ ...matrixViewState, audienceFilter: value });
   const setStatusFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedStatuses: value });
-  const setProductFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedProducts: value });
+  const setProductFilters = (value) => {
+    // Reset pan to top-left when product filter changes
+    setMatrixViewState({
+      ...matrixViewState,
+      selectedProducts: value,
+      matrixPan: { x: 0, y: 0 }
+    });
+  };
   const setMatrixZoom = (value) => {
     console.log('🔷 setMatrixZoom called with:', value);
     setMatrixViewState({ ...matrixViewState, matrixZoom: value });

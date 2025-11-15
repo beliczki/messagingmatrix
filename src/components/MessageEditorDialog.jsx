@@ -594,6 +594,12 @@ const MessageEditorDialog = ({
   const [width, height] = previewSize.split('x').map(Number);
   const isWide = width > 600; // Wide sizes go to top
 
+  // Check if either dimension is >= 1080, then scale to 50% (same as TemplatePreview)
+  const shouldScale = width >= 1080 || height >= 1080;
+  const scale = shouldScale ? 0.5 : 1;
+  const scaledWidth = width * scale;
+  const scaledHeight = height * scale;
+
   // Render text input field with formatting info
   const renderTextInputWithFormatting = (fieldName, label, inputType = 'input', rows = 3) => {
     const availableScopes = getAvailableScopes(fieldName);
@@ -1154,16 +1160,31 @@ const MessageEditorDialog = ({
                       </div>
                       <div className="flex justify-center">
                         {editingMessage.template ? (
-                          <iframe
-                            key={`${editingMessage.id}-${previewSize}`}
-                            srcDoc={generatePreviewHtml()}
-                            style={{ width: `${width}px`, height: `${height}px` }}
-                            className="border-0"
-                            title="Message Preview"
-                            sandbox="allow-same-origin allow-scripts"
-                          />
+                          <div style={{
+                            width: `${scaledWidth}px`,
+                            height: `${scaledHeight}px`,
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}>
+                            <iframe
+                              key={`${editingMessage.id}-${previewSize}`}
+                              srcDoc={generatePreviewHtml()}
+                              style={{
+                                width: `${width}px`,
+                                height: `${height}px`,
+                                transform: shouldScale ? 'scale(0.5)' : 'none',
+                                transformOrigin: 'top left',
+                                border: 0,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0
+                              }}
+                              title="Message Preview"
+                              sandbox="allow-same-origin allow-scripts"
+                            />
+                          </div>
                         ) : (
-                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
+                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}>
                             Select a template to see preview
                           </div>
                         )}
@@ -1375,13 +1396,30 @@ const MessageEditorDialog = ({
                           </label>
                         </div>
                         {editingMessage.template ? (
-                          <iframe
-                            key={`${editingMessage.id}-${previewSize}`}
-                            srcDoc={generatePreviewHtml()}
-                            className="w-full h-[600px] border-0"
-                            title="Message Preview"
-                            sandbox="allow-same-origin allow-scripts"
-                          />
+                          <div style={{
+                            width: `${scaledWidth}px`,
+                            height: `${scaledHeight}px`,
+                            overflow: 'hidden',
+                            position: 'relative',
+                            margin: '0 auto'
+                          }}>
+                            <iframe
+                              key={`${editingMessage.id}-${previewSize}`}
+                              srcDoc={generatePreviewHtml()}
+                              style={{
+                                width: `${width}px`,
+                                height: `${height}px`,
+                                transform: shouldScale ? 'scale(0.5)' : 'none',
+                                transformOrigin: 'top left',
+                                border: 0,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0
+                              }}
+                              title="Message Preview"
+                              sandbox="allow-same-origin allow-scripts"
+                            />
+                          </div>
                         ) : (
                           <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
                             Select a template to see preview
@@ -1495,16 +1533,31 @@ const MessageEditorDialog = ({
                       <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
                       <div className="flex justify-center">
                         {editingMessage.template ? (
-                          <iframe
-                            key={`${editingMessage.id}-${previewSize}-styles`}
-                            srcDoc={generatePreviewHtml()}
-                            style={{ width: `${width}px`, height: `${height}px` }}
-                            className="border-0"
-                            title="Message Preview"
-                            sandbox="allow-same-origin allow-scripts"
-                          />
+                          <div style={{
+                            width: `${scaledWidth}px`,
+                            height: `${scaledHeight}px`,
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}>
+                            <iframe
+                              key={`${editingMessage.id}-${previewSize}-styles`}
+                              srcDoc={generatePreviewHtml()}
+                              style={{
+                                width: `${width}px`,
+                                height: `${height}px`,
+                                transform: shouldScale ? 'scale(0.5)' : 'none',
+                                transformOrigin: 'top left',
+                                border: 0,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0
+                              }}
+                              title="Message Preview"
+                              sandbox="allow-same-origin allow-scripts"
+                            />
+                          </div>
                         ) : (
-                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${width}px`, height: `${height}px` }}>
+                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}>
                             Select a template to see preview
                           </div>
                         )}
@@ -1607,13 +1660,30 @@ const MessageEditorDialog = ({
                       <div className="border border-gray-300 rounded bg-gray-50 p-4 sticky top-6">
                         <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
                         {editingMessage.template ? (
-                          <iframe
-                            key={`${editingMessage.id}-${previewSize}-styles`}
-                            srcDoc={generatePreviewHtml()}
-                            className="w-full h-[600px] border-0"
-                            title="Message Preview"
-                            sandbox="allow-same-origin allow-scripts"
-                          />
+                          <div style={{
+                            width: `${scaledWidth}px`,
+                            height: `${scaledHeight}px`,
+                            overflow: 'hidden',
+                            position: 'relative',
+                            margin: '0 auto'
+                          }}>
+                            <iframe
+                              key={`${editingMessage.id}-${previewSize}-styles`}
+                              srcDoc={generatePreviewHtml()}
+                              style={{
+                                width: `${width}px`,
+                                height: `${height}px`,
+                                transform: shouldScale ? 'scale(0.5)' : 'none',
+                                transformOrigin: 'top left',
+                                border: 0,
+                                position: 'absolute',
+                                top: 0,
+                                left: 0
+                              }}
+                              title="Message Preview"
+                              sandbox="allow-same-origin allow-scripts"
+                            />
+                          </div>
                         ) : (
                           <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
                             Select a template to see preview
