@@ -46,7 +46,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Filter states
   const [productFilter, setProductFilter] = useState([]);
-  const [typeFilter, setTypeFilter] = useState([]);
+  const [typeFilter, setTypeFilter] = useState(['Dynamic HTML', 'Adobe generated']); // Both selected by default
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
 
@@ -125,6 +125,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Set all products selected by default when availableProducts changes
+  useEffect(() => {
+    if (availableProducts.length > 0 && productFilter.length === 0) {
+      setProductFilter(availableProducts);
+    }
+  }, [availableProducts]);
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -552,8 +559,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     return Array.from(products).sort();
   }, [matrixData?.audiences]);
 
-  // Type filter options
-  const typeOptions = ['All', 'Dynamic HTML', 'Adobe generated'];
+  // Type filter options (Adobe generated = Drive synced/static creatives)
+  const typeOptions = ['Dynamic HTML', 'Adobe generated'];
 
   // Filter creatives based on product and type
   const filteredByFilters = React.useMemo(() => {
@@ -564,7 +571,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
       // Type filter
       let matchesType = true;
-      if (typeFilter.length > 0 && !typeFilter.includes('All')) {
+      if (typeFilter.length > 0) {
         const isDynamicHTML = creative.isDynamic || creative.extension === 'html';
 
         if (typeFilter.includes('Dynamic HTML') && typeFilter.includes('Adobe generated')) {
@@ -572,7 +579,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         } else if (typeFilter.includes('Dynamic HTML')) {
           matchesType = isDynamicHTML;
         } else if (typeFilter.includes('Adobe generated')) {
-          matchesType = !isDynamicHTML;
+          matchesType = !isDynamicHTML; // Adobe generated = static (non-dynamic) creatives from Drive
         }
       }
 
@@ -649,8 +656,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                       className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
                     >
                       <span>
-                        {typeFilter.length === 0
-                          ? 'Type(All)'
+                        {typeFilter.length === typeOptions.length
+                          ? `Type(${typeFilter.length})`
                           : `Type(${typeFilter.length})`}
                       </span>
                       <ChevronDown size={16} />
@@ -661,23 +668,15 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                           <button
                             key={type}
                             onClick={() => {
-                              if (type === 'All') {
-                                setTypeFilter([]);
+                              if (typeFilter.includes(type)) {
+                                setTypeFilter(typeFilter.filter(t => t !== type));
                               } else {
-                                if (typeFilter.includes(type)) {
-                                  setTypeFilter(typeFilter.filter(t => t !== type));
-                                } else {
-                                  setTypeFilter([...typeFilter.filter(t => t !== 'All'), type]);
-                                }
+                                setTypeFilter([...typeFilter, type]);
                               }
                             }}
                             className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
                           >
-                            <Check size={16} className={
-                              type === 'All'
-                                ? (typeFilter.length === 0 ? 'text-blue-600' : 'text-transparent')
-                                : (typeFilter.includes(type) ? 'text-blue-600' : 'text-transparent')
-                            } />
+                            <Check size={16} className={typeFilter.includes(type) ? 'text-blue-600' : 'text-transparent'} />
                             <span className="text-gray-900">{type}</span>
                           </button>
                         ))}
