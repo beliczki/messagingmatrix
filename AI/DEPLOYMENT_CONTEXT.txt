@@ -1,0 +1,45 @@
+🚨 CRITICAL DEPLOYMENT CONTEXT - READ THIS FIRST 🚨
+
+PRODUCTION SERVER CONSTRAINTS:
+================================
+- ❌ NO SSH ACCESS
+- ❌ NO PM2 AVAILABLE
+- ❌ NO COMMAND LINE TOOLS BEYOND NODE.JS CONSOLE
+- ✅ ONLY Plesk Node.js Extension with web-based console
+- ✅ GitHub integration for code deployment
+
+NEVER SUGGEST:
+==============
+- PM2 commands (pm2 start, pm2 restart, pm2 logs, etc.)
+- SSH-based deployment
+- Installing global packages via npm -g
+- Direct server access commands
+- ecosystem.config.cjs usage in production
+
+CORRECT DEPLOYMENT PROCESS:
+===========================
+1. Git push to GitHub
+2. Plesk Git interface → Click "Deploy" button
+3. Plesk Node.js Console → npm install (if package.json changed)
+4. Plesk Node.js Console → npm run build
+5. Plesk UI → Click "Restart App" button
+
+SERVER DETAILS:
+===============
+- Domain: messagingmatrix.ai
+- Production Port: 3007 (configurable via .env)
+- Environment: Plesk Node.js Extension
+- Deployment: GitHub integration
+- Backend Start: Via Plesk "Restart App" or npm run server in console
+
+REFERENCE DOCUMENTATION:
+========================
+See: docs/PLESK_DEPLOYMENT_NO_SSH.md
+
+ALWAYS REMEMBER:
+================
+When user asks about deployment:
+1. Check if they're talking about production (Plesk) or local development
+2. For production: NEVER mention PM2, SSH, or command-line tools not available
+3. For production: Always refer to Plesk UI and Node.js Console
+4. Guide them to use Plesk's web interface for everything
