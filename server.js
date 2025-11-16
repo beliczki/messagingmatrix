@@ -98,17 +98,42 @@ async function getAccessToken() {
   }
 }
 
-// Configure CORS with explicit options for Chrome compatibility
-app.use(cors({
-  origin: [
+// Configure CORS dynamically based on environment
+const isDevelopment = process.env.NODE_ENV !== 'production';
+const allowedOrigins = [
+  'https://messagingmatrix.ai',
+  'http://messagingmatrix.ai'
+];
+
+// Add development origins
+if (isDevelopment) {
+  allowedOrigins.push(
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://messagingmatrix.ai',
-    'http://messagingmatrix.ai'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+    'http://127.0.0.1:3000'
+  );
+}
+
+// Add custom CORS origins from environment variable (comma-separated)
+if (process.env.CORS_ORIGINS) {
+  const customOrigins = process.env.CORS_ORIGINS.split(',').map(o => o.trim());
+  allowedOrigins.push(...customOrigins);
+}
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠ CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
