@@ -19,9 +19,9 @@ Quick reference guide to all context files and where to find specific informatio
 | Upload assets | `context-workflows.md` → Asset Upload |
 | Create shares | `skills/create-share.md` |
 | Find configuration | `context-architecture.md` → Configuration System |
-| **NEW: Google Drive setup** | `GOOGLE_DRIVE_SETUP.md` (root) |
-| **NEW: Asset naming** | `ASSET_NAMING_SYSTEM.md` (root) |
-| **NEW: PM2 management** | `SERVER_MANAGEMENT.md` (root) |
+| **NEW: Google Drive setup** | `docs/GOOGLE_DRIVE_SETUP.md` |
+| **NEW: Asset naming** | `docs/ASSET_NAMING_SYSTEM.md` |
+| **NEW: PM2 management** | `docs/SERVER_MANAGEMENT.md` |
 
 ---
 
@@ -35,8 +35,8 @@ Quick reference guide to all context files and where to find specific informatio
 - **Authentication**: `context-architecture.md` → Authentication Systems
 - **Configuration**: `context-architecture.md` → Configuration System
 - **Environment Setup**: `context-quickstart.md` → Development Setup
-- **Google Drive Integration**: `GOOGLE_DRIVE_SETUP.md` (root)
-- **PM2 Process Management**: `SERVER_MANAGEMENT.md` (root)
+- **Google Drive Integration**: `docs/GOOGLE_DRIVE_SETUP.md`
+- **PM2 Process Management**: `docs/SERVER_MANAGEMENT.md`
 
 ### Components
 - **Component List**: `context-components.md` → Component Hierarchy
@@ -168,7 +168,7 @@ Legend: ✓ Stable | ✨ Refactored | 🆕 New
 → `skills/test-asset-upload.md`
 
 ### "How do I sync assets from Google Drive?" 🆕
-→ `GOOGLE_DRIVE_SETUP.md` (root)
+→ `docs/GOOGLE_DRIVE_SETUP.md`
 → `context-workflows.md` → Google Drive Sync
 
 ### "How does the proxy work?" 🆕

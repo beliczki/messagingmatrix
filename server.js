@@ -634,7 +634,7 @@ app.post('/api/claude', async (req, res) => {
 });
 
 // AI Assistant Prompts endpoints
-const promptsDir = __dirname; // Root directory
+const promptsDir = path.join(__dirname, 'AI'); // AI directory
 
 // Map of module names to filenames
 const promptFileMap = {

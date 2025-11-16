@@ -205,10 +205,8 @@ messagingmatrix/
 ├── ecosystem.config.cjs                  # PM2 configuration
 ├── public/                               # Static assets
 ├── .claude/                              # Claude Code context files
-├── GOOGLE_DRIVE_SETUP.md                 # Drive setup guide
-├── ASSET_NAMING_SYSTEM.md                # Asset naming conventions
-├── SERVER_MANAGEMENT.md                  # PM2 server management
-├── PRODUCTION_SETUP.md                   # Production deployment
+├── AI/                                   # AI instruction files
+├── docs/                                 # Documentation files
 └── package.json                          # Dependencies
 ```
 
@@ -278,7 +276,7 @@ messagingmatrix/
 
    Share folders with service account email (Viewer access)
 
-   See [GOOGLE_DRIVE_SETUP.md](./GOOGLE_DRIVE_SETUP.md) for detailed instructions
+   See [GOOGLE_DRIVE_SETUP.md](./docs/GOOGLE_DRIVE_SETUP.md) for detailed instructions
 
 6. **Start development servers**
 
@@ -315,7 +313,7 @@ pm2 restart all
 pm2 stop all
 ```
 
-See [SERVER_MANAGEMENT.md](./SERVER_MANAGEMENT.md) for PM2 commands and troubleshooting.
+See [SERVER_MANAGEMENT.md](./docs/SERVER_MANAGEMENT.md) for PM2 commands and troubleshooting.
 
 ### Default Login
 
@@ -417,7 +415,7 @@ npm run build
 
 ### Production Deployment
 
-See [PRODUCTION_SETUP.md](./PRODUCTION_SETUP.md) for complete deployment instructions including:
+See [PRODUCTION_SETUP.md](./docs/PRODUCTION_SETUP.md) for complete deployment instructions including:
 
 - SSL/HTTPS configuration
 - PM2 process management
