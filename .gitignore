@@ -33,6 +33,7 @@ SECRETS_SETUP.md
 secrets.local.js
 config.local.js
 service-account.jsonnul
+email-account.json
 
 # SQLite database and cache
 db/*.db

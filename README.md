@@ -290,9 +290,6 @@ messagingmatrix/
    npm run server
    ```
 
-   Frontend: http://localhost:5173
-   Backend: http://localhost:3003
-
 ### Production Setup with PM2
 
 ```bash
