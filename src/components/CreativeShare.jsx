@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Share2, Copy, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Share2, Copy, Check, Loader2 } from 'lucide-react';
 import { createPreview } from '../services/previewService';
 
 const CreativeShare = ({
@@ -22,11 +22,20 @@ const CreativeShare = ({
   templateName = 'html',
   textFormatting = []
 }) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [creationStatus, setCreationStatus] = useState('');
+
   if (!isOpen) return null;
 
   const handleCreateShare = async () => {
     if (selectedCreativeIds.size > 0) {
       try {
+        // Clear any existing URL before creating new one
+        setGeneratedShareUrl(null);
+        setCopiedUrl(false);
+        setIsCreating(true);
+        setCreationStatus('Creating share...');
+
         const result = await createPreview(
           Array.from(selectedCreativeIds),
           selectedCreatives,
@@ -40,12 +49,23 @@ const CreativeShare = ({
           },
           textFormatting
         );
+
+        setCreationStatus('Share created successfully!');
         setGeneratedShareUrl(result.url);
       } catch (error) {
         console.error('Failed to create share:', error);
+        setCreationStatus('');
         alert(`Failed to create share link: ${error.message}`);
+      } finally {
+        setIsCreating(false);
       }
     }
+  };
+
+  const handleCreateAnother = () => {
+    setGeneratedShareUrl(null);
+    setCopiedUrl(false);
+    setShareTitle('');
   };
 
   const handleCopyUrl = () => {
@@ -74,48 +94,60 @@ const CreativeShare = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSelectedBaseColor(lookAndFeel?.headerColor || '#2870ed')}
+                disabled={isCreating}
                 className={`w-12 h-12 rounded-lg border-2 transition-all ${
                   selectedBaseColor === (lookAndFeel?.headerColor || '#2870ed')
                     ? 'border-white scale-110 shadow-lg'
                     : 'border-white/40 hover:border-white/70'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
                 style={{ backgroundColor: lookAndFeel?.headerColor || '#2870ed' }}
                 title="Header Color"
               />
               <button
                 onClick={() => setSelectedBaseColor(lookAndFeel?.secondaryColor1 || '#eb4c79')}
+                disabled={isCreating}
                 className={`w-12 h-12 rounded-lg border-2 transition-all ${
                   selectedBaseColor === (lookAndFeel?.secondaryColor1 || '#eb4c79')
                     ? 'border-white scale-110 shadow-lg'
                     : 'border-white/40 hover:border-white/70'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
                 style={{ backgroundColor: lookAndFeel?.secondaryColor1 || '#eb4c79' }}
                 title="Secondary Color 1"
               />
               <button
                 onClick={() => setSelectedBaseColor(lookAndFeel?.secondaryColor2 || '#02a3a4')}
+                disabled={isCreating}
                 className={`w-12 h-12 rounded-lg border-2 transition-all ${
                   selectedBaseColor === (lookAndFeel?.secondaryColor2 || '#02a3a4')
                     ? 'border-white scale-110 shadow-lg'
                     : 'border-white/40 hover:border-white/70'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
                 style={{ backgroundColor: lookAndFeel?.secondaryColor2 || '#02a3a4' }}
                 title="Secondary Color 2"
               />
               <button
                 onClick={() => setSelectedBaseColor(lookAndFeel?.secondaryColor3 || '#711c7a')}
+                disabled={isCreating}
                 className={`w-12 h-12 rounded-lg border-2 transition-all ${
                   selectedBaseColor === (lookAndFeel?.secondaryColor3 || '#711c7a')
                     ? 'border-white scale-110 shadow-lg'
                     : 'border-white/40 hover:border-white/70'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
                 style={{ backgroundColor: lookAndFeel?.secondaryColor3 || '#711c7a' }}
                 title="Secondary Color 3"
               />
             </div>
           </div>
 
-          {!generatedShareUrl ? (
+          {/* Loading Status */}
+          {isCreating && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-lg">
+              <Loader2 size={20} className="text-white animate-spin" />
+              <span className="text-white text-sm">{creationStatus}</span>
+            </div>
+          )}
+
+          {!generatedShareUrl && !isCreating ? (
             <div>
               <input
                 type="text"
@@ -125,7 +157,7 @@ const CreativeShare = ({
                 className="w-full px-3 py-2 bg-white/20 border border-white/40 rounded text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
               />
             </div>
-          ) : (
+          ) : generatedShareUrl && !isCreating ? (
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -140,22 +172,42 @@ const CreativeShare = ({
                 {copiedUrl ? <Check size={16} /> : <Copy size={16} />}
               </button>
             </div>
-          )}
+          ) : null}
         </div>
         <div className="flex items-center justify-end gap-3 p-6 border-t border-white/20">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
+            disabled={isCreating}
+            className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {generatedShareUrl ? 'Done' : 'Cancel'}
           </button>
-          {!generatedShareUrl && (
+          {generatedShareUrl ? (
             <button
-              onClick={handleCreateShare}
-              className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors flex items-center gap-2"
+              onClick={handleCreateAnother}
+              disabled={isCreating}
+              className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Share2 size={16} />
-              Create Link
+              Create Another
+            </button>
+          ) : (
+            <button
+              onClick={handleCreateShare}
+              disabled={isCreating}
+              className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Share2 size={16} />
+                  Create Link
+                </>
+              )}
             </button>
           )}
         </div>

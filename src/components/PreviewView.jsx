@@ -86,10 +86,13 @@ const PublicPreviewView = ({ previewId }) => {
   }, []);
 
   useEffect(() => {
-    if (allAssets.length > 0) {
+    // Load preview when previewId changes
+    // Note: We don't require allAssets anymore since Drive-based shares
+    // have assets embedded in the share metadata
+    if (previewId) {
       loadPreview();
     }
-  }, [previewId, allAssets]);
+  }, [previewId]);
 
   // Auto-populate comment author with logged-in user's email
   useEffect(() => {
@@ -101,6 +104,16 @@ const PublicPreviewView = ({ previewId }) => {
   // Helper function to check if asset is a static local folder review
   const isStaticLocalReview = (asset) => {
     return asset.isLocalFolderReview === true && asset.staticPath;
+  };
+
+  // Helper function to get the correct URL for an asset
+  const getAssetUrl = (asset) => {
+    // For Drive assets, use fullResUrl (proxy endpoint) or driveId if available
+    if (asset.driveId || asset.source === 'drive') {
+      return asset.fullResUrl || `/api/drive/proxy/${asset.driveId || asset.id}`;
+    }
+    // For local assets, use the regular url
+    return asset.url;
   };
 
   // Helper function to extract coordinates from comment text
@@ -269,7 +282,46 @@ const PublicPreviewView = ({ previewId }) => {
       }
       commentWithAsset += commentText;
 
-      await addComment(previewId, commentAuthor, commentWithAsset);
+      const newComment = await addComment(previewId, commentAuthor, commentWithAsset);
+
+      // Update preview state with new comment instead of reloading
+      setPreview(prev => ({
+        ...prev,
+        comments: [...(prev.comments || []), newComment]
+      }));
+
+      // Create a task for this comment
+      const asset = previewAssets.find(a => a.id === assetId);
+      if (asset) {
+        const assetName = asset.folderName || asset.filename || assetId;
+        const taskTitle = `Preview Comment: ${assetName.replace(/_/g, ' ')}`;
+        const previewUrl = `${window.location.origin}/share/${previewId}`;
+        const taskDescription = `${commentText}\n\nPreview: ${previewUrl}`;
+
+        // Create related content with the asset image
+        const relatedContent = [{
+          type: 'image',
+          url: getAssetUrl(asset),
+          filename: asset.filename || asset.folderName,
+          addedAt: new Date().toISOString()
+        }];
+
+        // Create the task
+        await fetch('/api/tasks/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: taskTitle,
+            description: taskDescription,
+            priority: 'Medium',
+            status: 'pending',
+            bucket: 'backlog',
+            source: `Preview Comment by ${commentAuthor}`,
+            from: commentAuthor,
+            relatedContent
+          })
+        });
+      }
 
       // Clear everything after posting (keep author if user is logged in)
       if (!currentUser || !currentUser.email) {
@@ -280,7 +332,6 @@ const PublicPreviewView = ({ previewId }) => {
       setUserClickedRef(null);
       setRectangleStart(null);
       setIsDrawing(false);
-      loadPreview(); // Reload to get updated comments
     } catch (error) {
       console.error('Failed to add comment:', error);
       alert('Failed to add comment. Please try again.');
@@ -306,62 +357,111 @@ const PublicPreviewView = ({ previewId }) => {
             const pathParts = asset.staticPath.split('/');
             const folderPath = pathParts.slice(0, -1).join('/');
 
-            // List of known files to fetch
-            const knownFiles = ['index.html', 'styles.css', 'manifest.json'];
+            // Track all image files to fetch
+            const imagesToFetch = new Set();
 
-            // Fetch known files
-            for (const filename of knownFiles) {
-              try {
-                const fileUrl = `${folderPath}/${filename}`;
-                const response = await fetch(fileUrl);
-                if (response.ok) {
-                  const blob = await response.blob();
-                  adFolder.file(filename, blob);
-                }
-              } catch (error) {
-                console.error(`Failed to fetch ${filename}:`, error);
-              }
-            }
-
-            // Fetch index.html to parse for images
+            // Fetch and process HTML
+            let htmlText = '';
             try {
               const htmlResponse = await fetch(`${folderPath}/index.html`);
               if (htmlResponse.ok) {
-                const htmlText = await htmlResponse.text();
+                htmlText = await htmlResponse.text();
 
-                // Extract image references from HTML
+                // Extract images from <img> tags
                 const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-                const imageSources = [];
                 let match;
-
                 while ((match = imgRegex.exec(htmlText)) !== null) {
                   const imgSrc = match[1];
-                  // Only include local images (not http/https URLs)
-                  if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
-                    imageSources.push(imgSrc);
+                  // Extract filename from URL (could be /api/drive/proxy/filename or just filename)
+                  const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
+                  if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+                    imagesToFetch.add(filename);
                   }
                 }
 
-                // Fetch and add images to zip
-                for (const imgSrc of imageSources) {
-                  try {
-                    const imgUrl = `${folderPath}/${imgSrc}`;
-                    const imgResponse = await fetch(imgUrl);
-                    if (imgResponse.ok) {
-                      const imgBlob = await imgResponse.blob();
-                      adFolder.file(imgSrc, imgBlob);
-                    }
-                  } catch (error) {
-                    console.error(`Failed to fetch image ${imgSrc}:`, error);
+                // Extract images from background-image:url(...) in inline styles
+                const bgImageRegex = /background-image\s*:\s*url\(['"]?([^'")\s]+)['"]?\)/g;
+                while ((match = bgImageRegex.exec(htmlText)) !== null) {
+                  const imgSrc = match[1];
+                  // Extract filename from URL
+                  const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
+                  if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+                    imagesToFetch.add(filename);
                   }
                 }
               }
             } catch (error) {
-              console.error('Failed to parse HTML for images:', error);
+              console.error('Failed to fetch HTML:', error);
+            }
+
+            // Fetch and process CSS
+            let cssText = '';
+            try {
+              const cssResponse = await fetch(`${folderPath}/styles.css`);
+              if (cssResponse.ok) {
+                cssText = await cssResponse.text();
+
+                // Extract images from url() in CSS
+                const cssUrlRegex = /url\(['"]?([^'")\s]+)['"]?\)/g;
+                let match;
+                while ((match = cssUrlRegex.exec(cssText)) !== null) {
+                  const urlPath = match[1];
+                  // Extract filename from URL
+                  const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
+                  if (filename && !urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
+                    imagesToFetch.add(filename);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Failed to fetch CSS:', error);
+            }
+
+            // Fetch all image files from Drive
+            for (const imgSrc of imagesToFetch) {
+              try {
+                // Use the same Drive proxy endpoint that works for display
+                const driveResponse = await fetch(`/api/drive/proxy/${imgSrc}`);
+                if (driveResponse.ok) {
+                  const imgBlob = await driveResponse.blob();
+                  adFolder.file(imgSrc, imgBlob);
+                  console.log(`✓ Downloaded ${imgSrc} from Drive`);
+                } else {
+                  console.warn(`Skipping ${imgSrc} - not found (${driveResponse.status})`);
+                }
+              } catch (error) {
+                console.error(`Failed to fetch image ${imgSrc}:`, error);
+              }
+            }
+
+            // Add HTML with relative paths (replace /api/drive/proxy/ with just filenames)
+            if (htmlText) {
+              let cleanedHtml = htmlText;
+
+              // Replace all /api/drive/proxy/{filename} with just {filename}
+              cleanedHtml = cleanedHtml.replace(/\/api\/drive\/proxy\//g, '');
+
+              adFolder.file('index.html', cleanedHtml);
+            }
+
+            // Add CSS (already has relative paths from server)
+            if (cssText) {
+              adFolder.file('styles.css', cssText);
+            }
+
+            // Fetch and add manifest.json
+            try {
+              const manifestResponse = await fetch(`${folderPath}/manifest.json`);
+              if (manifestResponse.ok) {
+                const manifestBlob = await manifestResponse.blob();
+                adFolder.file('manifest.json', manifestBlob);
+              }
+            } catch (error) {
+              console.error('Failed to fetch manifest:', error);
             }
           } else {
             // Regular asset (image, video, etc.)
-            const response = await fetch(asset.url);
+            const response = await fetch(getAssetUrl(asset));
             const blob = await response.blob();
             zip.file(asset.filename, blob);
           }
@@ -401,58 +501,107 @@ const PublicPreviewView = ({ previewId }) => {
       const pathParts = asset.staticPath.split('/');
       const folderPath = pathParts.slice(0, -1).join('/'); // Remove index.html
 
-      // List of known files to fetch
-      const knownFiles = ['index.html', 'styles.css', 'manifest.json'];
+      // Track all image files to fetch
+      const imagesToFetch = new Set();
 
-      // Fetch known files
-      for (const filename of knownFiles) {
-        try {
-          const fileUrl = `${folderPath}/${filename}`;
-          const response = await fetch(fileUrl);
-          if (response.ok) {
-            const blob = await response.blob();
-            zip.file(filename, blob);
-          }
-        } catch (error) {
-          console.error(`Failed to fetch ${filename}:`, error);
-        }
-      }
-
-      // Fetch index.html to parse for images
+      // Fetch and process HTML
+      let htmlText = '';
       try {
         const htmlResponse = await fetch(`${folderPath}/index.html`);
         if (htmlResponse.ok) {
-          const htmlText = await htmlResponse.text();
+          htmlText = await htmlResponse.text();
 
-          // Extract image references from HTML
+          // Extract images from <img> tags
           const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-          const imageSources = [];
           let match;
-
           while ((match = imgRegex.exec(htmlText)) !== null) {
             const imgSrc = match[1];
-            // Only include local images (not http/https URLs)
-            if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
-              imageSources.push(imgSrc);
+            // Extract filename from URL (could be /api/drive/proxy/filename or just filename)
+            const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
+            if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+              imagesToFetch.add(filename);
             }
           }
 
-          // Fetch and add images to zip
-          for (const imgSrc of imageSources) {
-            try {
-              const imgUrl = `${folderPath}/${imgSrc}`;
-              const imgResponse = await fetch(imgUrl);
-              if (imgResponse.ok) {
-                const imgBlob = await imgResponse.blob();
-                zip.file(imgSrc, imgBlob);
-              }
-            } catch (error) {
-              console.error(`Failed to fetch image ${imgSrc}:`, error);
+          // Extract images from background-image:url(...) in inline styles
+          const bgImageRegex = /background-image\s*:\s*url\(['"]?([^'")\s]+)['"]?\)/g;
+          while ((match = bgImageRegex.exec(htmlText)) !== null) {
+            const imgSrc = match[1];
+            // Extract filename from URL
+            const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
+            if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+              imagesToFetch.add(filename);
             }
           }
         }
       } catch (error) {
-        console.error('Failed to parse HTML for images:', error);
+        console.error('Failed to fetch HTML:', error);
+      }
+
+      // Fetch and process CSS
+      let cssText = '';
+      try {
+        const cssResponse = await fetch(`${folderPath}/styles.css`);
+        if (cssResponse.ok) {
+          cssText = await cssResponse.text();
+
+          // Extract images from url() in CSS
+          const cssUrlRegex = /url\(['"]?([^'")\s]+)['"]?\)/g;
+          let match;
+          while ((match = cssUrlRegex.exec(cssText)) !== null) {
+            const urlPath = match[1];
+            // Extract filename from URL
+            const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
+            if (filename && !urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
+              imagesToFetch.add(filename);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch CSS:', error);
+      }
+
+      // Fetch all image files from Drive
+      for (const imgSrc of imagesToFetch) {
+        try {
+          // Use the same Drive proxy endpoint that works for display
+          const driveResponse = await fetch(`/api/drive/proxy/${imgSrc}`);
+          if (driveResponse.ok) {
+            const imgBlob = await driveResponse.blob();
+            zip.file(imgSrc, imgBlob);
+            console.log(`✓ Downloaded ${imgSrc} from Drive`);
+          } else {
+            console.warn(`Skipping ${imgSrc} - not found (${driveResponse.status})`);
+          }
+        } catch (error) {
+          console.error(`Failed to fetch image ${imgSrc}:`, error);
+        }
+      }
+
+      // Add HTML with relative paths (replace /api/drive/proxy/ with just filenames)
+      if (htmlText) {
+        let cleanedHtml = htmlText;
+
+        // Replace all /api/drive/proxy/{filename} with just {filename}
+        cleanedHtml = cleanedHtml.replace(/\/api\/drive\/proxy\//g, '');
+
+        zip.file('index.html', cleanedHtml);
+      }
+
+      // Add CSS (already has relative paths from server)
+      if (cssText) {
+        zip.file('styles.css', cssText);
+      }
+
+      // Fetch and add manifest.json
+      try {
+        const manifestResponse = await fetch(`${folderPath}/manifest.json`);
+        if (manifestResponse.ok) {
+          const manifestBlob = await manifestResponse.blob();
+          zip.file('manifest.json', manifestBlob);
+        }
+      } catch (error) {
+        console.error('Failed to fetch manifest:', error);
       }
 
       // Generate ZIP file
@@ -653,7 +802,7 @@ const PublicPreviewView = ({ previewId }) => {
                     )}
                     {!isStatic && isImage && (
                       <img
-                        src={asset.url}
+                        src={getAssetUrl(asset)}
                         alt={asset.filename}
                         className="w-full h-auto object-cover"
                         loading="lazy"
@@ -661,7 +810,7 @@ const PublicPreviewView = ({ previewId }) => {
                     )}
                     {!isStatic && isVideo && (
                       <video
-                        src={asset.url}
+                        src={getAssetUrl(asset)}
                         className="w-full h-auto object-cover"
                         preload="metadata"
                       />
@@ -784,7 +933,7 @@ const PublicPreviewView = ({ previewId }) => {
                     ) : (
                       <>
                         <a
-                          href={selectedAsset.url}
+                          href={getAssetUrl(selectedAsset)}
                           download={selectedAsset.filename}
                           className="flex items-center gap-2 px-3 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
                           title="Download"
@@ -793,7 +942,7 @@ const PublicPreviewView = ({ previewId }) => {
                           Download
                         </a>
                         <a
-                          href={selectedAsset.url}
+                          href={getAssetUrl(selectedAsset)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
@@ -998,7 +1147,7 @@ const PublicPreviewView = ({ previewId }) => {
                 ) : (
                   <>
                     <a
-                      href={selectedAsset.url}
+                      href={getAssetUrl(selectedAsset)}
                       download={selectedAsset.filename}
                       className="p-3 hover:bg-white/20 rounded transition-colors"
                       title="Download"
@@ -1006,7 +1155,7 @@ const PublicPreviewView = ({ previewId }) => {
                       <Download size={24} className="text-white" />
                     </a>
                     <a
-                      href={selectedAsset.url}
+                      href={getAssetUrl(selectedAsset)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-3 hover:bg-white/20 rounded transition-colors"
@@ -1030,6 +1179,11 @@ const PublicPreviewView = ({ previewId }) => {
                   const currentIndex = previewAssets.findIndex(a => a.id === selectedAsset.id);
                   if (currentIndex > 0) {
                     setSelectedAsset(previewAssets[currentIndex - 1]);
+                    // Clear reference markers when switching assets
+                    setReferencePoint(null);
+                    setUserClickedRef(null);
+                    setRectangleStart(null);
+                    setIsDrawing(false);
                   }
                 }}
                 disabled={previewAssets.findIndex(a => a.id === selectedAsset.id) === 0}
@@ -1045,6 +1199,11 @@ const PublicPreviewView = ({ previewId }) => {
                   const currentIndex = previewAssets.findIndex(a => a.id === selectedAsset.id);
                   if (currentIndex < previewAssets.length - 1) {
                     setSelectedAsset(previewAssets[currentIndex + 1]);
+                    // Clear reference markers when switching assets
+                    setReferencePoint(null);
+                    setUserClickedRef(null);
+                    setRectangleStart(null);
+                    setIsDrawing(false);
                   }
                 }}
                 disabled={previewAssets.findIndex(a => a.id === selectedAsset.id) === previewAssets.length - 1}
@@ -1059,6 +1218,11 @@ const PublicPreviewView = ({ previewId }) => {
                 onClick={() => {
                   setSelectedAsset(null);
                   setLeftPanelOpen(true); // Reset panel state when closing
+                  // Clear reference markers when closing
+                  setReferencePoint(null);
+                  setUserClickedRef(null);
+                  setRectangleStart(null);
+                  setIsDrawing(false);
                 }}
                 className="p-2 bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/20 rounded transition-colors"
                 title="Close"
@@ -1254,7 +1418,7 @@ const PublicPreviewView = ({ previewId }) => {
                 </div>
               ) : selectedAsset.extension === 'mp4' ? (
                 <video
-                  src={selectedAsset.url}
+                  src={getAssetUrl(selectedAsset)}
                   controls
                   autoPlay
                   loop
@@ -1269,7 +1433,7 @@ const PublicPreviewView = ({ previewId }) => {
               ) : (
                 <div className="relative" style={{ maxHeight: '80vh', maxWidth: '100%' }}>
                   <img
-                    src={selectedAsset.url}
+                    src={getAssetUrl(selectedAsset)}
                     alt={selectedAsset.filename}
                     className="object-contain rounded-lg shadow-2xl cursor-crosshair"
                     style={{ maxHeight: '80vh', maxWidth: '100%', height: 'auto', width: 'auto' }}

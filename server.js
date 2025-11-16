@@ -117,6 +117,9 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Serve static files from public/share directory for HTML ad previews
+app.use('/api/share-static', express.static(path.join(__dirname, 'public', 'share')));
+
 // Google Sheets API endpoints
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -635,6 +638,7 @@ const promptsDir = __dirname; // Root directory
 
 // Map of module names to filenames
 const promptFileMap = {
+  'client-context': 'AiClientContext.txt',
   'matrix': 'AIMatrixInstructions.txt',
   'creative-library': 'AICreativeLibraryInstructions.txt',
   'assets': 'AIAssetsInstructions.txt',
@@ -642,8 +646,32 @@ const promptFileMap = {
   'templates': 'AITemplatesInstructions.txt',
   'users': 'AIUsersInstructions.txt',
   'tasks': 'AITasksInstructions.txt',
-  'settings': 'AISettingsInstructions.txt'
+  'settings': 'AISettingsInstructions.txt',
+  'email-to-task': 'AIEmailToTaskInstructions.txt'
 };
+
+// Get all AI prompts
+app.get('/api/ai-prompts', (req, res) => {
+  try {
+    const prompts = {};
+
+    // Load all prompts from files
+    for (const [module, filename] of Object.entries(promptFileMap)) {
+      const filePath = path.join(promptsDir, filename);
+
+      if (fs.existsSync(filePath)) {
+        prompts[module] = fs.readFileSync(filePath, 'utf8');
+      } else {
+        prompts[module] = ''; // Empty string if file doesn't exist
+      }
+    }
+
+    res.json(prompts);
+  } catch (error) {
+    console.error('Error reading AI prompts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Get AI prompt for a specific module
 app.get('/api/ai-prompts/:module', (req, res) => {
@@ -774,7 +802,8 @@ app.get('/api/shares/:shareId', (req, res) => {
       assets: share.metadata ? JSON.parse(share.metadata).assets : [],
       createdAt: share.created_at,
       baseColor: share.metadata ? JSON.parse(share.metadata).baseColor : null,
-      comments: share.metadata ? JSON.parse(share.metadata).comments || [] : []
+      comments: share.metadata ? JSON.parse(share.metadata).comments || [] : [],
+      driveAssets: share.drive_file_ids ? JSON.parse(share.drive_file_ids) : {}
     };
 
     res.json(shareData);
@@ -840,7 +869,7 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
 // Create new share
 app.post('/api/shares', async (req, res) => {
   try {
-    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [] } = req.body;
+    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [], driveAssets = {} } = req.body;
 
     // Load config from SQLite to get image base URLs
     const sqlite = db.getSqlite();
@@ -896,74 +925,33 @@ app.post('/api/shares', async (req, res) => {
           // Save CSS file
           fs.writeFileSync(path.join(adDir, 'styles.css'), combinedCss, 'utf8');
 
+          // Build imageBaseUrls from template config
+          const templateImageBaseUrls = {};
+          if (templateData.templateConfig && templateData.templateConfig.placeholders) {
+            Object.keys(templateData.templateConfig.placeholders).forEach(placeholderName => {
+              const config = templateData.templateConfig.placeholders[placeholderName];
+              if (config.type === 'image' || config.type === 'video') {
+                const binding = config['binding-messagingmatrix'];
+                if (binding) {
+                  const fieldName = binding.replace(/^message\./i, '').toLowerCase();
+                  templateImageBaseUrls[fieldName] = config['path-messagingmatrix'] || '';
+                }
+              }
+            });
+          }
+
           // Populate template with message data (with text formatting)
           let populatedHtml = populateTemplate(
             templateData.templateHtml,
             creative.messageData,
             templateData.templateConfig,
-            imageBaseUrls,
+            templateImageBaseUrls, // Use template-based URLs instead of config
             dimensions,
             textFormatting
           );
 
-          // Extract and copy images to local folder
-          const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-          const imagesToCopy = [];
-          let match;
-
-          while ((match = imgRegex.exec(populatedHtml)) !== null) {
-            imagesToCopy.push(match[1]);
-          }
-
-          // Copy images and update HTML references
-          for (const imgSrc of imagesToCopy) {
-            try {
-              let localImagePath = null;
-              const imgFilename = path.basename(imgSrc);
-
-              // Handle local file paths (e.g., /src/assets/image.png or src/assets/image.png)
-              if (imgSrc.startsWith('/')) {
-                // Absolute path from project root
-                localImagePath = path.join(__dirname, imgSrc);
-              } else if (imgSrc.startsWith('src/') || imgSrc.startsWith('public/')) {
-                // Relative path from project root
-                localImagePath = path.join(__dirname, imgSrc);
-              } else if (!imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
-                // Try to find the image in common locations
-                const possiblePaths = [
-                  path.join(__dirname, 'src', 'assets', imgFilename),
-                  path.join(__dirname, 'src', 'creatives', imgFilename),
-                  path.join(__dirname, 'public', imgFilename)
-                ];
-
-                for (const possiblePath of possiblePaths) {
-                  if (fs.existsSync(possiblePath)) {
-                    localImagePath = possiblePath;
-                    break;
-                  }
-                }
-              }
-
-              // Copy the image file if we found a local path
-              if (localImagePath && fs.existsSync(localImagePath)) {
-                const destPath = path.join(adDir, imgFilename);
-                fs.copyFileSync(localImagePath, destPath);
-
-                // Update HTML to reference local image
-                populatedHtml = populatedHtml.replace(
-                  new RegExp(`src=["']${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`, 'g'),
-                  `src="${imgFilename}"`
-                );
-
-                console.log(`  ✓ Copied image: ${imgFilename}`);
-              } else if (imgSrc.startsWith('http://') || imgSrc.startsWith('https://')) {
-                // For remote URLs, keep the original URL (downloading would add complexity and latency)
-                console.log(`  → Remote image (kept as URL): ${imgFilename}`);
-              }
-            } catch (imgError) {
-              console.error(`  ✗ Error copying image ${imgSrc}:`, imgError.message);
-            }
-          }
+          // Note: Images are NOT saved in share folder to save space
+          // They will be fetched from Drive when downloading ZIP
 
           // Replace CSS links with the actual styles file
           populatedHtml = populatedHtml.replace(
@@ -1008,7 +996,7 @@ app.post('/api/shares', async (req, res) => {
           // Add to processed assets list with new path and mark as local folder review
           processedAssets.push({
             ...creative,
-            staticPath: `/share/${shareId}/${folderName}/index.html`,
+            staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
             folderName,
             isLocalFolderReview: true,
             reviewType: 'static-local'
@@ -1036,8 +1024,8 @@ app.post('/api/shares', async (req, res) => {
 
     // Save to SQLite database (sqlite already declared above for config)
     const shareStmt = sqlite.prepare(`
-      INSERT INTO share_galleries (id, title, description, created_by, creative_ids, asset_ids, metadata, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO share_galleries (id, title, description, created_by, creative_ids, asset_ids, metadata, drive_file_ids, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     shareStmt.run(
@@ -1048,6 +1036,7 @@ app.post('/api/shares', async (req, res) => {
       null, // creative_ids (deprecated in favor of metadata)
       JSON.stringify(assetIds),
       JSON.stringify(shareData), // Store full shareData in metadata for backward compatibility
+      Object.keys(driveAssets).length > 0 ? JSON.stringify(driveAssets) : null, // Store Drive file IDs
       new Date().toISOString()
     );
 
@@ -1116,6 +1105,89 @@ app.post('/api/shares/:shareId/comments', (req, res) => {
   } catch (error) {
     console.error('Error adding comment:', error);
     res.status(500).json({ error: 'Failed to add comment' });
+  }
+});
+
+// Google Drive asset proxy endpoint
+// Redirects to the cached direct link or fetches a new one
+app.get('/api/drive-asset/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const sqlite = db.getSqlite();
+
+    // Try to find file in assets or creatives cache
+    let asset = sqlite.prepare('SELECT file_direct_link FROM assets WHERE file_drive_id = ?').get(fileId);
+    if (!asset) {
+      asset = sqlite.prepare('SELECT file_direct_link FROM creatives WHERE file_drive_id = ?').get(fileId);
+    }
+
+    if (asset && asset.file_direct_link) {
+      // Redirect to cached direct link
+      return res.redirect(asset.file_direct_link);
+    }
+
+    // If not in cache or no direct link, use public Drive URL
+    const publicUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    res.redirect(publicUrl);
+  } catch (error) {
+    console.error('Error proxying Drive asset:', error);
+    res.status(500).json({ error: 'Failed to proxy Drive asset' });
+  }
+});
+
+// HTML ad renderer for shares with Drive assets
+// Injects Drive proxy URLs into HTML templates for iframe viewing
+app.get('/api/share-html/:shareId/:assetId', async (req, res) => {
+  try {
+    const { shareId, assetId } = req.params;
+    const sqlite = db.getSqlite();
+
+    // Get share data
+    const shareStmt = sqlite.prepare('SELECT drive_file_ids FROM share_galleries WHERE id = ?');
+    const share = shareStmt.get(shareId);
+
+    if (!share) {
+      return res.status(404).send('Share not found');
+    }
+
+    // Parse Drive file IDs
+    const driveFileIds = share.drive_file_ids ? JSON.parse(share.drive_file_ids) : {};
+    const assetData = driveFileIds[assetId];
+
+    if (!assetData || !assetData.htmlFileId) {
+      return res.status(404).send('HTML asset not found in share');
+    }
+
+    // Get HTML content from Drive (or local path if it's a local folder review)
+    const shareDir = path.join(sharesDir, shareId, assetData.folderName || '');
+    const htmlPath = path.join(shareDir, 'index.html');
+
+    if (fs.existsSync(htmlPath)) {
+      // Local folder review - serve directly
+      res.setHeader('Content-Type', 'text/html');
+      res.sendFile(htmlPath);
+    } else {
+      // TODO: Fetch HTML from Drive and inject Drive proxy URLs for images
+      res.status(501).send('Drive-based HTML rendering not yet implemented');
+    }
+  } catch (error) {
+    console.error('Error rendering share HTML:', error);
+    res.status(500).send('Failed to render HTML');
+  }
+});
+
+// HTML ad download for ZIP packaging
+// Returns HTML with local relative paths for standalone usage
+app.get('/api/share-html-download/:shareId/:assetId', async (req, res) => {
+  try {
+    const { shareId, assetId } = req.params;
+
+    // For now, this is the same as the regular endpoint
+    // In the future, this could modify paths to be relative for ZIP downloads
+    res.redirect(`/api/share-html/${shareId}/${assetId}`);
+  } catch (error) {
+    console.error('Error downloading share HTML:', error);
+    res.status(500).send('Failed to download HTML');
   }
 });
 
@@ -1250,6 +1322,24 @@ app.post('/api/templates/:templateName/:fileName', (req, res) => {
   }
 });
 
+// Helper function to get email config from SQLite
+function getEmailConfigFromDb() {
+  try {
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT value FROM config WHERE key = ?');
+    const row = stmt.get('emailAccount');
+
+    if (!row) {
+      throw new Error('Email account configuration not found in database');
+    }
+
+    return JSON.parse(row.value);
+  } catch (error) {
+    console.error('Error loading email config from database:', error);
+    throw error;
+  }
+}
+
 // Email endpoints
 // Get emails from IMAP server
 app.get('/api/emails', async (req, res) => {
@@ -1257,7 +1347,10 @@ app.get('/api/emails', async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const unseenOnly = req.query.unseenOnly !== 'false';
 
-    const emails = await fetchEmails(limit, unseenOnly);
+    // Get email config from SQLite database
+    const emailConfig = getEmailConfigFromDb();
+
+    const emails = await fetchEmails(limit, unseenOnly, emailConfig);
     res.json({ emails });
   } catch (error) {
     console.error('Error fetching emails:', error);
@@ -1289,15 +1382,46 @@ app.post('/api/emails/convert-to-tasks', async (req, res) => {
     const prompt = `You are an intelligent task manager. Analyze the following emails and extract actionable tasks from them. For each email, identify:
 1. What action needs to be taken
 2. The priority level (High, Medium, Low)
-3. A clear, concise task description
+3. A clear, concise task summary (2-3 sentences max - DO NOT copy the entire email)
 4. Any relevant deadline or due date mentioned
 5. The email source (subject and sender)
+6. Extract and structure the COMPLETE conversation context from the ENTIRE email thread
+
+CRITICAL INSTRUCTION - PRESERVE ORIGINAL LANGUAGE:
+- **IMPORTANT**: The "title", "description", and "context" fields MUST be in the ORIGINAL LANGUAGE of the email
+- DO NOT translate to English or any other language
+- If the email is in Hungarian, write the task in Hungarian
+- If the email is in German, write the task in German
+- If the email is in English, write the task in English
+- Keep the exact same language as the email for all fields
+
+INSTRUCTIONS FOR THE "title" FIELD:
+- Brief task title (one line)
+- In the ORIGINAL LANGUAGE of the email
+- Actionable and clear
+
+INSTRUCTIONS FOR THE "description" FIELD:
+- Concise 2-3 sentence summary of what needs to be done and why
+- In the ORIGINAL LANGUAGE of the email
+- NOT the full email content - just a brief summary
+
+INSTRUCTIONS FOR THE "context" FIELD:
+- Extract the COMPLETE email thread - ALL messages, not just the latest 2-3
+- Organize the conversation chronologically showing who said what
+- Use Markdown formatting for structure (headings, bold, lists, etc.)
+- Preserve the ORIGINAL LANGUAGE - DO NOT translate
+- Preserve the original meaning - DO NOT summarize or condense
+- Format it clearly with headings like "## John Doe wrote:" or "### Maria Smith replied:"
+- Include timestamps if available
+- Keep all relevant details, quotes, and information from each message in the thread
+- Make it easy to read by using markdown formatting (bold for names, ## for message headers, etc.)
 
 Return your response as a JSON array of tasks with this structure:
 [
   {
-    "title": "Task title",
-    "description": "Detailed description",
+    "title": "Brief task title in ORIGINAL LANGUAGE",
+    "description": "Concise 2-3 sentence summary in ORIGINAL LANGUAGE",
+    "context": "Markdown-formatted complete conversation thread in ORIGINAL LANGUAGE",
     "priority": "High|Medium|Low",
     "dueDate": "ISO date string or null",
     "source": "Email subject",
@@ -1321,8 +1445,8 @@ ${emailSummaries}`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 8192,
         messages: [{
           role: 'user',
           content: prompt
@@ -1346,13 +1470,19 @@ ${emailSummaries}`;
     if (jsonMatch) {
       try {
         tasks = JSON.parse(jsonMatch[0]);
-        // Add email UIDs to tasks
-        tasks = tasks.map((task, idx) => ({
-          ...task,
-          id: `task-${Date.now()}-${idx}`,
-          emailUid: emails[idx]?.uid || null,
-          createdAt: new Date().toISOString()
-        }));
+        // Add email UIDs and original email content to tasks
+        tasks = tasks.map((task, idx) => {
+          const originalEmail = emails[idx];
+          return {
+            ...task,
+            id: `task-${Date.now()}-${idx}`,
+            emailUid: originalEmail?.uid || null,
+            emailBody: originalEmail?.body || '',
+            emailSubject: originalEmail?.subject || '',
+            emailDate: originalEmail?.date || null,
+            createdAt: new Date().toISOString()
+          };
+        });
       } catch (err) {
         console.error('Error parsing tasks JSON:', err);
         return res.status(500).json({ error: 'Failed to parse tasks from Claude response' });
@@ -1370,7 +1500,11 @@ ${emailSummaries}`;
 app.post('/api/emails/:uid/mark-read', async (req, res) => {
   try {
     const uid = req.params.uid;
-    await markEmailAsSeen(uid);
+
+    // Get email config from SQLite database
+    const emailConfig = getEmailConfigFromDb();
+
+    await markEmailAsSeen(uid, emailConfig);
     res.json({ success: true });
   } catch (error) {
     console.error('Error marking email as read:', error);
@@ -1380,6 +1514,29 @@ app.post('/api/emails/:uid/mark-read', async (req, res) => {
 
 // Task endpoints (SQLite-backed)
 
+// Get available labels (products from config)
+app.get('/api/task-labels', (req, res) => {
+  try {
+    // Product labels from AiClientContext.txt
+    const productLabels = [
+      'SZK', 'HK', 'VAL', 'MIKRO', 'SZA', 'LTP', 'HITEL', 'MARKET',
+      'OtthonStart', 'MunkásHitel', 'Babaváró', 'Diak', 'Online',
+      'Cseperedő', 'BeErste', 'CARD', 'GEORGE'
+    ];
+
+    const labels = {
+      products: productLabels,
+      topics: [], // No topic labels as requested
+      all: productLabels
+    };
+
+    res.json(labels);
+  } catch (error) {
+    console.error('Error getting task labels:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all tasks (from SQLite)
 app.get('/api/tasks', (req, res) => {
   try {
@@ -1387,7 +1544,30 @@ app.get('/api/tasks', (req, res) => {
     const stmt = sqlite.prepare('SELECT * FROM tasks ORDER BY created_at DESC');
     const tasks = stmt.all();
 
-    res.json({ tasks });
+    // Transform tasks to match frontend naming conventions
+    const transformedTasks = tasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      dueDate: task.due_date,
+      source: task.source,
+      from: task.from,
+      status: task.status,
+      emailUid: task.email_uid,
+      emailBody: task.email_body,
+      emailSubject: task.email_subject,
+      emailDate: task.email_date,
+      context: task.context,
+      userNotes: task.user_notes,
+      relatedContent: task.related_content ? JSON.parse(task.related_content) : [],
+      labels: task.labels ? JSON.parse(task.labels) : [],
+      bucket: task.bucket,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    }));
+
+    res.json({ tasks: transformedTasks });
   } catch (error) {
     console.error('Error getting tasks:', error);
     res.status(500).json({ error: error.message });
@@ -1413,11 +1593,19 @@ app.post('/api/tasks', (req, res) => {
       const stmt = sqlite.prepare(`
         INSERT INTO tasks (
           id, title, description, priority, due_date,
-          source, "from", status, email_uid, bucket, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source, "from", status, email_uid, email_body, email_subject, email_date,
+          context, user_notes, related_content, labels, bucket, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       tasks.forEach(task => {
+        console.log(`💾 Saving task ${task.id}:`);
+        console.log(`  - emailBody: ${task.emailBody ? task.emailBody.length + ' chars' : 'null/empty'}`);
+        console.log(`  - emailSubject: ${task.emailSubject || 'null/empty'}`);
+        console.log(`  - emailDate: ${task.emailDate || 'null/empty'}`);
+        console.log(`  - context: ${task.context ? task.context.length + ' chars' : 'null/empty'}`);
+        console.log(`  - userNotes: ${task.userNotes ? task.userNotes.length + ' chars' : 'null/empty'}`);
+
         stmt.run(
           task.id,
           task.title,
@@ -1428,6 +1616,13 @@ app.post('/api/tasks', (req, res) => {
           task.from || null,
           task.status || 'pending',
           task.emailUid || null,
+          task.emailBody || null,
+          task.emailSubject || null,
+          task.emailDate || null,
+          task.context || null,
+          task.userNotes || null,
+          task.relatedContent ? JSON.stringify(task.relatedContent) : null,
+          task.labels ? JSON.stringify(task.labels) : null,
           task.bucket || 'backlog',
           task.createdAt || new Date().toISOString()
         );
@@ -1456,8 +1651,9 @@ app.post('/api/tasks/create', (req, res) => {
     const stmt = sqlite.prepare(`
       INSERT INTO tasks (
         id, title, description, priority, due_date,
-        source, "from", status, email_uid, bucket, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source, "from", status, email_uid, bucket, created_at,
+        context, user_notes, related_content, labels
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -1473,7 +1669,11 @@ app.post('/api/tasks/create', (req, res) => {
       task.status || 'pending',
       task.emailUid || null,
       task.bucket || 'backlog',
-      task.createdAt || new Date().toISOString()
+      task.createdAt || new Date().toISOString(),
+      task.context || null,
+      task.userNotes || null,
+      task.relatedContent ? JSON.stringify(task.relatedContent) : null,
+      task.labels ? JSON.stringify(task.labels) : null
     );
 
     res.json({ success: true, task: { ...task, id: taskId } });
