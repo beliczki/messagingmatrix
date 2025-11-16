@@ -16,6 +16,10 @@ import syncService from './services/syncService.js';
 
 dotenv.config();
 
+// Server version - increment this whenever server.js is modified
+// Format: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for small changes)
+const SERVER_VERSION = '1.0.1';
+
 // Initialize SQLite database
 console.log('🔄 Initializing SQLite cache database...');
 db.initialize();
@@ -425,6 +429,7 @@ app.get('/api/diagnostics', (req, res) => {
     const fullPath = path.join(__dirname, serviceAccountPath);
 
     const diagnostics = {
+      version: SERVER_VERSION,
       serviceAccountPath: serviceAccountPath,
       fullPath: fullPath,
       fileExists: fs.existsSync(fullPath),
@@ -2954,7 +2959,7 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`\n✓ Server running on http://localhost:${PORT}`);
+  console.log(`\n✓ Server v${SERVER_VERSION} running on http://localhost:${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✓ Make sure VITE_ANTHROPIC_API_KEY is set in your .env file\n`);
 
