@@ -32,21 +32,13 @@ let accessToken = null;
 let tokenExpiry = null;
 
 try {
-  // Try loading from environment variable first (production)
-  if (process.env.VITE_GOOGLE_SERVICE_ACCOUNT_KEY) {
-    serviceAccount = JSON.parse(process.env.VITE_GOOGLE_SERVICE_ACCOUNT_KEY);
-    console.log('✓ Service account loaded from .env:', serviceAccount.client_email);
-  }
-  // Fall back to file (development)
-  else {
-    const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
-    const fullPath = path.join(__dirname, serviceAccountPath);
-    if (fs.existsSync(fullPath)) {
-      serviceAccount = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-      console.log('✓ Service account loaded from file:', serviceAccount.client_email);
-    } else {
-      console.warn('⚠ Service account not found in .env or file at:', fullPath);
-    }
+  const serviceAccountPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './service-account.json';
+  const fullPath = path.join(__dirname, serviceAccountPath);
+  if (fs.existsSync(fullPath)) {
+    serviceAccount = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    console.log('✓ Service account loaded:', serviceAccount.client_email);
+  } else {
+    console.warn('⚠ Service account file not found at:', fullPath);
   }
 } catch (error) {
   console.error('✗ Error loading service account:', error.message);
