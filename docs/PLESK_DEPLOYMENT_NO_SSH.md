@@ -41,7 +41,7 @@
 
 ### Step 3: Install Dependencies (if needed)
 
-**Only if `package.json` changed:**
+**Only if `package.json` changed OR first deployment:**
 
 1. **Go to "Node.js"** in Plesk
 2. **Open Node.js Console** (web terminal)
@@ -50,6 +50,11 @@
    npm install
    ```
 4. **Wait for completion** (may take 1-2 minutes)
+
+**⚠️ If you get "terser not found" error during build:**
+```bash
+npm install terser --save-dev
+```
 
 ### Step 4: Build Frontend
 
