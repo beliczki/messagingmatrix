@@ -26,6 +26,26 @@ export const createPreview = async (assetIds, creatives = [], title = '', baseCo
     console.log('previewService: Creating preview with', assetIds.length, 'assets');
     console.log('previewService: API URL:', `${API_BASE_URL}/shares`);
 
+    // Collect Drive file IDs from creatives for assets that have them
+    const driveAssets = {};
+    creatives.forEach(creative => {
+      if (creative.driveFileId || creative.file_drive_id) {
+        const fileId = creative.driveFileId || creative.file_drive_id;
+        driveAssets[creative.id] = {
+          driveFileId: fileId,
+          filename: creative.filename || creative.file_name,
+          directLink: creative.directLink || creative.file_direct_link
+        };
+
+        // Update creative URL to use Drive proxy
+        if (!creative.url || !creative.url.startsWith('/api/drive-asset/')) {
+          creative.url = `/api/drive-asset/${fileId}`;
+        }
+      }
+    });
+
+    console.log('previewService: Collected Drive assets:', driveAssets);
+
     const response = await fetch(`${API_BASE_URL}/shares`, {
       method: 'POST',
       headers: {
@@ -37,7 +57,8 @@ export const createPreview = async (assetIds, creatives = [], title = '', baseCo
         title: title || `Preview ${new Date().toLocaleDateString()}`,
         baseColor,
         templateData,
-        textFormatting
+        textFormatting,
+        driveAssets
       })
     });
 

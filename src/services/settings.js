@@ -165,6 +165,24 @@ class SettingsService {
       PLANNED: '#ffff00'
     };
   }
+
+  // Get audience structure (comma-separated column names)
+  // Returns null if not configured - caller should handle validation
+  getAudienceStructure() {
+    return this.settings?.audienceStructure || null;
+  }
+
+  // Get topic structure (comma-separated column names)
+  // Returns null if not configured - caller should handle validation
+  getTopicStructure() {
+    return this.settings?.topicStructure || null;
+  }
+
+  // Get messages structure (comma-separated column names)
+  // Returns null if not configured - caller should handle validation
+  getMessagesStructure() {
+    return this.settings?.messagesStructure || null;
+  }
 }
 
 export default new SettingsService();

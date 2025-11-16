@@ -50,7 +50,13 @@
       "Bash(do echo \"--- $file ---\")",
       "Bash(npm run server:*)",
       "Bash(node scripts/migrateJsonToSqlite.js:*)",
-      "Bash(npm run kill)"
+      "Bash(npm run kill)",
+      "Bash(node scripts/migrateAssetsJsonToSqlite.js:*)",
+      "Bash(git restore:*)",
+      "Bash(if exist cachedrive dir /b cachedrive)",
+      "Bash(nul)",
+      "Bash(node:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

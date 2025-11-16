@@ -90,6 +90,16 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [generatingModule, setGeneratingModule] = useState(null);
   const [dataStructureDoc, setDataStructureDoc] = useState('');
   const [readmeDoc, setReadmeDoc] = useState('');
+  const [emailAccount, setEmailAccount] = useState({
+    client_email: '',
+    pass: '',
+    host: '',
+    port: ''
+  });
+  const [activeTab, setActiveTab] = useState('storage');
+  const [audienceStructure, setAudienceStructure] = useState('');
+  const [topicStructure, setTopicStructure] = useState('');
+  const [messagesStructure, setMessagesStructure] = useState('');
 
   useEffect(() => {
     loadConfig();
@@ -124,6 +134,19 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       await settings.ensureInitialized();
       const configData = settings.getAll();
       setConfig(configData);
+
+      // Load email account settings and structure fields from SQLite
+      const response = await fetch('/api/config');
+      if (response.ok) {
+        const allConfig = await response.json();
+        if (allConfig.emailAccount) {
+          setEmailAccount(allConfig.emailAccount);
+        }
+        // Set structure fields (no defaults - must be explicitly configured)
+        setAudienceStructure(allConfig.audienceStructure || '');
+        setTopicStructure(allConfig.topicStructure || '');
+        setMessagesStructure(allConfig.messagesStructure || '');
+      }
     } catch (error) {
       console.error('Error loading config:', error);
       setMessage({ type: 'error', text: 'Failed to load configuration' });
@@ -169,7 +192,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
 
       // Save AI prompts to text files
       console.log('💾 Saving AI Prompts - Current state:', aiPrompts);
-      const allModules = ['matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings'];
+      const allModules = ['client-context', 'matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings', 'email-to-task'];
       const savePromises = allModules.map(module => {
         const promptValue = aiPrompts[module] || '';
         console.log(`📝 Saving ${module}:`, promptValue.substring(0, 100) + (promptValue.length > 100 ? '...' : ''));
@@ -183,7 +206,24 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       await Promise.all(savePromises);
       console.log('✅ All AI prompts saved');
 
-      setMessage({ type: 'success', text: 'Configuration and AI prompts saved successfully' });
+      // Save email account settings and structure fields to SQLite
+      const sqliteConfigResponse = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emailAccount,
+          audienceStructure,
+          topicStructure,
+          messagesStructure
+        })
+      });
+
+      if (!sqliteConfigResponse.ok) {
+        throw new Error('Failed to save SQLite configuration');
+      }
+      console.log('✅ Email account and structure settings saved');
+
+      setMessage({ type: 'success', text: 'Configuration, email settings, and AI prompts saved successfully' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       console.error('Error saving:', error);
@@ -219,6 +259,10 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const handleAiPromptChange = (module, value) => {
     // Update local state only (don't save to backend yet)
     setAiPrompts(prev => ({ ...prev, [module]: value }));
+  };
+
+  const handleEmailAccountChange = (field, value) => {
+    setEmailAccount(prev => ({ ...prev, [field]: value }));
   };
 
   const resetAiPrompt = async (module) => {
@@ -381,6 +425,55 @@ Guidelines for creating instructions:
             </div>
           )}
 
+          {/* Tab Navigation */}
+          <div className="border-b bg-gray-50">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('storage')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'storage'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Storage
+              </button>
+              <button
+                onClick={() => setActiveTab('design')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'design'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Design
+              </button>
+              <button
+                onClick={() => setActiveTab('structure')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'structure'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Structure
+              </button>
+              <button
+                onClick={() => setActiveTab('prompts')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'prompts'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Prompts
+              </button>
+            </div>
+          </div>
+
+          {/* Storage Tab */}
+          {activeTab === 'storage' && (
+            <>
           {/* Google Sheets Configuration */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -505,50 +598,90 @@ Guidelines for creating instructions:
             </div>
           </div>
 
-          {/* Tree Structure Configuration */}
+          {/* Email Account Settings */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Tree Structure</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <SettingsIcon size={20} className="text-blue-600" />
+              Email Account Settings
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Configure the IMAP email account for the Tasks module to fetch and convert emails to tasks
+            </p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Decision Tree Hierarchy
+                  Email Address
                 </label>
                 <input
-                  type="text"
-                  value={config.treeStructure || 'Product → Strategy → Targeting Type → Audience → Topic → Messages'}
-                  onChange={(e) => handleInputChange('treeStructure', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  placeholder="Product → Strategy → Targeting Type → Audience → Topic → Messages"
+                  type="email"
+                  value={emailAccount.client_email || ''}
+                  onChange={(e) => handleEmailAccountChange('client_email', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="your-email@example.com"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Define the hierarchy levels for the tree view using → arrows to separate levels
-                </p>
               </div>
-            </div>
-          </div>
 
-          {/* Feed Structure Configuration */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Feed Structure</h2>
-            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Feed CSV Header
+                  Password
                 </label>
-                <textarea
-                  value={config.feedStructure || 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2'}
-                  onChange={(e) => handleInputChange('feedStructure', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  rows="4"
-                  placeholder="Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,..."
+                <input
+                  type="password"
+                  value={emailAccount.pass || ''}
+                  onChange={(e) => handleEmailAccountChange('pass', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Email password or app-specific password"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Define the CSV header for the feed view using comma-separated field definitions (Type:field_name)
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    IMAP Host
+                  </label>
+                  <input
+                    type="text"
+                    value={emailAccount.host || ''}
+                    onChange={(e) => handleEmailAccountChange('host', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="imap.gmail.com"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    IMAP server address (e.g., imap.gmail.com, outlook.office365.com)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    IMAP Port
+                  </label>
+                  <input
+                    type="text"
+                    value={emailAccount.port || ''}
+                    onChange={(e) => handleEmailAccountChange('port', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="993"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Usually 993 for SSL/TLS
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200">
+                <p className="text-xs text-gray-600">
+                  <strong>Note:</strong> These settings are used by the Tasks module to fetch emails via IMAP.
+                  For Gmail, you'll need to enable "Less secure app access" or use an "App password" if 2FA is enabled.
                 </p>
               </div>
             </div>
           </div>
+            </>
+          )}
 
+          {/* Design Tab */}
+          {activeTab === 'design' && (
+            <>
           {/* Look and Feel Configuration */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -875,6 +1008,129 @@ Guidelines for creating instructions:
               </div>
             </div>
           </div>
+            </>
+          )}
+
+          {/* Structure Tab */}
+          {activeTab === 'structure' && (
+            <>
+          {/* Tree Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Tree Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Decision Tree Hierarchy
+                </label>
+                <input
+                  type="text"
+                  value={config.treeStructure || 'Product → Strategy → Targeting Type → Audience → Topic → Messages'}
+                  onChange={(e) => handleInputChange('treeStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="Product → Strategy → Targeting Type → Audience → Topic → Messages"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the hierarchy levels for the tree view using → arrows to separate levels
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Feed Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Feed Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Feed CSV Header
+                </label>
+                <textarea
+                  value={config.feedStructure || 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2'}
+                  onChange={(e) => handleInputChange('feedStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  rows="4"
+                  placeholder="Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the CSV header for the feed view using comma-separated field definitions (Type:field_name)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Audience Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Data Structure Configuration</h2>
+            {(!audienceStructure || !topicStructure || !messagesStructure) && (
+              <div className="mb-4 bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={20} />
+                  <div className="text-sm">
+                    <p className="font-semibold text-yellow-800 mb-1">Structure Configuration Required</p>
+                    <p className="text-yellow-700">
+                      Define the column structure for each sheet below. This is required for saving data to Google Sheets.
+                      Without these configurations, save operations will fail.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Audience Structure {!audienceStructure && <span className="text-red-600">*Required</span>}
+                </label>
+                <textarea
+                  value={audienceStructure}
+                  onChange={(e) => setAudienceStructure(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
+                    !audienceStructure ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                  rows="3"
+                  placeholder="ID,Name,Order,Status,Product,Strategy,Buying_platform,Data_source,Targeting_type,Device,Tag,Key,Comment,Campaign_name,Campaign_ID,Lineitem_name,Lineitem_ID"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Comma-separated column names for the Audience sheet structure
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Topic Structure {!topicStructure && <span className="text-red-600">*Required</span>}
+                </label>
+                <textarea
+                  value={topicStructure}
+                  onChange={(e) => setTopicStructure(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
+                    !topicStructure ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                  rows="3"
+                  placeholder="ID,Name,Key,Order,Status,Product,Tag1,Tag2,Tag3,Tag4,Created,Comment"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Comma-separated column names for the Topic sheet structure
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Messages Structure {!messagesStructure && <span className="text-red-600">*Required</span>}
+                </label>
+                <textarea
+                  value={messagesStructure}
+                  onChange={(e) => setMessagesStructure(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
+                    !messagesStructure ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                  rows="3"
+                  placeholder="ID,POMS_ID,Name,Number,Variant,Audience_Key,Topic_Key,Version,PMMID,Status,..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Comma-separated column names for the Messages sheet structure
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Pattern Configuration */}
           <div className="bg-white rounded-lg shadow-sm p-6">
@@ -1028,7 +1284,12 @@ Guidelines for creating instructions:
               </div>
             </div>
           </div>
+            </>
+          )}
 
+          {/* Prompts Tab */}
+          {activeTab === 'prompts' && (
+            <>
           {/* AI Assistant Prompts Configuration */}
           <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
             <div className="mb-6">
@@ -1042,6 +1303,43 @@ Guidelines for creating instructions:
             </div>
 
             <div className="space-y-6">
+              {/* Client Context - Global */}
+              <div className="border-b-2 border-purple-300 pb-6 bg-purple-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-md font-semibold text-purple-900">Client & Project Context</h3>
+                    <p className="text-xs text-purple-700 mt-1">Global context added to all AI conversations</p>
+                  </div>
+                  <button
+                    onClick={() => generateNewInstructions('client-context')}
+                    disabled={generatingModule === 'client-context'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'client-context' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts['client-context'] || ''}
+                  onChange={(e) => handleAiPromptChange('client-context', e.target.value)}
+                  placeholder="Leave empty to use default context..."
+                  className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs bg-white"
+                  rows="15"
+                />
+                <p className="text-xs text-purple-700 mt-1">
+                  Default: Client information (Erste Bank), team structure (WPP Media), platform capabilities (Messaging Matrix), tone of voice, campaign context
+                </p>
+              </div>
+
               {/* Matrix Module */}
               <div className="border-b border-gray-200 pb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -1247,7 +1545,7 @@ Guidelines for creating instructions:
               </div>
 
               {/* Tasks Module */}
-              <div className="pb-6">
+              <div className="border-b border-gray-200 pb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-md font-semibold text-gray-800">Tasks Module</h3>
                   <button
@@ -1276,11 +1574,47 @@ Guidelines for creating instructions:
                   rows="8"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Default: Task management, workflow organization, email-to-task conversion
+                  Default: General task management assistant, workflow organization, task analysis
+                </p>
+              </div>
+
+              {/* Email-to-Task Conversion */}
+              <div className="pb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-gray-800">Email-to-Task Conversion</h3>
+                  <button
+                    onClick={() => generateNewInstructions('email-to-task')}
+                    disabled={generatingModule === 'email-to-task'}
+                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'email-to-task' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts['email-to-task'] || ''}
+                  onChange={(e) => handleAiPromptChange('email-to-task', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
+                  rows="12"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: Email analysis and task extraction, conversation context structuring, multilingual support
                 </p>
               </div>
             </div>
           </div>
+            </>
+          )}
 
         </div>
       </div>

@@ -770,9 +770,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                     <>
                       <button
                         onClick={() => {
-                          // MediaLibraryBase will provide filteredCount, but we need the actual items
-                          // We'll select all current creatives for now
-                          const allIds = new Set(creatives.map(c => c.id));
+                          // Select only the filtered creatives, not all creatives
+                          const allIds = new Set(filteredCreatives.map(c => c.id));
                           setSelectedCreativeIds(allIds);
                         }}
                         className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"

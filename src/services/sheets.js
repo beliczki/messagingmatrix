@@ -219,27 +219,27 @@ class SheetsService {
 
   // Save all data
   async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null, creativesData = null) {
+    // Get audience structure from settings (comma-separated column names)
+    const audienceStructure = settings.getAudienceStructure();
+
+    // Validate audience structure is configured
+    if (!audienceStructure) {
+      console.error('❌ Audience structure not configured in Settings > Structure > Data Structure Configuration');
+      throw new Error('Audience structure not configured. Please configure it in Settings > Structure tab > Data Structure Configuration > Audience Structure');
+    }
+
+    const audienceColumns = audienceStructure.split(',').map(col => col.trim());
+
+    // Build audience rows dynamically based on structure
     const audienceRows = [
-      ['ID', 'Name', 'Order', 'Status', 'Product', 'Strategy', 'Buying_platform', 'Data_source', 'Targeting_type', 'Device', 'Tag', 'Key', 'Comment', 'Campaign_name', 'Campaign_ID', 'Lineitem_name', 'Lineitem_ID'],
-      ...audiences.map(a => [
-        a.id,
-        a.name,
-        a.order,
-        a.status || '',
-        a.product || '',
-        a.strategy || '',
-        a.buying_platform || '',
-        a.data_source || '',
-        a.targeting_type || '',
-        a.device || '',
-        a.tag || '',
-        a.key,
-        a.comment || '',
-        a.campaign_name || '',
-        a.campaign_id || '',
-        a.lineitem_name || '',
-        a.lineitem_id || ''
-      ])
+      audienceColumns,
+      ...audiences.map(a =>
+        audienceColumns.map(col => {
+          // Map column names to object properties (converting to lowercase with underscores)
+          const key = col.toLowerCase().replace(/_/g, '_');
+          return a[key] !== undefined ? a[key] : '';
+        })
+      )
     ];
 
     const topicRows = [

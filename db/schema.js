@@ -167,6 +167,12 @@ export const tasks = sqliteTable('tasks', {
   from: text('from'),
   status: text('status').default('pending'), // 'pending', 'completed', 'in_progress'
   email_uid: integer('email_uid'),
+  email_body: text('email_body'), // Full original email body
+  email_subject: text('email_subject'), // Original email subject
+  email_date: text('email_date'), // Original email date
+  context: text('context'), // AI-extracted conversation context (markdown)
+  user_notes: text('user_notes'), // User-editable additional context notes
+  related_content: text('related_content'), // JSON array of related creative IDs
   bucket: text('bucket').default('backlog'), // 'backlog', 'review', 'done'
   created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)

@@ -86,6 +86,192 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
+    processEmailsToTasks: async (emails, onTasksCreated) => {
+      if (!isConfigured || isLoading) {
+        alert('AI Assistant API is not configured or busy');
+        return;
+      }
+
+      // Expand the assistant panel to show the process
+      setIsCollapsed(false);
+      setActiveTab('chat');
+
+      // Build email summaries context
+      const emailSummaries = emails.map((email, idx) =>
+        `Email ${idx + 1}:\nFrom: ${email.fromName} <${email.from}>\nSubject: ${email.subject}\nDate: ${email.date}\nBody:\n${email.body}\n`
+      ).join('\n---\n\n');
+
+      // Get client context and email-to-task prompt from loaded prompts or use fallback
+      const clientContext = customPrompts['client-context'] || '';
+      const clientContextSection = clientContext ? `${clientContext}\n\n---\n\n` : '';
+      const basePrompt = customPrompts['email-to-task'] || `You are an intelligent task manager. Analyze the following emails and extract actionable tasks from them. For each email, identify:
+1. What action needs to be taken
+2. The priority level (High, Medium, Low)
+3. A clear, concise task summary (2-3 sentences max - DO NOT copy the entire email)
+4. Any relevant deadline or due date mentioned
+5. The email source (subject and sender)
+6. Extract and structure the COMPLETE conversation context from the ENTIRE email thread
+
+CRITICAL INSTRUCTION - PRESERVE ORIGINAL LANGUAGE:
+- **IMPORTANT**: The "title", "description", and "context" fields MUST be in the ORIGINAL LANGUAGE of the email
+- DO NOT translate to English or any other language
+- If the email is in Hungarian, write the task in Hungarian
+- If the email is in German, write the task in German
+- If the email is in English, write the task in English
+- Keep the exact same language as the email for all fields
+
+INSTRUCTIONS FOR THE "title" FIELD:
+- Brief task title (one line)
+- In the ORIGINAL LANGUAGE of the email
+- Actionable and clear
+
+INSTRUCTIONS FOR THE "description" FIELD:
+- Concise 2-3 sentence summary of what needs to be done and why
+- In the ORIGINAL LANGUAGE of the email
+- NOT the full email content - just a brief summary
+
+INSTRUCTIONS FOR THE "context" FIELD:
+- Extract key points from the email thread - focus on the most recent and relevant messages
+- Organize the conversation chronologically showing who said what
+- Use Markdown formatting for structure (headings, bold, lists, etc.)
+- Preserve the ORIGINAL LANGUAGE - DO NOT translate
+- Summarize older messages briefly, but keep recent messages more detailed
+- Format it clearly with headings like "## John Doe wrote:" or "### Maria Smith replied:"
+- Include timestamps for key messages
+- Keep the context field concise but informative (aim for 200-400 words)
+- Make it easy to read by using markdown formatting (bold for names, ## for message headers, etc.)
+
+Return your response as a JSON array of tasks with this structure:
+[
+  {
+    "title": "Brief task title in ORIGINAL LANGUAGE",
+    "description": "Concise 2-3 sentence summary in ORIGINAL LANGUAGE",
+    "context": "Markdown-formatted complete conversation thread in ORIGINAL LANGUAGE",
+    "priority": "High|Medium|Low",
+    "dueDate": "ISO date string or null",
+    "source": "Email subject",
+    "from": "Sender name/email",
+    "status": "pending",
+    "emailUid": email UID number
+  }
+]
+
+If an email doesn't contain actionable tasks, you can skip it or note it as informational.`;
+
+      const emailPrompt = `${clientContextSection}${basePrompt}
+
+Here are the emails:
+
+${emailSummaries}`;
+
+      // Add context message showing the emails
+      const contextMessage = {
+        role: 'system',
+        content: `📧 Processing ${emails.length} email(s):\n\n${emails.map((e, i) => `${i + 1}. ${e.subject} (from ${e.fromName})`).join('\n')}`
+      };
+      setMessages(prev => [...prev, contextMessage]);
+
+      // Add user message with the prompt
+      const userMessage = {
+        role: 'user',
+        content: emailPrompt
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // Call Claude API with higher max_tokens for long email threads
+        const data = await callClaudeAPI(apiKey, [userMessage], 'claude-sonnet-4-5-20250929', 16384);
+        const responseText = data.content[0].text;
+
+        // Add assistant response to chat
+        const assistantMessage = {
+          role: 'assistant',
+          content: responseText
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Check if response was truncated
+        if (data.stop_reason === 'max_tokens') {
+          const warningMessage = {
+            role: 'system',
+            content: '⚠️ Warning: Response was truncated due to length. The task extraction may be incomplete. Consider processing fewer emails at once.'
+          };
+          setMessages(prev => [...prev, warningMessage]);
+        }
+
+        // Extract JSON from the response - try multiple patterns
+        let jsonMatch = responseText.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (!jsonMatch) {
+          // Try without newlines
+          jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/);
+        }
+        if (!jsonMatch) {
+          // Try to find JSON array directly
+          jsonMatch = responseText.match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            jsonMatch = [null, jsonMatch[0]]; // Format to match other patterns
+          }
+        }
+
+        if (jsonMatch) {
+          const jsonText = jsonMatch[1] || jsonMatch[0];
+          try {
+            const tasks = JSON.parse(jsonText.trim());
+
+            // Add email content and IDs to tasks
+            const enrichedTasks = tasks.map((task, idx) => {
+              const originalEmail = emails[idx];
+              return {
+                ...task,
+                id: `task-${Date.now()}-${idx}`,
+                emailUid: originalEmail?.uid || null,
+                emailBody: originalEmail?.body || '',
+                emailSubject: originalEmail?.subject || '',
+                emailDate: originalEmail?.date || null,
+                createdAt: new Date().toISOString()
+              };
+            });
+
+            // Automatically create tasks
+            if (onTasksCreated) {
+              onTasksCreated(enrichedTasks);
+            }
+
+            // Show success message
+            const successMessage = {
+              role: 'system',
+              content: `✅ Extracted and created ${enrichedTasks.length} task(s) from ${emails.length} email(s)!`
+            };
+            setMessages(prev => [...prev, successMessage]);
+          } catch (parseError) {
+            console.error('Error parsing tasks JSON:', parseError);
+            console.error('Attempted to parse:', jsonText);
+            console.error('Full response:', responseText);
+            const errorMessage = {
+              role: 'system',
+              content: `❌ Failed to parse tasks from response. Parse error: ${parseError.message}\n\nCheck browser console for details.`
+            };
+            setMessages(prev => [...prev, errorMessage]);
+          }
+        } else {
+          const errorMessage = {
+            role: 'system',
+            content: '❌ No task data found in response. Please try again.'
+          };
+          setMessages(prev => [...prev, errorMessage]);
+        }
+      } catch (error) {
+        console.error('Error processing emails:', error);
+        const errorMessage = {
+          role: 'assistant',
+          content: `Error: ${error.message}`
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
     generateMessageContent: async (contextData, callback) => {
       if (!isConfigured || isLoading) {
         alert('AI Assistant API is not configured or busy');
@@ -393,8 +579,13 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
   const buildContextPrompt = () => {
     const appStateContext = buildAppStateContext();
 
+    // Get client context (added to ALL modules)
+    const clientContext = customPrompts['client-context'] || '';
+    const clientContextSection = clientContext ? `${clientContext}\n\n---\n\n` : '';
+
     console.log('🤖 AI Assistant Context Builder - Custom Prompts:', customPrompts);
     console.log('🤖 Prompts Loaded:', promptsLoaded);
+    console.log('🏢 Client Context Length:', clientContext.length, 'characters');
 
     // Module-specific contexts (creative-library, assets, monitoring, templates, users, settings)
     if (moduleContext) {
@@ -402,7 +593,7 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
 
       // Use prompt from file (loaded from backend on component mount)
       if (customPrompts[module] && customPrompts[module].trim() !== '') {
-        const context = `${customPrompts[module]}
+        const context = `${clientContextSection}${customPrompts[module]}
 ${appStateContext}`;
 
         console.log('🤖 AI Assistant - Final Context Prompt:', context);
@@ -435,7 +626,7 @@ ${JSON.stringify(emails, null, 2)}`;
 
       // Use prompt from file
       if (customPrompts.tasks && customPrompts.tasks.trim() !== '') {
-        const context = `${taskStateJSON}
+        const context = `${clientContextSection}${taskStateJSON}
 
 ${customPrompts.tasks}`;
 
@@ -467,8 +658,8 @@ Error: AI Assistant prompt not configured for tasks. Please check that AITasksIn
     const { audiences = [], topics = [], messages: matrixMessages = [], keywords = {}, assets = [], creatives = [], textFormatting = [] } = data;
     const activeMessages = matrixMessages.filter(m => m.status !== 'deleted');
 
-    // Build complete matrix context: Instructions -> README -> Data
-    const matrixContextFull = `${customPrompts.matrix || ''}
+    // Build complete matrix context: Client Context -> Instructions -> README -> Data
+    const matrixContextFull = `${clientContextSection}${customPrompts.matrix || ''}
 
 ---
 

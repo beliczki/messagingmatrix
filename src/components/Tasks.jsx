@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid } from 'lucide-react';
+import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid, Tag } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
@@ -107,26 +107,19 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         return;
       }
 
-      // Convert new emails to tasks
-      const convertResponse = await fetch('http://localhost:3003/api/emails/convert-to-tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails: newEmails }),
-      });
+      // Use AI Assistant to process emails (this will open the assistant panel)
+      if (claudeChatRef.current && claudeChatRef.current.processEmailsToTasks) {
+        claudeChatRef.current.processEmailsToTasks(newEmails, (newTasks) => {
+          // Callback to add tasks when user clicks "Create Tasks" button
+          setTasks(prev => [...newTasks, ...prev]);
 
-      if (!convertResponse.ok) {
-        throw new Error('Failed to convert emails to tasks');
+          // Mark these emails as processed
+          const emailUidsToMark = newEmails.map(e => e.uid);
+          markEmailsAsProcessed(emailUidsToMark);
+        });
+      } else {
+        throw new Error('AI Assistant not available or not configured');
       }
-
-      const convertData = await convertResponse.json();
-      const newTasks = convertData.tasks || [];
-
-      // Add new tasks to existing tasks
-      setTasks(prev => [...newTasks, ...prev]);
-
-      // Mark these emails as processed
-      const emailUidsToMark = newEmails.map(e => e.uid);
-      await markEmailsAsProcessed(emailUidsToMark);
 
     } catch (err) {
       setError(err.message);
@@ -193,6 +186,43 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
     } catch {
       return null;
     }
+  };
+
+  const getLabelColor = (label) => {
+    // Simple color scheme for labels - you can customize
+    const colors = [
+      'bg-blue-100 text-blue-700 border-blue-300',
+      'bg-purple-100 text-purple-700 border-purple-300',
+      'bg-green-100 text-green-700 border-green-300',
+      'bg-orange-100 text-orange-700 border-orange-300',
+      'bg-pink-100 text-pink-700 border-pink-300',
+      'bg-indigo-100 text-indigo-700 border-indigo-300',
+      'bg-teal-100 text-teal-700 border-teal-300'
+    ];
+    // Simple hash to get consistent color for same label
+    const hash = label.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const getBucketHeaderStyle = (bucketId) => {
+    switch (bucketId) {
+      case 'backlog':
+        return { backgroundColor: '#6B7280' }; // Middle grey
+      case 'dead':
+        return { backgroundColor: '#DC2626' }; // Full red
+      case 'planning':
+        return { backgroundColor: lookAndFeel?.secondaryColor || '#3B82F6' }; // Use secondaryColor
+      case 'production':
+        return { backgroundColor: lookAndFeel?.secondaryColor2 || '#F59E0B' }; // Use secondaryColor2
+      case 'review':
+        return { backgroundColor: lookAndFeel?.secondaryColor3 || '#8B5CF6' }; // Use secondaryColor3
+      default:
+        return { backgroundColor: lookAndFeel?.secondaryColor || '#3B82F6' };
+    }
+  };
+
+  const getBucketContentColor = () => {
+    return 'bg-white'; // All buckets have white background for content
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -353,6 +383,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         onToggleStatus={toggleTaskStatus}
                         onEdit={setEditingTask}
                         getPriorityColor={getPriorityColor}
+                        getLabelColor={getLabelColor}
                         formatDate={formatDate}
                       />
                     ))}
@@ -375,6 +406,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                         onToggleStatus={toggleTaskStatus}
                         onEdit={setEditingTask}
                         getPriorityColor={getPriorityColor}
+                        getLabelColor={getLabelColor}
                         formatDate={formatDate}
                       />
                     ))}
@@ -391,21 +423,24 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                 );
 
                 return (
-                  <div key={bucket.id} className="flex-shrink-0 w-80">
+                  <div key={bucket.id} className="flex-shrink-0 w-80 shadow-sm rounded-lg">
                     {/* Bucket Header */}
-                    <div className={`${bucket.color} border-2 rounded-t-lg p-3`}>
-                      <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide">
+                    <div
+                      className="rounded-t-lg p-3"
+                      style={getBucketHeaderStyle(bucket.id)}
+                    >
+                      <h3 className="font-bold text-white text-sm uppercase tracking-wide">
                         {bucket.name}
                       </h3>
-                      <p className="text-xs text-gray-600 mt-1">{bucket.description}</p>
-                      <div className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-white/90 mt-1">{bucket.description}</p>
+                      <div className="text-xs text-white/80 mt-2">
                         {bucketTasks.length} {bucketTasks.length === 1 ? 'task' : 'tasks'}
                       </div>
                     </div>
 
                     {/* Bucket Content */}
                     <div
-                      className={`${bucket.color} border-2 border-t-0 rounded-b-lg p-3 min-h-[200px] max-h-[calc(100vh-350px)] overflow-y-auto`}
+                      className={`${getBucketContentColor()} rounded-b-lg p-3 min-h-[200px] max-h-[calc(100vh-350px)] overflow-y-auto`}
                       onDragOver={handleDragOver}
                       onDrop={() => handleDrop(bucket.id)}
                     >
@@ -419,6 +454,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
                             onToggleStatus={toggleTaskStatus}
                             onEdit={setEditingTask}
                             getPriorityColor={getPriorityColor}
+                            getLabelColor={getLabelColor}
                             formatDate={formatDate}
                           />
                         ))}
@@ -458,7 +494,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   );
 };
 
-const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, formatDate }) => {
+const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, getLabelColor, formatDate }) => {
   const isCompleted = task.status === 'completed';
 
   return (
@@ -487,15 +523,27 @@ const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, formatDate }
             <h3 className={`font-semibold text-gray-900 ${isCompleted ? 'line-through' : ''}`}>
               {task.title}
             </h3>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-start gap-2 flex-shrink-0 max-w-xs">
               {task.priority && (
                 <span
-                  className={`px-2 py-1 text-xs font-medium rounded border ${getPriorityColor(
+                  className={`px-2 py-1 text-xs font-medium rounded border flex-shrink-0 ${getPriorityColor(
                     task.priority
                   )}`}
                 >
                   {task.priority}
                 </span>
+              )}
+              {task.labels && task.labels.length > 0 && (
+                <div className="flex gap-1 overflow-hidden flex-1 min-w-0">
+                  {task.labels.map((label) => (
+                    <span
+                      key={label}
+                      className={`px-2 py-1 text-xs font-medium rounded flex-shrink-0 whitespace-nowrap ${getLabelColor(label)}`}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -531,7 +579,7 @@ const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, formatDate }
   );
 };
 
-const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onToggleStatus, onEdit, getPriorityColor, formatDate }) => {
+const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onToggleStatus, onEdit, getPriorityColor, getLabelColor, formatDate }) => {
   const isCompleted = task.status === 'completed';
 
   return (
@@ -558,15 +606,27 @@ const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onToggleStatus, onEdit, 
           )}
         </button>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-start gap-1 flex-shrink-0 max-w-[180px]">
           {task.priority && (
             <span
-              className={`px-1.5 py-0.5 text-xs font-medium rounded ${getPriorityColor(
+              className={`px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 ${getPriorityColor(
                 task.priority
               )}`}
             >
               {task.priority}
             </span>
+          )}
+          {task.labels && task.labels.length > 0 && (
+            <div className="flex gap-1 overflow-hidden flex-1 min-w-0">
+              {task.labels.map((label) => (
+                <span
+                  key={label}
+                  className={`px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 whitespace-nowrap ${getLabelColor(label)}`}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>

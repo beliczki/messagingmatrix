@@ -1,0 +1,102 @@
+# CLIENT & PROJECT CONTEXT
+
+## Client Information
+
+**Client:** Erste Bank Hungary
+**Website:** https://erstebank.hu
+**Industry:** Banking & Financial Services
+**Primary Language:** Hungarian for client communication and creative content
+**Card issuer:** VISA
+
+Erste Bank is one of Hungary's leading financial institutions, offering retail banking, corporate banking, and financial services. The bank emphasizes customer-centric digital solutions and personalized financial products.
+
+## ERSTE BRAND
+
+Erste Group’s communication follows a purpose-driven approach. Our brand narrative “Our region needs people who believe in themselves and a bank which believes in them”, in short: #believeinyourself is directly derived from our founding purpose, reflects our attitude and gives orientation for all means of communication and behaviour. 
+**Magyarul: #higgymagadban**
+
+A brand is a consistent promise. People who believe in themselves are the basis for a healthy personal life, economy and society. Therefore, we encourage and inspire people to pursue their aspirations, follow their dreams, create something new and move forward, which will continue to be the driving force into a positive future. Believing in people underlines Erste Group’s promise to support people along the way, by providing knowledge, advice, products, services and initiatives which enable them to improve their financial health.
+
+## Prodcuts 
+**Primary Product Focus:** 
+- 1 Personal Loans, Személyi Kölcsön, **abbreviation SZK** 
+- 2 Max és WizzAir Credit Card, Erste Max Hitelkártya, **abbreviation: HK**
+- 3 Mikrovállalkozói termékek, Mikrovállalati hitelek, számlák, Széchenyi Program, **abbreviation: VAL**
+**Product Groups:** 
+- Dikszámla, Online Számla, Cseperedő számla, értékpapír és folyószámla, **abbreviation: SZA**
+- Babaváró hitel, Otthonstart lakás hitel, Munkás hitel **abbreviation: HITEL**
+- Lakástakarék pénztár, **abbreviation: LTP**
+- Erste Market termékek, értékpapítszámla, tartós befeketstési számla (TBSZ), **abbreviation: MARKET**
+**Linked Products:**
+- folyószámla + értékpapírszámla
+
+Product labels:
+SZK, HK, VAL, MIKRO, SZA, LTP, HITEL, MARKET, OtthonStart, MunkasHitel, Babaváró, Diak, Online, Cseperedő, BeErste, CARD, GEORGE
+
+## Tone of Voice & Communication
+**Creative Approach**
+- Consumer-centric messaging
+- Benefit-driven copy
+- Contextual relevance (time of day, audience, behavior)
+- A/B testing and optimization-minded
+- Regulatory compliant (financial services)
+
+## Key Success Metrics
+- Cost per Lead (CPL)
+- End-to-End Conversions (E2E)
+- Visitor to Customer (VHK)
+- Click-through Rate (CTR)
+- Creative performance by audience/time/message
+
+## Team Structure & Roles
+
+### Client Side (Erste Bank)
+- **Várfi Tamás** (Tamas.Varfi@erstebank.hu) - Marketing Lead
+- **Porkoláb Dávid** (David.Porkolab@erstebank.hu) - Marketing Team
+- Focus: Strategy, approvals, brand guidelines, performance goals
+
+### Agency Side (WPP Media)
+- **Lajos Danko** (lajos.danko@wppmedia.com) - PPC Strategist
+- **Mercedesz Toth** (mercedesz.toth@wppmedia.com) - Account/Project Lead
+- **Anna Marjan** (anna.marjan@wppmedia.com) - Senior Programmatic Trader
+- **Sándor Korsos** (sandor.korsos@wppmedia.com) - Programmatic Team
+- **Krisztián Simon** (krisztian.simon@wppmedia.com) - Strategy
+- **Kristóf Martikán** (kristof.martikan@wppmedia.com) - Media Planning
+- **Csenge Barabás** (csenge.barabas@mediaco.hu) - Media Planning
+- **Judit Andrik** (judit.andrik@wppmedia.com) - Team member
+- **Norbert Vincze** (norbert.vincze@wppmedia.com) - Team member
+
+### Creative/Technical
+- **Beliczki Róbert** (beliczki.robert@gmail.com) - DCO Specialist, Creative Developer
+  - Manages Messaging Matrix platform
+  - Creates dynamic creative templates
+  - Handles feed setup and trafficking
+  - Technical implementation and QA
+
+## Typical Workflow:## 
+1. Strategy and concept development
+2. Creative brief and messaging development
+3. Template creation in Messaging Matrix
+4. Asset preparation and upload
+5. Feed configuration and mapping
+6. QA and client approval
+7. Trafficking to ad platforms
+8. Performance monitoring and optimization
+
+
+## Important Notes
+
+- **Compliance:** All financial product claims must be accurate and include required disclosures
+- **THM (Teljes Hiteldíj Mutató):** Annual Percentage Rate must be prominently displayed
+- **Approval Process:** Creative requires client sign-off before trafficking
+- **Versioning:** Multiple creative variants tested simultaneously
+- **Reporting:** Regular performance analysis drives optimization decisions
+
+**Common Tasks:**
+- Creating new message variations for A/B testing
+- Updating creative assets (images, copy, CTAs)
+- Configuring feed parameters for new campaigns
+- Trafficking new line items with proper targeting
+- Generating performance reports and insights
+- Troubleshooting feed or template issues
+
