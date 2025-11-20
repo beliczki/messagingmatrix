@@ -6,6 +6,12 @@ import fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Ensure Web Crypto API is available globally for jose library
+if (!globalThis.crypto) {
+  globalThis.crypto = crypto.webcrypto;
+}
+
 import { SignJWT, importPKCS8 } from 'jose';
 import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
