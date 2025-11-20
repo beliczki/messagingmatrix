@@ -157,7 +157,14 @@ Return your response as a JSON array of tasks with this structure:
   }
 ]
 
-If an email doesn't contain actionable tasks, you can skip it or note it as informational.`;
+CRITICAL JSON FORMATTING RULES:
+- Return ONLY the JSON array - no markdown code fences, no explanations
+- Do NOT wrap the JSON in \`\`\`json code blocks
+- Ensure all strings are properly escaped (escape quotes with \\", newlines with \\n)
+- Make sure the JSON is valid and parseable
+- If an email doesn't contain actionable tasks, skip it (return empty array [] if no tasks)
+
+RESPONSE MUST START WITH [ AND END WITH ]`;
 
       const emailPrompt = `${clientContextSection}${basePrompt}
 
@@ -208,10 +215,18 @@ ${emailSummaries}`;
           jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/);
         }
         if (!jsonMatch) {
-          // Try to find JSON array directly
-          jsonMatch = responseText.match(/\[[\s\S]*?\]/);
+          // Try to find JSON array directly (greedy to get the full array)
+          jsonMatch = responseText.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
             jsonMatch = [null, jsonMatch[0]]; // Format to match other patterns
+          }
+        }
+        if (!jsonMatch) {
+          // Last resort: try to find anything between first [ and last ]
+          const firstBracket = responseText.indexOf('[');
+          const lastBracket = responseText.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+            jsonMatch = [null, responseText.substring(firstBracket, lastBracket + 1)];
           }
         }
 
