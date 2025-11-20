@@ -50,7 +50,8 @@ const App = () => {
   });
 
   // Load matrix data once at app level to share across all components
-  const matrixDataRaw = useMatrix();
+  // Only load if user is authenticated to avoid API errors on login page
+  const matrixDataRaw = useMatrix(currentUser);
 
   // Memoize matrixData to prevent it from being seen as changed on every render
   const matrixData = useMemo(() => matrixDataRaw, [matrixDataRaw]);
@@ -100,12 +101,13 @@ const App = () => {
     return () => clearTimeout(timeoutId);
   }, [matrixViewState]);
 
-  // Load look and feel settings from public endpoint (no auth required)
+  // Load look and feel settings from basic config endpoint (no auth required)
   useEffect(() => {
     const loadLookAndFeel = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
-        const response = await fetch(`${API_URL}/api/config/public`);
+        // Use relative URL in production, localhost in development
+        const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3003' : '');
+        const response = await fetch(`${API_URL}/api/config-basic`);
         if (response.ok) {
           const data = await response.json();
           setLookAndFeel(data.lookAndFeel);

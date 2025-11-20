@@ -6,7 +6,7 @@ import { generatePMMID, generateTopicKey, generateTraffickingFields } from '../u
 // Module-level cache to persist across hook calls
 let cachedMatrixResult = null;
 
-export const useMatrix = () => {
+export const useMatrix = (currentUser = null) => {
   // State
   const [audiences, setAudiences] = useState([]);
   const [topics, setTopics] = useState([]);
@@ -354,10 +354,12 @@ export const useMatrix = () => {
     return messagesByCell[cellKey] || [];
   }, [messagesByCell]);
 
-  // Load on mount
+  // Load on mount - only if user is authenticated
   useEffect(() => {
-    load();
-  }, [load]);
+    if (currentUser) {
+      load();
+    }
+  }, [load, currentUser]);
 
   // Save keywords
   const saveKeywords = useCallback(async (updatedKeywords) => {

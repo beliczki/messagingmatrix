@@ -1,6 +1,8 @@
 // API Helper - Automatically includes JWT token in requests
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+// Use VITE_API_URL if set, otherwise use empty string for relative URLs (same origin)
+// In development, use localhost:3003. In production, nginx proxies /api to backend
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3003' : '');
 
 // Get auth token from localStorage
 const getAuthHeaders = () => {

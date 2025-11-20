@@ -338,8 +338,8 @@ app.get('/api/sheets/:spreadsheetId', verifyToken, async (req, res) => {
   }
 });
 
-// Get public config (no auth required - only returns lookAndFeel for login page)
-app.get('/api/config/public', (req, res) => {
+// Get basic config (NO AUTH REQUIRED - only lookAndFeel for login page)
+app.get('/api/config-basic', (req, res) => {
   try {
     const sqlite = db.getSqlite();
     const stmt = sqlite.prepare('SELECT value FROM config WHERE key = ?');
@@ -364,12 +364,12 @@ app.get('/api/config/public', (req, res) => {
     const lookAndFeel = JSON.parse(row.value);
     res.json({ lookAndFeel });
   } catch (error) {
-    console.error('Error reading public config:', error);
-    res.status(500).json({ error: 'Failed to read public config from database' });
+    console.error('Error reading basic config:', error);
+    res.status(500).json({ error: 'Failed to read basic config from database' });
   }
 });
 
-// Get config (from SQLite)
+// Get config (from SQLite) - REQUIRES JWT AUTH
 app.get('/api/config', verifyToken, (req, res) => {
   try {
     const sqlite = db.getSqlite();
