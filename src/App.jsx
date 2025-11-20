@@ -104,7 +104,8 @@ const App = () => {
   useEffect(() => {
     const loadLookAndFeel = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+        // Use VITE_API_URL if set, otherwise use empty string for relative URLs (same origin)
+        const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3003' : '');
         const response = await fetch(`${API_URL}/api/config/public`);
         if (response.ok) {
           const data = await response.json();
