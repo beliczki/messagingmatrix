@@ -2,6 +2,9 @@
 
 **Created:** 2025-01-20
 **Purpose:** Document our agreed-upon collaboration patterns to work more effectively together
+**Scope:** Applies to all projects we work on together
+
+> 📝 **Note:** This is a universal guide. Copy it to any project's `.claude/` directory, or keep one master copy for reference. Project-specific examples are in the "Project History" section at the bottom.
 
 ---
 
@@ -40,17 +43,45 @@ Copy this at the start of complex tasks:
 **First Issue:** [Describe using What/Why/How pattern]
 ```
 
-### Example Session Starter
+### Example Session Starters
+
+**Example 1: Deployment Issue**
 ```markdown
-**Goal:** Deploy messaging matrix to production subdomain
+**Goal:** Deploy application to production with SSL
 **Current State:** App works on HTTP, HTTPS fails with SSL errors
-**Environment:** Hetzner Ubuntu 22.04, Node 18.19.1, nginx 1.24, PM2
-**Context:** DNS configured yesterday, pointed to 46.224.60.159
+**Environment:** Ubuntu 22.04, Node 18.x, nginx 1.24, PM2
+**Context:** DNS configured yesterday, pointed to server IP
 **Constraints:** Need to finish in 1 hour, want to understand SSL process
 **First Issue:**
-- What: Certbot SSL setup failing
+- What: SSL certificate setup failing
 - Why: DNS not resolving (NXDOMAIN error)
 - How: [screenshot + error text]
+```
+
+**Example 2: Bug Fix**
+```markdown
+**Goal:** Fix data loading issue in dashboard
+**Current State:** Dashboard shows loading spinner indefinitely
+**Environment:** React 18, TypeScript, running locally
+**Context:** Worked yesterday, broke after updating API endpoint
+**Constraints:** 30 minutes, need quick fix for demo
+**First Issue:**
+- What: API calls returning 404
+- Why: Endpoint URL changed but frontend not updated
+- How: Browser console shows "GET /api/old-endpoint 404"
+```
+
+**Example 3: New Feature**
+```markdown
+**Goal:** Add user authentication with JWT
+**Current State:** App has no auth, all routes public
+**Environment:** Node/Express backend, React frontend
+**Context:** New project, no auth implemented yet
+**Constraints:** 2 hours available, want to understand JWT concepts
+**First Issue:**
+- What: Need to plan authentication flow
+- Why: Currently anyone can access sensitive data
+- How: [diagram or description of current architecture]
 ```
 
 ---
@@ -161,9 +192,15 @@ Use this structure to describe problems:
 
 ---
 
-## 📝 Past Successes (Reference Examples)
+## 📝 Project History (Reference Examples)
 
-### Hetzner Deployment (2025-01-20)
+> Add notable sessions from any project to track patterns and lessons learned.
+
+### Project: Messaging Matrix
+
+#### Hetzner Deployment (2025-01-20)
+**Task:** Deploy React/Node app to Hetzner with SSL and Google Sheets integration
+
 **What worked well:**
 - User provided consistent screenshots
 - Stayed patient through 6+ iterations on crypto issue
@@ -175,7 +212,26 @@ Use this structure to describe problems:
 - Could have asked "why" more often
 - Text error messages would have helped
 
-**Lesson:** Complex issues (crypto/jose) need patience and iteration
+**Lesson:** Complex issues (crypto/jose library compatibility) need patience and iteration. Environmental differences (browser vs Node.js) can be subtle.
+
+---
+
+### Project: [Future Project Name]
+
+#### [Session Name] (Date)
+**Task:** [Brief description]
+
+**What worked well:**
+- [Success patterns]
+
+**What we improved:**
+- [Areas that needed work]
+
+**Lesson:** [Key takeaway]
+
+---
+
+_Add new project entries above this line_
 
 ---
 
@@ -260,8 +316,27 @@ Use this structure to describe problems:
 ---
 
 **Last Updated:** 2025-01-20
+**Scope:** Universal - applies to all projects
 **Weekly Feedback Schedule:** Every weekend (Saturday or Sunday)
 **Next Feedback Round:** Weekend of 2025-01-25/26
 **Next Major Review:** When starting next complex project
 
-_This is a living document. Update it as we learn what works!_
+---
+
+## 🔄 Using This Guide Across Projects
+
+**Option 1: Master Copy**
+- Keep one master copy (like this one)
+- Reference it from any project
+- Update with lessons from all projects
+
+**Option 2: Per-Project Copy**
+- Copy to each project's `.claude/` directory
+- Customize per-project if needed
+- Merge learnings back to master
+
+**Recommended:** Keep master copy + add project-specific notes in "Project History" section
+
+---
+
+_This is a living document. Update it as we learn what works across all our projects!_
