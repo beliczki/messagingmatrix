@@ -3,6 +3,8 @@
  * Handles loading and managing assets from Google Drive
  */
 
+import { apiGet, authenticatedFetch } from './api.js';
+
 /**
  * Load assets from Google Drive
  * @param {string} folderType - 'assets' or 'creatives'
@@ -74,7 +76,7 @@ export const uploadToDrive = async (file, folderType = 'assets', metadata = {}) 
     formData.append('folderType', folderType);
     formData.append('metadata', JSON.stringify(metadata));
 
-    const response = await fetch('/api/drive/upload', {
+    const response = await authenticatedFetch('/api/drive/upload', {
       method: 'POST',
       body: formData
     });
@@ -109,7 +111,7 @@ export const uploadMultipleToDrive = async (files, folderType = 'assets', metada
     formData.append('folderType', folderType);
     formData.append('metadata', JSON.stringify(metadata));
 
-    const response = await fetch('/api/drive/upload-batch', {
+    const response = await authenticatedFetch('/api/drive/upload-batch', {
       method: 'POST',
       body: formData
     });
@@ -154,7 +156,7 @@ export const deleteDriveFile = async (fileId) => {
  */
 export const getDriveQuota = async () => {
   try {
-    const response = await fetch('/api/drive/quota');
+    const response = await apiGet('/api/drive/quota');
 
     if (!response.ok) {
       throw new Error(`Failed to get Drive quota: ${response.statusText}`);
@@ -217,7 +219,7 @@ export const searchDriveFiles = async (searchTerm, folderType = 'assets') => {
  */
 export const isDriveEnabled = async () => {
   try {
-    const response = await fetch('/api/config');
+    const response = await apiGet('/api/config');
 
     if (!response.ok) {
       return false;
