@@ -1,4 +1,5 @@
 // Simplified Google Sheets Service - Local Storage + Service Account
+import crypto from 'crypto';
 import { SignJWT } from 'jose';
 import settings from './settings';
 
