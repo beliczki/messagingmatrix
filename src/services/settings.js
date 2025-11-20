@@ -6,7 +6,7 @@ class SettingsService {
     this.settings = null;
     this.apiUrl = '/api/config';
     this.initialized = false;
-    this.initPromise = this.init();
+    this.initPromise = null; // Don't auto-initialize - wait for ensureInitialized() to be called
   }
 
   // Initialize settings from config file via API
@@ -27,9 +27,12 @@ class SettingsService {
     }
   }
 
-  // Wait for initialization
+  // Wait for initialization (lazy initialization - only starts when first needed)
   async ensureInitialized() {
     if (!this.initialized) {
+      if (!this.initPromise) {
+        this.initPromise = this.init();
+      }
       await this.initPromise;
     }
   }
