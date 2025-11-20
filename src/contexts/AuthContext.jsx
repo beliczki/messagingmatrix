@@ -88,7 +88,8 @@ export const AuthProvider = ({ children }) => {
 
     // Check if user is already logged in (stored in localStorage for session persistence)
     const savedUser = localStorage.getItem('current_user');
-    if (savedUser) {
+    const savedToken = localStorage.getItem('auth_token');
+    if (savedUser && savedToken) {
       setCurrentUser(JSON.parse(savedUser));
     }
     setLoading(false);
@@ -110,6 +111,11 @@ export const AuthProvider = ({ children }) => {
         throw new Error(data.error || 'Login failed');
       }
 
+      // Store JWT token
+      if (data.token) {
+        localStorage.setItem('auth_token', data.token);
+      }
+
       // Store current user session in localStorage
       const userWithoutPassword = {
         id: data.user.id,
@@ -128,7 +134,19 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('current_user');
+    localStorage.removeItem('auth_token');
     setCurrentUser(null);
+  };
+
+  // Helper function to get auth headers for API requests
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('auth_token');
+    return token ? {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    } : {
+      'Content-Type': 'application/json'
+    };
   };
 
   const getAllUsers = async () => {
@@ -194,7 +212,8 @@ export const AuthProvider = ({ children }) => {
     changePassword,
     createUser,
     loading,
-    hashPassword
+    hashPassword,
+    getAuthHeaders
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

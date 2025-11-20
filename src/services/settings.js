@@ -1,4 +1,6 @@
 // Settings Service - Persistent settings storage via API
+import { apiGet, apiPost } from '../utils/api.js';
+
 class SettingsService {
   constructor() {
     this.settings = null;
@@ -12,7 +14,7 @@ class SettingsService {
     if (this.initialized) return;
 
     try {
-      const response = await fetch(this.apiUrl);
+      const response = await apiGet(this.apiUrl);
       if (response.ok) {
         this.settings = await response.json();
         this.initialized = true;
@@ -43,13 +45,7 @@ class SettingsService {
     try {
       await this.ensureInitialized();
 
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings)
-      });
+      const response = await apiPost(this.apiUrl, settings);
 
       if (response.ok) {
         const result = await response.json();
