@@ -155,6 +155,56 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// JWT Authentication Middleware
+function verifyToken(req, res, next) {
+  // Get token from Authorization header: "Bearer <token>"
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Extract token after "Bearer "
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    // Split JWT into parts
+    const [header, payload, signature] = token.split('.');
+
+    if (!header || !payload || !signature) {
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
+
+    // Verify signature
+    const validSignature = crypto
+      .createHmac('sha256', process.env.JWT_SECRET)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+
+    if (signature !== validSignature) {
+      return res.status(401).json({ error: 'Invalid token signature' });
+    }
+
+    // Decode and verify payload
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+
+    // Check expiration
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+
+    // Attach user info to request
+    req.user = {
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role
+    };
+
+    next(); // Token is valid, continue to route
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
 // Serve static files from public/share directory for HTML ad previews
 app.use('/api/share-static', express.static(path.join(__dirname, 'public', 'share')));
 
@@ -162,7 +212,7 @@ app.use('/api/share-static', express.static(path.join(__dirname, 'public', 'shar
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 // Get spreadsheet data (read from a specific sheet/range)
-app.get('/api/sheets/:spreadsheetId/values/:range', async (req, res) => {
+app.get('/api/sheets/:spreadsheetId/values/:range', verifyToken, async (req, res) => {
   try {
     const { spreadsheetId, range } = req.params;
     const token = await getAccessToken();
@@ -228,7 +278,7 @@ app.put('/api/sheets/:spreadsheetId/values/:range', async (req, res) => {
 });
 
 // Clear spreadsheet data
-app.post('/api/sheets/:spreadsheetId/values/:range/clear', async (req, res) => {
+app.post('/api/sheets/:spreadsheetId/values/:range/clear', verifyToken, async (req, res) => {
   try {
     const { spreadsheetId, range } = req.params;
     const token = await getAccessToken();
@@ -259,7 +309,7 @@ app.post('/api/sheets/:spreadsheetId/values/:range/clear', async (req, res) => {
 });
 
 // Get spreadsheet metadata
-app.get('/api/sheets/:spreadsheetId', async (req, res) => {
+app.get('/api/sheets/:spreadsheetId', verifyToken, async (req, res) => {
   try {
     const { spreadsheetId } = req.params;
     const token = await getAccessToken();
@@ -289,7 +339,7 @@ app.get('/api/sheets/:spreadsheetId', async (req, res) => {
 });
 
 // Get config (from SQLite)
-app.get('/api/config', (req, res) => {
+app.get('/api/config', verifyToken, (req, res) => {
   try {
     const sqlite = db.getSqlite();
     const stmt = sqlite.prepare('SELECT * FROM config');
@@ -1961,9 +2011,29 @@ app.post('/api/users/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Return user without password
+    // Create JWT token
+    const payload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      iat: Math.floor(Date.now() / 1000), // Issued at
+      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // Expires in 24 hours
+    };
+
+    // Create JWT: base64(header).base64(payload).signature
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', process.env.JWT_SECRET)
+      .update(`${header}.${body}`)
+      .digest('base64url');
+
+    const token = `${header}.${body}.${signature}`;
+
+    // Return user and token
     res.json({
       success: true,
+      token: token,
       user: {
         id: user.id,
         email: user.email,
