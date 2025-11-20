@@ -197,7 +197,8 @@ Use this structure to describe problems:
 
 ## 📅 Weekly Feedback Round
 
-**Schedule:** Every week (pick a consistent day/time)
+**Schedule:** Every weekend (Saturday or Sunday)
+**Purpose:** Close out the previous week, plan for the next
 **Duration:** 10-15 minutes
 **Format:** Quick retrospective
 
@@ -259,7 +260,8 @@ Use this structure to describe problems:
 ---
 
 **Last Updated:** 2025-01-20
-**Next Weekly Feedback:** [Pick a day - Monday? Friday?]
+**Weekly Feedback Schedule:** Every weekend (Saturday or Sunday)
+**Next Feedback Round:** Weekend of 2025-01-25/26
 **Next Major Review:** When starting next complex project
 
 _This is a living document. Update it as we learn what works!_
