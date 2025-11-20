@@ -197,10 +197,8 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       const savePromises = allModules.map(module => {
         const promptValue = aiPrompts[module] || '';
         console.log(`📝 Saving ${module}:`, promptValue.substring(0, 100) + (promptValue.length > 100 ? '...' : ''));
-        return fetch(`/api/ai-prompts/${module}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: promptValue })
+        return apiPost(`/api/ai-prompts/${module}`, {
+          prompt: promptValue
         });
       });
 
@@ -265,10 +263,8 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const resetAiPrompt = async (module) => {
     try {
       // Save empty prompt to delete the file and revert to default
-      const response = await fetch(`/api/ai-prompts/${module}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: '' })
+      const response = await apiPost(`/api/ai-prompts/${module}`, {
+        prompt: ''
       });
 
       if (response.ok) {

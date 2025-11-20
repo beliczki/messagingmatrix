@@ -23,7 +23,7 @@ export const loadDriveAssets = async (folderType = 'assets', options = {}) => {
       params.append('pageToken', options.pageToken);
     }
 
-    const response = await fetch(`/api/drive/files?${params}`);
+    const response = await apiGet(`/api/drive/files?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to load Drive assets: ${response.statusText}`);
@@ -135,7 +135,7 @@ export const uploadMultipleToDrive = async (files, folderType = 'assets', metada
  */
 export const deleteDriveFile = async (fileId) => {
   try {
-    const response = await fetch(`/api/drive/files/${fileId}`, {
+    const response = await authenticatedFetch(`/api/drive/files/${fileId}`, {
       method: 'DELETE'
     });
 
@@ -182,7 +182,7 @@ export const searchDriveFiles = async (searchTerm, folderType = 'assets') => {
       folderType
     });
 
-    const response = await fetch(`/api/drive/search?${params}`);
+    const response = await apiGet(`/api/drive/search?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search Drive files: ${response.statusText}`);

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+import { apiPost, authenticatedFetch } from '../utils/api';
 import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
@@ -415,7 +416,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/api/assets/preview-metadata', {
+        const response = await authenticatedFetch('/api/assets/preview-metadata', {
           method: 'POST',
           body: formData
         });
@@ -450,13 +451,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
     for (const upload of pendingUploads) {
       try {
-        const response = await fetch('/api/assets/confirm-upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tempFilename: upload.tempFilename,
-            metadata: upload.metadata
-          })
+        const response = await apiPost('/api/assets/confirm-upload', {
+          tempFilename: upload.tempFilename,
+          metadata: upload.metadata
         });
 
         if (!response.ok) {
@@ -488,10 +485,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const handleCancelUploads = async () => {
     for (const upload of pendingUploads) {
       try {
-        await fetch('/api/assets/cancel-upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tempFilename: upload.tempFilename })
+        await apiPost('/api/assets/cancel-upload', {
+          tempFilename: upload.tempFilename
         });
       } catch (error) {
         console.error('Error canceling upload:', error);

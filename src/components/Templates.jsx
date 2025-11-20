@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileCode, Menu, Edit, AlertCircle, X, Code, Eye, Save, ChevronDown, AlertTriangle, ChevronLeft, ChevronRight, Moon, Grid, Sun, Type, Image, Video, Link, Tag, Palette, Filter } from 'lucide-react';
+import { apiGet, apiPost } from '../utils/api';
 import TemplatePreview from './TemplatePreview';
 import CodeEditor from './CodeEditor';
 import TemplateClaudeChat from './TemplateClaudeChat';
@@ -263,7 +264,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
 
   const loadTemplateConfig = async () => {
     try {
-      const response = await fetch(`/api/templates/${template.name}/template.json`);
+      const response = await apiGet(`/api/templates/${template.name}/template.json`);
       if (response.ok) {
         const data = await response.json();
         const config = JSON.parse(data.content);
@@ -379,9 +380,9 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
 
       // Load all necessary files
       const [htmlResponse, mainCssResponse, dimCssResponse] = await Promise.all([
-        fetch(`/api/templates/${template.name}/${htmlFile}`),
-        fetch(`/api/templates/${template.name}/${mainCssFile}`).catch(() => null),
-        fetch(`/api/templates/${template.name}/${dimensionCssFile}`).catch(() => null)
+        apiGet(`/api/templates/${template.name}/${htmlFile}`),
+        apiGet(`/api/templates/${template.name}/${mainCssFile}`).catch(() => null),
+        apiGet(`/api/templates/${template.name}/${dimensionCssFile}`).catch(() => null)
       ]);
 
       if (!htmlResponse.ok) throw new Error('Failed to load template HTML');
@@ -415,7 +416,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     try {
       setIsLoading(true);
       setError('');
-      const response = await fetch(`/api/templates/${template.name}/${selectedFile}`);
+      const response = await apiGet(`/api/templates/${template.name}/${selectedFile}`);
       if (!response.ok) throw new Error('Failed to load file');
       const data = await response.json();
       setFileContent(data.content);
@@ -433,10 +434,8 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
       setIsSaving(true);
       setError('');
       setSuccess('');
-      const response = await fetch(`/api/templates/${template.name}/${selectedFile}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: fileContent })
+      const response = await apiPost(`/api/templates/${template.name}/${selectedFile}`, {
+        content: fileContent
       });
       if (!response.ok) throw new Error('Failed to save file');
       setSuccess('File updated successfully!');

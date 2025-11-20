@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, Mail, Clock, Plus, Search, Tag } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { apiGet } from '../utils/api';
 
 const TaskEditorDialog = ({
   editingTask,

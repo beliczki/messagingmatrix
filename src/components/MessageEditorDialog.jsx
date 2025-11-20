@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, AlertCircle, Loader, Trash2 } from 'lucid
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
+import { apiGet, apiPost } from '../utils/api';
 import mainCss from '../templates/html/main.css?raw';
 import css300x250 from '../templates/html/300x250.css?raw';
 import css300x600 from '../templates/html/300x600.css?raw';
@@ -197,7 +198,7 @@ const MessageEditorDialog = ({
       }
 
       try {
-        const response = await fetch(`/api/templates/${editingMessage.template}/template.json`);
+        const response = await apiGet(`/api/templates/${editingMessage.template}/template.json`);
         if (response.ok) {
           const data = await response.json();
           const config = JSON.parse(data.content);
@@ -235,7 +236,7 @@ const MessageEditorDialog = ({
       }
 
       try {
-        const response = await fetch(`/api/templates/${editingMessage.template}/index.html`);
+        const response = await apiGet(`/api/templates/${editingMessage.template}/index.html`);
         if (response.ok) {
           const data = await response.json();
           setTemplateHtml(data.content);
@@ -653,16 +654,10 @@ const MessageEditorDialog = ({
       setSavingFormatting({ fieldName, scope: selectedScope });
 
       try {
-        const response = await fetch('/api/textformatting', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            text_original,
-            text_formatted,
-            formatting_scope
-          })
+        const response = await apiPost('/api/textformatting', {
+          text_original,
+          text_formatted,
+          formatting_scope
         });
 
         if (response.ok) {

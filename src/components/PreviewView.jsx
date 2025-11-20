@@ -1,5 +1,5 @@
 
-import { apiGet, apiPost } from '../utils/api';
+import { apiGet, apiPost, authenticatedFetch } from '../utils/api';
 import {
   Share2,
   MessageSquare,
@@ -308,19 +308,15 @@ const PublicPreviewView = ({ previewId }) => {
         }];
 
         // Create the task
-        await fetch('/api/tasks/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: taskTitle,
-            description: taskDescription,
-            priority: 'Medium',
-            status: 'pending',
-            bucket: 'backlog',
-            source: `Preview Comment by ${commentAuthor}`,
-            from: commentAuthor,
-            relatedContent
-          })
+        await apiPost('/api/tasks/create', {
+          title: taskTitle,
+          description: taskDescription,
+          priority: 'Medium',
+          status: 'pending',
+          bucket: 'backlog',
+          source: `Preview Comment by ${commentAuthor}`,
+          from: commentAuthor,
+          relatedContent
         });
       }
 
@@ -422,7 +418,7 @@ const PublicPreviewView = ({ previewId }) => {
             for (const imgSrc of imagesToFetch) {
               try {
                 // Use the same Drive proxy endpoint that works for display
-                const driveResponse = await fetch(`/api/drive/proxy/${imgSrc}`);
+                const driveResponse = await apiGet(`/api/drive/proxy/${imgSrc}`);
                 if (driveResponse.ok) {
                   const imgBlob = await driveResponse.blob();
                   adFolder.file(imgSrc, imgBlob);
@@ -566,7 +562,7 @@ const PublicPreviewView = ({ previewId }) => {
       for (const imgSrc of imagesToFetch) {
         try {
           // Use the same Drive proxy endpoint that works for display
-          const driveResponse = await fetch(`/api/drive/proxy/${imgSrc}`);
+          const driveResponse = await apiGet(`/api/drive/proxy/${imgSrc}`);
           if (driveResponse.ok) {
             const imgBlob = await driveResponse.blob();
             zip.file(imgSrc, imgBlob);

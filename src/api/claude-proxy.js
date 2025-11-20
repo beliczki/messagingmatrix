@@ -1,9 +1,10 @@
+import { apiPost, authenticatedFetch } from '../utils/api.js';
 // API proxy that calls our backend server to avoid CORS issues
 
 export async function callClaudeAPI(apiKey, messages, model = 'claude-3-5-sonnet-20241022', maxTokens = 4096) {
   try {
     // Call our backend proxy server
-    const response = await fetch('/api/claude', {
+    const response = await authenticatedFetch('/api/claude', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
