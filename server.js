@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
@@ -106,7 +107,9 @@ async function getAccessToken() {
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const allowedOrigins = [
   'https://messagingmatrix.ai',
-  'http://messagingmatrix.ai'
+  'http://messagingmatrix.ai',
+  'https://erste.messagingmatrix.ai',
+  'http://erste.messagingmatrix.ai'
 ];
 
 // Add development origins
