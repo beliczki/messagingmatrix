@@ -1,4 +1,5 @@
 // Shared utility functions for asset/creative management
+import { apiGet } from './api.js';
 
 // Parse dimensions from various sources (File_dimensions, size field, bannerSize object)
 export const parseDimensions = (creative) => {
