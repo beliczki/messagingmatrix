@@ -683,7 +683,7 @@ app.post('/api/textformatting/batch', async (req, res) => {
   }
 });
 
-app.post('/api/claude', async (req, res) => {
+app.post('/api/claude', verifyToken, async (req, res) => {
   try {
     const { messages, model = 'claude-3-5-sonnet-20241022', max_tokens = 4096 } = req.body;
 
@@ -740,7 +740,7 @@ const promptFileMap = {
 };
 
 // Get all AI prompts
-app.get('/api/ai-prompts', (req, res) => {
+app.get('/api/ai-prompts', verifyToken, (req, res) => {
   try {
     const prompts = {};
 
@@ -763,7 +763,7 @@ app.get('/api/ai-prompts', (req, res) => {
 });
 
 // Get AI prompt for a specific module
-app.get('/api/ai-prompts/:module', (req, res) => {
+app.get('/api/ai-prompts/:module', verifyToken, (req, res) => {
   try {
     const { module } = req.params;
     const filename = promptFileMap[module];
@@ -788,7 +788,7 @@ app.get('/api/ai-prompts/:module', (req, res) => {
 });
 
 // Save AI prompt for a specific module
-app.post('/api/ai-prompts/:module', (req, res) => {
+app.post('/api/ai-prompts/:module', verifyToken, (req, res) => {
   try {
     const { module } = req.params;
     const { prompt } = req.body;
@@ -844,7 +844,7 @@ app.get('/api/ai-prompts', (req, res) => {
 });
 
 // Get AI data structure documentation
-app.get('/api/ai-data-structure', (req, res) => {
+app.get('/api/ai-data-structure', verifyToken, (req, res) => {
   try {
     const filePath = path.join(promptsDir, 'AIMessagingMatrixDataStructure.txt');
 
