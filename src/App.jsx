@@ -3,7 +3,6 @@ import { Routes, Route, useParams } from 'react-router-dom';
 import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
-import settings from './services/settings';
 import './App.css';
 
 // Lazy load heavy components for better code splitting
