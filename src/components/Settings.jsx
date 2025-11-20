@@ -4,6 +4,7 @@ import settings from '../services/settings';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import { callClaudeAPI } from '../api/claude-proxy';
+import { apiGet, apiPost } from '../utils/api';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -110,7 +111,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const loadContextDocuments = async () => {
     try {
       // Load data structure documentation
-      const dataStructResponse = await fetch('/api/ai-data-structure');
+      const dataStructResponse = await apiGet('/api/ai-data-structure');
       if (dataStructResponse.ok) {
         const { content } = await dataStructResponse.json();
         setDataStructureDoc(content);
@@ -136,7 +137,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       setConfig(configData);
 
       // Load email account settings and structure fields from SQLite
-      const response = await fetch('/api/config');
+      const response = await apiGet('/api/config');
       if (response.ok) {
         const allConfig = await response.json();
         if (allConfig.emailAccount) {
@@ -158,7 +159,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const loadAiPrompts = async () => {
     try {
       // Load all AI prompts from backend
-      const response = await fetch('/api/ai-prompts');
+      const response = await apiGet('/api/ai-prompts');
       if (response.ok) {
         const prompts = await response.json();
         setAiPrompts(prompts);
@@ -207,15 +208,11 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       console.log('✅ All AI prompts saved');
 
       // Save email account settings and structure fields to SQLite
-      const sqliteConfigResponse = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          emailAccount,
-          audienceStructure,
-          topicStructure,
-          messagesStructure
-        })
+      const sqliteConfigResponse = await apiPost('/api/config', {
+        emailAccount,
+        audienceStructure,
+        topicStructure,
+        messagesStructure
       });
 
       if (!sqliteConfigResponse.ok) {
