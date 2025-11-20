@@ -1,4 +1,4 @@
-
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiPost, authenticatedFetch } from '../utils/api';
 import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
