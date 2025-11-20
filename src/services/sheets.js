@@ -2,8 +2,34 @@
 import { SignJWT } from 'jose';
 import settings from './settings';
 
-// In browser, crypto is available globally via Web Crypto API
-const crypto = globalThis.crypto;
+// Web Crypto API - works in both browser and Node.js 18+
+// Browser: window.crypto or globalThis.crypto
+// Node.js: Use dynamic import for crypto.webcrypto
+let cryptoInstance = null;
+
+async function getCrypto() {
+  if (cryptoInstance) return cryptoInstance;
+
+  // Try browser crypto first
+  if (typeof window !== 'undefined' && window.crypto) {
+    cryptoInstance = window.crypto;
+    return cryptoInstance;
+  }
+
+  if (typeof globalThis !== 'undefined' && globalThis.crypto) {
+    cryptoInstance = globalThis.crypto;
+    return cryptoInstance;
+  }
+
+  // Node.js environment - use webcrypto
+  try {
+    const nodeCrypto = await import('crypto');
+    cryptoInstance = nodeCrypto.webcrypto;
+    return cryptoInstance;
+  } catch (e) {
+    throw new Error('Web Crypto API not available');
+  }
+}
 
 class SheetsService {
   constructor() {
@@ -41,6 +67,7 @@ class SheetsService {
 
     try {
       const serviceAccount = JSON.parse(this.serviceAccountKey);
+      const crypto = await getCrypto();
 
       // Create JWT
       const now = Math.floor(Date.now() / 1000);
