@@ -1,7 +1,9 @@
 // Simplified Google Sheets Service - Local Storage + Service Account
-import crypto from 'crypto';
 import { SignJWT } from 'jose';
 import settings from './settings';
+
+// In browser, crypto is available globally via Web Crypto API
+const crypto = globalThis.crypto;
 
 class SheetsService {
   constructor() {
