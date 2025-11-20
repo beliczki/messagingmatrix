@@ -185,12 +185,65 @@ Use this structure to describe problems:
 - When starting complex projects
 - After frustrating sessions (what went wrong?)
 - When collaboration feels off
-- Monthly check-in
+- **Weekly feedback round** (see below)
 
 **Update when:**
 - We discover new patterns that work
 - Something consistently causes friction
 - Tools or processes change
+- Insights from weekly feedback
+
+---
+
+## 📅 Weekly Feedback Round
+
+**Schedule:** Every week (pick a consistent day/time)
+**Duration:** 10-15 minutes
+**Format:** Quick retrospective
+
+### Feedback Template
+
+**Week of:** [Date range]
+
+#### What Worked Well ✅
+- [Example: Started sessions with context template]
+- [Example: Caught errors early by asking "why"]
+- [What did we do that felt smooth/effective?]
+
+#### What Needs Improvement 🔄
+- [Example: Forgot to share what I'd already tried]
+- [Example: Rushed without confirming understanding]
+- [What caused friction or confusion?]
+
+#### Action Items for Next Week 🎯
+- [ ] [Example: User will paste error text, not just screenshots]
+- [ ] [Example: Claude will explain theory when requested]
+- [ ] [What will we specifically do differently?]
+
+#### Wins to Celebrate 🎉
+- [Example: Successfully deployed to Hetzner with SSL]
+- [What did we accomplish together?]
+
+### Questions to Ask Each Other
+
+**For User to Ask Claude:**
+- Did I provide enough context this week?
+- Was I asking good questions?
+- Did I interrupt your flow with unclear requests?
+- What could I do better?
+
+**For Claude to Ask User:**
+- Did I explain things clearly?
+- Was I too verbose or too brief?
+- Did I check your understanding enough?
+- What would help you learn better?
+
+### Commitment Check
+- [ ] User followed session starter template: ___% of time
+- [ ] User asked "why" when curious: ___% of time
+- [ ] Claude explained reasoning: ___% of time
+- [ ] Claude checked understanding: ___% of time
+- [ ] Both celebrated wins: ___% of time
 
 ---
 
@@ -206,6 +259,7 @@ Use this structure to describe problems:
 ---
 
 **Last Updated:** 2025-01-20
-**Next Review:** When starting next complex project
+**Next Weekly Feedback:** [Pick a day - Monday? Friday?]
+**Next Major Review:** When starting next complex project
 
 _This is a living document. Update it as we learn what works!_
