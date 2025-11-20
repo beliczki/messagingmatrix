@@ -102,7 +102,7 @@ export const processAssets = async (assetModules) => {
 
     // Fetch file stats from backend to get actual modification times
     try {
-      const response = await fetch('/api/assets/stats');
+      const response = await apiGet('/api/assets/stats');
       if (response.ok) {
         const stats = await response.json();
 

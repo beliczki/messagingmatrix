@@ -56,7 +56,11 @@
       "Bash(if exist cachedrive dir /b cachedrive)",
       "Bash(nul)",
       "Bash(node:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git mv:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)",
+      "Bash(git revert:*)"
     ],
     "deny": [],
     "ask": []

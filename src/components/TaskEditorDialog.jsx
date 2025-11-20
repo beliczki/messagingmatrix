@@ -16,7 +16,7 @@ const TaskEditorDialog = ({
 
   // Fetch available labels on mount
   useEffect(() => {
-    fetch('/api/task-labels')
+    apiGet('/api/task-labels')
       .then(res => res.json())
       .then(data => setAvailableLabels(data))
       .catch(err => console.error('Error fetching labels:', err));

@@ -175,7 +175,7 @@ const MessageEditorDialog = ({
   useEffect(() => {
     const loadTemplates = async () => {
       try {
-        const response = await fetch('/api/templates');
+        const response = await apiGet('/api/templates');
         if (response.ok) {
           const data = await response.json();
           setTemplates(data);

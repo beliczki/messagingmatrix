@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import { apiGet, apiPost } from '../utils/api';
 import {
   Share2,
   MessageSquare,
@@ -52,7 +53,7 @@ const PublicPreviewView = ({ previewId }) => {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch('/api/config');
+        const response = await apiGet('/api/config');
         if (response.ok) {
           const config = await response.json();
           setLookAndFeel(config.lookAndFeel);

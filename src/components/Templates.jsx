@@ -18,7 +18,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
   const loadTemplates = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/templates');
+      const response = await apiGet('/api/templates');
       if (!response.ok) throw new Error('Failed to fetch templates');
       const data = await response.json();
       setTemplates(data);
