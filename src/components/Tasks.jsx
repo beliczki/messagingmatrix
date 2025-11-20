@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid, Tag } from 'lucide-react';
+import { apiGet, apiPost } from '../utils/api';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
@@ -34,7 +35,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
   const loadTasks = async () => {
     try {
-      const response = await fetch('http://localhost:3003/api/tasks');
+      const response = await apiGet('/api/tasks');
       if (response.ok) {
         const data = await response.json();
         setTasks(data.tasks || []);
@@ -46,11 +47,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
   const saveTasks = async () => {
     try {
-      await fetch('http://localhost:3003/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks })
-      });
+      await apiPost('/api/tasks', { tasks });
     } catch (err) {
       console.error('Error saving tasks:', err);
     }
@@ -58,7 +55,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
   const loadProcessedEmails = async () => {
     try {
-      const response = await fetch('http://localhost:3003/api/processed-emails');
+      const response = await apiGet('/api/processed-emails');
       if (response.ok) {
         const data = await response.json();
         setProcessedEmailUids(data.processedEmails || []);
@@ -70,11 +67,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
   const markEmailsAsProcessed = async (emailUids) => {
     try {
-      const response = await fetch('http://localhost:3003/api/processed-emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emailUids })
-      });
+      const response = await apiPost('/api/processed-emails', { emailUids });
       if (response.ok) {
         const data = await response.json();
         setProcessedEmailUids(data.processedEmails || []);
@@ -90,7 +83,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
 
     try {
       // Fetch emails
-      const response = await fetch('http://localhost:3003/api/emails?limit=10&unseenOnly=true');
+      const response = await apiGet('/api/emails?limit=10&unseenOnly=true');
       if (!response.ok) {
         throw new Error('Failed to fetch emails');
       }
