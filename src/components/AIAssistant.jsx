@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { MessageSquare, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
 import { callClaudeAPI } from '../api/claude-proxy';
+import { apiGet } from '../utils/api';
 
 const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl }, ref) => {
   const [messages, setMessages] = useState([]);
@@ -51,7 +52,7 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   useEffect(() => {
     const loadCustomPrompts = async () => {
       try {
-        const response = await fetch('/api/ai-prompts');
+        const response = await apiGet('/api/ai-prompts');
         if (response.ok) {
           const prompts = await response.json();
           setCustomPrompts(prompts);
@@ -66,7 +67,7 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
 
     const loadDataStructure = async () => {
       try {
-        const response = await fetch('/api/ai-data-structure');
+        const response = await apiGet('/api/ai-data-structure');
         if (response.ok) {
           const { content } = await response.json();
           setDataStructureDoc(content);
