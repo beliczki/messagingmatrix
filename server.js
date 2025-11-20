@@ -338,6 +338,37 @@ app.get('/api/sheets/:spreadsheetId', verifyToken, async (req, res) => {
   }
 });
 
+// Get public config (no auth required - only returns lookAndFeel for login page)
+app.get('/api/config/public', (req, res) => {
+  try {
+    const sqlite = db.getSqlite();
+    const stmt = sqlite.prepare('SELECT value FROM config WHERE key = ?');
+    const row = stmt.get('lookAndFeel');
+
+    if (!row) {
+      // Return default lookAndFeel if not found
+      return res.json({
+        lookAndFeel: {
+          logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
+          headerColor: '#2870ed',
+          logoStyle: 'height: 25px; margin-top: -6px;',
+          buttonColor: '#ff6130',
+          buttonStyle: 'border: 1px solid white;',
+          secondaryColor1: '#eb4c79',
+          secondaryColor2: '#02a3a4',
+          secondaryColor3: '#711c7a'
+        }
+      });
+    }
+
+    const lookAndFeel = JSON.parse(row.value);
+    res.json({ lookAndFeel });
+  } catch (error) {
+    console.error('Error reading public config:', error);
+    res.status(500).json({ error: 'Failed to read public config from database' });
+  }
+});
+
 // Get config (from SQLite)
 app.get('/api/config', verifyToken, (req, res) => {
   try {

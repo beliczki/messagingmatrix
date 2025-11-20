@@ -100,13 +100,16 @@ const App = () => {
     return () => clearTimeout(timeoutId);
   }, [matrixViewState]);
 
-  // Load look and feel settings
+  // Load look and feel settings from public endpoint (no auth required)
   useEffect(() => {
     const loadLookAndFeel = async () => {
       try {
-        await settings.ensureInitialized();
-        const laf = settings.getLookAndFeel();
-        setLookAndFeel(laf);
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+        const response = await fetch(`${API_URL}/api/config/public`);
+        if (response.ok) {
+          const data = await response.json();
+          setLookAndFeel(data.lookAndFeel);
+        }
       } catch (error) {
         console.error('Error loading look and feel settings:', error);
       }
