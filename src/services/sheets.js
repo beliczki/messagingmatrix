@@ -1,5 +1,6 @@
 // Simplified Google Sheets Service - Local Storage + Service Account
 import { SignJWT } from 'jose';
+import { apiGet, apiPost, authenticatedFetch } from '../utils/api.js';
 import settings from './settings';
 
 // Web Crypto API - works in both browser and Node.js 18+
@@ -146,7 +147,7 @@ class SheetsService {
         const url = `/api/sheets/${this.spreadsheetId}/values/${sheetName}`;
         console.log(`Fetching ${sheetName} from Google Sheets via server:`, url);
 
-        const response = await fetch(url);
+        const response = await apiGet(url);
 
         if (response.ok) {
           const data = await response.json();
@@ -179,7 +180,7 @@ class SheetsService {
         // Step 1: Clear the entire sheet first
         const clearUrl = `/api/sheets/${this.spreadsheetId}/values/${sheetName}/clear`;
 
-        const clearResponse = await fetch(clearUrl, {
+        const clearResponse = await authenticatedFetch(clearUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -197,7 +198,7 @@ class SheetsService {
         // Step 2: Write new data
         const url = `/api/sheets/${this.spreadsheetId}/values/${sheetName}`;
 
-        const response = await fetch(url, {
+        const response = await authenticatedFetch(url, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
