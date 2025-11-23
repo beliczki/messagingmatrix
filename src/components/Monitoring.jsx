@@ -86,21 +86,7 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
         isSaving={matrixData?.isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => {
-          // Preserve authentication data
-          const currentUser = localStorage.getItem('current_user');
-          const appUsers = localStorage.getItem('app_users');
-
-          // Clear all localStorage
-          localStorage.clear();
-
-          // Restore authentication data
-          if (currentUser) localStorage.setItem('current_user', currentUser);
-          if (appUsers) localStorage.setItem('app_users', appUsers);
-
-          // Reload the page to fetch fresh data from spreadsheet
-          window.location.reload();
-        }}
+        onClearReload={() => window.location.reload()}
         onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
         downloadFeedCSV={() => {}}
       />

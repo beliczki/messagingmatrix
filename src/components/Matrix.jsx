@@ -3,7 +3,6 @@ import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
-import { clearAndReloadApp } from '../utils/clearAndReload';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import TreeView from './TreeView';
@@ -1427,10 +1426,10 @@ const Matrix = ({
         />
 
         <button
-          onClick={clearAndReloadApp}
+          onClick={() => window.location.reload()}
           className="p-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
-          title="Clear cache and reload data"
+          title="Reload data from spreadsheet"
         >
           <RefreshCw size={20} />
         </button>
@@ -1618,7 +1617,7 @@ const Matrix = ({
         isSaving={isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
+        onClearReload={() => window.location.reload()}
         onRegenerateTopicKeys={regenerateTopicKeys}
         downloadFeedCSV={downloadFeedCSV}
       />

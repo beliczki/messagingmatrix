@@ -172,7 +172,7 @@ const MatrixStatePanel = ({
           className="flex items-center gap-2 px-3 py-2 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
         >
           <RefreshCw size={14} />
-          Clear & Reload
+          Reload
         </button>
 
         {/* Regenerate Topic Keys button - commented out for now */}
@@ -320,7 +320,7 @@ const MatrixStatePanel = ({
             className="flex items-center gap-2 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
           >
             <RefreshCw size={14} />
-            Clear & Reload
+            Reload
           </button>
           <button
             onClick={onSave}

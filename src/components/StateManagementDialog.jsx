@@ -217,25 +217,11 @@ const StateManagementDialog = ({
               Close
             </button>
             <button
-              onClick={() => {
-                // Preserve authentication data
-                const currentUser = localStorage.getItem('current_user');
-                const appUsers = localStorage.getItem('app_users');
-
-                // Clear all localStorage
-                localStorage.clear();
-
-                // Restore authentication data
-                if (currentUser) localStorage.setItem('current_user', currentUser);
-                if (appUsers) localStorage.setItem('app_users', appUsers);
-
-                // Reload the page to fetch fresh data from spreadsheet
-                window.location.reload();
-              }}
+              onClick={() => window.location.reload()}
               className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
             >
               <RefreshCw size={16} />
-              Clear & Reload
+              Reload
             </button>
             <button
               onClick={handleSaveWithProgress}
