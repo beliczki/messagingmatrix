@@ -1427,17 +1427,7 @@ const Matrix = ({
         />
 
         <button
-          onClick={() => {
-            // Clear localStorage except authentication
-            const currentUser = localStorage.getItem('current_user');
-            const appUsers = localStorage.getItem('app_users');
-            localStorage.clear();
-            // Restore authentication data
-            if (currentUser) localStorage.setItem('current_user', currentUser);
-            if (appUsers) localStorage.setItem('app_users', appUsers);
-            // Reload the page to fetch fresh data from spreadsheet
-            window.location.reload();
-          }}
+          onClick={clearAndReloadApp}
           className="p-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
           title="Clear cache and reload data"
