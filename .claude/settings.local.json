@@ -60,7 +60,8 @@
       "Bash(git mv:*)",
       "Bash(python:*)",
       "Bash(cat:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": []

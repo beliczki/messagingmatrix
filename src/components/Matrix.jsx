@@ -3,6 +3,7 @@ import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import TreeView from './TreeView';
@@ -1627,21 +1628,7 @@ const Matrix = ({
         isSaving={isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => {
-          // Preserve authentication data
-          const currentUser = localStorage.getItem('current_user');
-          const appUsers = localStorage.getItem('app_users');
-
-          // Clear all localStorage
-          localStorage.clear();
-
-          // Restore authentication data
-          if (currentUser) localStorage.setItem('current_user', currentUser);
-          if (appUsers) localStorage.setItem('app_users', appUsers);
-
-          // Reload the page to fetch fresh data from spreadsheet
-          window.location.reload();
-        }}
+        onClearReload={clearAndReloadApp}
         onRegenerateTopicKeys={regenerateTopicKeys}
         downloadFeedCSV={downloadFeedCSV}
       />
