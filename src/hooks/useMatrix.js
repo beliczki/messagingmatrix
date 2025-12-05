@@ -274,23 +274,26 @@ export const useMatrix = (currentUser = null) => {
 
   // Copy message - keeps same message number, updates audience in PMMID
   const copyMessage = useCallback((id, newAudience) => {
-    const msg = messages.find(m => m.id === id);
-    if (!msg) return;
+    // Use functional update to get the latest state (important for batch copies)
+    setMessages(prev => {
+      const msg = prev.find(m => m.id === id);
+      if (!msg) return prev;
 
-    // Generate new numeric ID
-    const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
-    const newId = maxId + 1;
+      // Generate new numeric ID based on current state
+      const maxId = Math.max(0, ...prev.map(m => parseInt(m.id) || 0));
+      const newId = maxId + 1;
 
-    // Update PMMID with new audience key (keep same number/variant/version)
-    const newPmmid = `a_${newAudience}-t_${msg.topic}-m_${msg.number}-v_${msg.variant}-n_${msg.version}`;
+      // Update PMMID with new audience key (keep same number/variant/version)
+      const newPmmid = `a_${newAudience}-t_${msg.topic}-m_${msg.number}-v_${msg.variant}-n_${msg.version}`;
 
-    setMessages(prev => [...prev, {
-      ...msg,
-      id: newId,           // New numeric ID
-      pmmid: newPmmid,     // Updated PMMID with new audience
-      audience: newAudience // New audience key
-    }]);
-  }, [messages]);
+      return [...prev, {
+        ...msg,
+        id: newId,           // New numeric ID
+        pmmid: newPmmid,     // Updated PMMID with new audience
+        audience: newAudience // New audience key
+      }];
+    });
+  }, []);
 
   // Update audience (by id)
   const updateAudience = useCallback((id, updates) => {

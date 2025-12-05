@@ -7,6 +7,7 @@ import CreativePreview from './CreativePreview';
 import AssetsMasonryView from './AssetsMasonryView';
 import MediaLibraryBase from './MediaLibraryBase';
 import { loadDriveAssets, parseDriveAssetData, isDriveEnabled } from '../utils/driveAssets';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   // Get assets from matrixData (loaded from spreadsheet)
@@ -505,7 +506,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         isSaving={matrixData?.isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => window.location.reload()}
+        onClearReload={clearAndReloadApp}
         onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
         downloadFeedCSV={() => {}}
       />

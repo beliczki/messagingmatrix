@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ExternalLink, RefreshCw } from 'lucide-react';
 import settings from '../services/settings';
 import sheets from '../services/sheets';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -159,21 +160,7 @@ const KeywordEditor = ({ keywords, onSave, onClose }) => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                // Preserve authentication data
-                const currentUser = localStorage.getItem('current_user');
-                const appUsers = localStorage.getItem('app_users');
-
-                // Clear all localStorage
-                localStorage.clear();
-
-                // Restore authentication data
-                if (currentUser) localStorage.setItem('current_user', currentUser);
-                if (appUsers) localStorage.setItem('app_users', appUsers);
-
-                // Reload the page to fetch fresh data from spreadsheet
-                window.location.reload();
-              }}
+              onClick={clearAndReloadApp}
               className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors"
             >
               <RefreshCw size={16} />

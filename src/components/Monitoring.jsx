@@ -3,6 +3,7 @@ import { BarChart3 } from 'lucide-react';
 import PageHeader from './PageHeader';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
@@ -86,7 +87,7 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
         isSaving={matrixData?.isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => window.location.reload()}
+        onClearReload={clearAndReloadApp}
         onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
         downloadFeedCSV={() => {}}
       />

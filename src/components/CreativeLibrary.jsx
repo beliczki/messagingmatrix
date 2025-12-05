@@ -11,6 +11,7 @@ import CreativeLibraryListView from './CreativeLibraryListView';
 import CreativeLibraryUploadDialogs from './CreativeLibraryUploadDialogs';
 import MediaLibraryBase from './MediaLibraryBase';
 import { processAssets } from '../utils/assetUtils';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
 import templateHtmlRaw from '../templates/html/index.html?raw';
 import templateConfigUrl from '../templates/html/template.json?url';
@@ -1123,7 +1124,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         isSaving={matrixData?.isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => window.location.reload()}
+        onClearReload={clearAndReloadApp}
         onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
         downloadFeedCSV={() => {}}
       />

@@ -188,7 +188,7 @@ const MatrixGridView = ({
                     return (
                       <td
                         key={aud.key}
-                        className={`border ${displayMode === 'minimal' ? 'p-1' : 'p-2'} align-top transition-colors relative ${
+                        className={`border ${displayMode === 'minimal' ? 'p-1' : 'p-2'} align-top transition-colors relative group/cell ${
                           isHoverCell && isOriginCell
                             ? 'border-gray-400 bg-gray-100 border-2'
                             : isHoverCell && isValidDropZone
@@ -257,18 +257,27 @@ const MatrixGridView = ({
                                     setActiveTab('naming');
                                   }
                                 }}
-                                className={`border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} hover:shadow group relative ${
+                                className={`border rounded ${displayMode === 'minimal' ? 'p-1' : 'p-2'} hover:shadow group relative select-none ${
                                   isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                                 } ${
-                                  isSelectMode ? 'cursor-pointer' : 'cursor-move'
+                                  isSelectMode
+                                    ? (isSelected ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer')
+                                    : 'cursor-move'
                                 }`}
                                 style={{
                                   backgroundColor: isSelected ? '#EFF6FF' : bgColor,
                                   borderColor: isSelected ? '#3B82F6' : borderColor,
-                                  borderWidth: isSelected ? '2px' : '1px'
+                                  borderWidth: isSelected ? '2px' : '1px',
+                                  WebkitUserDrag: 'element'
                                 }}
                               >
-                                <div className="flex items-start gap-2">
+                                {/* Drag indicator for selected cards - appears on hover */}
+                                {isSelectMode && isSelected && (
+                                  <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-500 text-white rounded-full p-1 shadow-md z-10">
+                                    <Move size={12} />
+                                  </div>
+                                )}
+                                <div className={`flex items-start gap-2 ${isSelectMode && isSelected ? 'pointer-events-none' : ''}`}>
                                   {/* Selection indicator */}
                                   {isSelectMode && (
                                     <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
@@ -319,10 +328,11 @@ const MatrixGridView = ({
                             );
                           })}
 
+                          {/* Only render on hover, not during drag or space press */}
                           {!spacePressed && !isDraggingSelected && (
                             <button
                               onClick={() => onAddMessage(topic.key, aud.key)}
-                              className={`${displayMode === 'minimal' ? 'w-auto px-2' : 'w-full'} border-2 border-dashed border-gray-300 rounded p-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50`}
+                              className={`${displayMode === 'minimal' ? 'w-auto px-2' : 'w-full'} border-2 border-dashed border-gray-300 rounded p-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 hidden group-hover/cell:block`}
                             >
                               {displayMode === 'minimal' ? '+' : '+ Add Message'}
                             </button>

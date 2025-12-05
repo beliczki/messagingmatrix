@@ -3,6 +3,7 @@ import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import TreeView from './TreeView';
@@ -130,11 +131,15 @@ const Matrix = ({
   const [selectedMessages, setSelectedMessages] = useState(new Set());
   const [longPressTimer, setLongPressTimer] = useState(null);
   const [dragHoverCell, setDragHoverCell] = useState(null); // { topic, audience }
-  const [dragOriginCell, setDragOriginCell] = useState(null); // { topic, audience } - origin cell where drag started
-  const [isCopyMode, setIsCopyMode] = useState(false); // Track if CTRL is pressed during drag
   const [isDraggingSelected, setIsDraggingSelected] = useState(false); // Track if we're dragging selected messages (for UI updates)
+  const [isCopyModeUI, setIsCopyModeUI] = useState(false); // For UI feedback only (updated in onDragOver)
+  const [dragOriginCellUI, setDragOriginCellUI] = useState(null); // For UI feedback only (updated after drag starts)
   const justEnteredSelectMode = useRef(false); // Track if we just entered select mode
   const isDraggingSelectedRef = useRef(false); // Track if we're dragging selected messages (needs to be ref for immediate access in onDrop)
+  const dragPreviewRef = useRef(null); // Store drag preview element for cleanup
+  const dragOriginCellRef = useRef(null); // Use ref to avoid re-render during drag start
+  const isCopyModeRef = useRef(false); // Use ref to avoid re-render during drag start
+  const draggedMsgRef = useRef(null); // Use ref to avoid re-render during drag start
 
   // Use matrixViewState for persisted values - memoize arrays with stable references
   const viewMode = matrixViewState?.viewMode || 'matrix';
@@ -1082,6 +1087,12 @@ const Matrix = ({
 
   // Handle drag
   const onDragStart = (e, msg) => {
+    // Cancel long press timer when drag starts to prevent entering select mode
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+
     console.log('🔍 onDragStart called:', {
       isSelectMode,
       selectedMessagesSize: selectedMessages.size,
@@ -1090,62 +1101,75 @@ const Matrix = ({
       ctrlPressed: e.ctrlKey
     });
 
-    // Set initial copy mode based on CTRL key
-    setIsCopyMode(e.ctrlKey);
+    // Use REFS instead of setState to avoid re-renders that cancel the drag
+    isCopyModeRef.current = e.ctrlKey;
+    dragOriginCellRef.current = { topic: msg.topic, audience: msg.audience };
+    draggedMsgRef.current = msg;
 
-    // Store origin cell to prevent dropping back on same cell
-    setDragOriginCell({ topic: msg.topic, audience: msg.audience });
     console.log(`📍 Origin cell: ${msg.topic} x ${msg.audience}`);
 
     // Check if dragging a selected message
-    if (isSelectMode && selectedMessages.has(msg.id) && selectedMessages.size > 0) {
-      // Batch drag mode
-      isDraggingSelectedRef.current = true; // Use ref for immediate access in onDrop
-      setIsDraggingSelected(true); // Set state for UI updates
-      setDraggedMsg(msg); // Keep reference to the dragged message
-      e.dataTransfer.effectAllowed = 'copyMove'; // Allow both operations
+    const isBatchDrag = isSelectMode && selectedMessages.has(msg.id) && selectedMessages.size > 0;
 
-      // Set custom drag image showing only count (no mode text)
+    if (isBatchDrag) {
+      // Batch drag mode - use ref for immediate access
+      isDraggingSelectedRef.current = true;
+
+      // Required: Set drag data for browser to recognize the drag
+      e.dataTransfer.setData('text/plain', `batch:${Array.from(selectedMessages).join(',')}`);
+      e.dataTransfer.effectAllowed = 'copyMove';
+
+      // Set custom drag image showing only count
       const dragPreview = document.createElement('div');
-      dragPreview.style.cssText = 'position: absolute; top: -1000px; padding: 8px 12px; background: rgba(59, 130, 246, 0.9); color: white; border-radius: 6px; font-weight: bold; font-size: 14px;';
+      dragPreview.style.cssText = 'position: fixed; top: -1000px; left: -1000px; padding: 8px 12px; background: rgba(59, 130, 246, 0.9); color: white; border-radius: 6px; font-weight: bold; font-size: 14px; pointer-events: none; z-index: 99999;';
       dragPreview.textContent = `${selectedMessages.size} message${selectedMessages.size > 1 ? 's' : ''}`;
       document.body.appendChild(dragPreview);
+      dragPreviewRef.current = dragPreview;
       e.dataTransfer.setDragImage(dragPreview, 0, 0);
-      setTimeout(() => document.body.removeChild(dragPreview), 0);
 
       console.log(`🎯 BATCH DRAG: ${selectedMessages.size} selected messages`);
     } else {
       // Single message drag - use default browser drag image
       isDraggingSelectedRef.current = false;
-      setIsDraggingSelected(false);
-      setDraggedMsg(msg);
-      e.dataTransfer.effectAllowed = 'copyMove'; // Allow both operations
+
+      // Required: Set drag data for browser to recognize the drag
+      e.dataTransfer.setData('text/plain', `single:${msg.id}`);
+      e.dataTransfer.effectAllowed = 'copyMove';
 
       console.log(`📍 Single message drag: ${msg.id}`);
     }
+
+    // Defer state updates to after drag has started (for UI updates only)
+    requestAnimationFrame(() => {
+      setIsDraggingSelected(isBatchDrag);
+      setDragOriginCellUI({ topic: msg.topic, audience: msg.audience });
+      setIsCopyModeUI(e.ctrlKey);
+      setDraggedMsg(msg); // For UI feedback (isValidDropZone check)
+    });
   };
 
   const onDragOver = (e, topic, audience) => {
     e.preventDefault();
 
-    // Check if hovering over origin cell
-    const isOriginCell = dragOriginCell && dragOriginCell.topic === topic && dragOriginCell.audience === audience;
+    // Check if hovering over origin cell (use ref)
+    const originCell = dragOriginCellRef.current;
+    const isOriginCell = originCell && originCell.topic === topic && originCell.audience === audience;
 
     if (isOriginCell) {
       // Disallow dropping on origin cell
       e.dataTransfer.dropEffect = 'none';
     } else {
-      // Update copy mode based on current CTRL key state during drag
-      // This fires continuously so we can detect CTRL press/release during drag
-      if (e.ctrlKey !== isCopyMode) {
-        setIsCopyMode(e.ctrlKey);
+      // Update copy mode ref and UI state based on current CTRL key state during drag
+      if (e.ctrlKey !== isCopyModeRef.current) {
+        isCopyModeRef.current = e.ctrlKey;
+        setIsCopyModeUI(e.ctrlKey); // Update UI state for visual feedback
         console.log(`🔄 Mode changed during drag: ${e.ctrlKey ? 'COPY' : 'MOVE'}`);
       }
 
       e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
     }
 
-    // Update hover cell for visual feedback
+    // Update hover cell for visual feedback (this state update is ok, happens during drag)
     if (!dragHoverCell || dragHoverCell.topic !== topic || dragHoverCell.audience !== audience) {
       setDragHoverCell({ topic, audience });
     }
@@ -1155,37 +1179,51 @@ const Matrix = ({
   const onDragEnd = () => {
     console.log('🔚 Drag ended');
     setDragHoverCell(null);
-    setDragOriginCell(null);
+    setDragOriginCellUI(null);
+    setIsCopyModeUI(false);
+    setDraggedMsg(null);
+    dragOriginCellRef.current = null;
+    draggedMsgRef.current = null;
+    isCopyModeRef.current = false;
     isDraggingSelectedRef.current = false;
     setIsDraggingSelected(false);
-    setIsCopyMode(false);
+
+    // Clean up drag preview element
+    if (dragPreviewRef.current && dragPreviewRef.current.parentNode) {
+      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+      dragPreviewRef.current = null;
+    }
   };
 
   const onDrop = (e, topic, audience) => {
     e.preventDefault();
 
+    const currentDraggedMsg = draggedMsgRef.current;
+    const currentIsCopyMode = isCopyModeRef.current;
+    const originCell = dragOriginCellRef.current;
+
     console.log('🔍 onDrop called:', {
       isDraggingSelectedRef: isDraggingSelectedRef.current,
       selectedMessagesSize: selectedMessages.size,
-      draggedMsgId: draggedMsg?.id,
-      hasDraggedMsg: draggedMsg ? selectedMessages.has(draggedMsg.id) : false,
-      isCopyMode
+      draggedMsgId: currentDraggedMsg?.id,
+      hasDraggedMsg: currentDraggedMsg ? selectedMessages.has(currentDraggedMsg.id) : false,
+      isCopyMode: currentIsCopyMode
     });
 
-    if (!draggedMsg) return;
+    if (!currentDraggedMsg) return;
 
     // Prevent dropping on origin cell
-    const isOriginCell = dragOriginCell && dragOriginCell.topic === topic && dragOriginCell.audience === audience;
+    const isOriginCell = originCell && originCell.topic === topic && originCell.audience === audience;
     if (isOriginCell) {
       console.log('❌ Cannot drop on origin cell');
-      setDraggedMsg(null);
-      setDragOriginCell(null);
+      draggedMsgRef.current = null;
+      dragOriginCellRef.current = null;
       return;
     }
 
     // Handle batch drag if multiple messages selected
     // Check isDraggingSelectedRef flag that we set in onDragStart
-    if (isDraggingSelectedRef.current && selectedMessages.size > 0 && selectedMessages.has(draggedMsg.id)) {
+    if (isDraggingSelectedRef.current && selectedMessages.size > 0 && selectedMessages.has(currentDraggedMsg.id)) {
       console.log(`🎯 Dropping batch: ${selectedMessages.size} messages`);
       // Get all selected messages
       const msgsToMove = messages.filter(m => selectedMessages.has(m.id));
@@ -1195,7 +1233,7 @@ const Matrix = ({
       const topics = new Set(msgsToMove.map(m => m.topic));
       if (topics.size > 1) {
         alert('Cannot move messages from different rows. All selected messages must be in the same row (topic).');
-        setDraggedMsg(null);
+        draggedMsgRef.current = null;
         return;
       }
 
@@ -1204,65 +1242,89 @@ const Matrix = ({
       // Check if moving to different topic
       if (sourceTopic !== topic) {
         alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic.');
-        setDraggedMsg(null);
+        draggedMsgRef.current = null;
         return;
       }
 
-      // Perform batch operation using isCopyMode state
-      if (isCopyMode) {
+      // Perform batch operation using isCopyMode ref
+      if (currentIsCopyMode) {
+        // Track max ID before copying to identify new messages later
+        const maxIdBefore = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
+        const copyCount = msgsToMove.length;
+
         // Batch copy
         msgsToMove.forEach(msg => {
           copyMessage(msg.id, audience);
         });
-        console.log(`📋 Copied ${msgsToMove.length} messages to ${audience}`);
+        console.log(`📋 Copied ${copyCount} messages to ${audience}`);
+
+        // After copy, select the new copies so user can continue copying forward
+        // New copies will have IDs > maxIdBefore
+        setTimeout(() => {
+          const newIds = [];
+          for (let i = 1; i <= copyCount; i++) {
+            newIds.push(maxIdBefore + i);
+          }
+          setSelectedMessages(new Set(newIds));
+          // Update origin cell to the new location
+          dragOriginCellRef.current = { topic, audience };
+          setDragOriginCellUI({ topic, audience });
+          console.log(`✅ Auto-selected ${copyCount} copied messages with IDs:`, newIds);
+        }, 50);
+
+        // Keep select mode active, just clear drag state
+        setDragHoverCell(null);
+        isDraggingSelectedRef.current = false;
+        setIsDraggingSelected(false);
+        isCopyModeRef.current = false;
       } else {
         // Batch move
         msgsToMove.forEach(msg => {
           moveMessage(msg.id, audience);
         });
         console.log(`📦 Moved ${msgsToMove.length} messages to ${audience}`);
-      }
 
-      // Clear selection and exit select mode
-      setSelectedMessages(new Set());
-      setIsSelectMode(false);
-      setDragHoverCell(null);
-      setDragOriginCell(null);
-      isDraggingSelectedRef.current = false;
-      setIsDraggingSelected(false);
-      setIsCopyMode(false); // Reset copy mode
-      console.log('🚪 Exited select mode after batch operation');
+        // Clear selection and exit select mode after move
+        setSelectedMessages(new Set());
+        setIsSelectMode(false);
+        setDragHoverCell(null);
+        dragOriginCellRef.current = null;
+        isDraggingSelectedRef.current = false;
+        setIsDraggingSelected(false);
+        isCopyModeRef.current = false;
+        console.log('🚪 Exited select mode after batch move');
+      }
     } else {
       // Clear hover state for single drag
       setDragHoverCell(null);
-      setDragOriginCell(null);
+      dragOriginCellRef.current = null;
       isDraggingSelectedRef.current = false;
       setIsDraggingSelected(false);
 
-      // Single message drag using isCopyMode state
-      if (isCopyMode) {
+      // Single message drag using isCopyMode ref
+      if (currentIsCopyMode) {
         // CTRL+drag = copy
         // Constraint: Can only copy within the same row (same topic)
-        if (draggedMsg.topic !== topic) {
+        if (currentDraggedMsg.topic !== topic) {
           alert('Cannot copy message to a different row (topic). Messages can only be copied across columns within the same topic.');
-          setDraggedMsg(null);
-          setIsCopyMode(false);
+          draggedMsgRef.current = null;
+          isCopyModeRef.current = false;
           return;
         }
 
         // Use copyMessage hook function (updates PMMID automatically)
-        copyMessage(draggedMsg.id, audience);
-        console.log(`📋 Copied message ${draggedMsg.id} to ${audience}`);
+        copyMessage(currentDraggedMsg.id, audience);
+        console.log(`📋 Copied message ${currentDraggedMsg.id} to ${audience}`);
       } else {
         // Regular drag = move (updates PMMID automatically)
-        moveMessage(draggedMsg.id, audience);
-        console.log(`📦 Moved message ${draggedMsg.id} to ${audience}`);
+        moveMessage(currentDraggedMsg.id, audience);
+        console.log(`📦 Moved message ${currentDraggedMsg.id} to ${audience}`);
       }
 
-      setIsCopyMode(false); // Reset copy mode
+      isCopyModeRef.current = false;
     }
 
-    setDraggedMsg(null);
+    draggedMsgRef.current = null;
   };
 
   // Header edit
@@ -1426,7 +1488,7 @@ const Matrix = ({
         />
 
         <button
-          onClick={() => window.location.reload()}
+          onClick={clearAndReloadApp}
           className="p-2 text-white rounded hover:opacity-90 transition-opacity"
           style={getButtonStyle(lookAndFeel)}
           title="Reload data from spreadsheet"
@@ -1509,9 +1571,9 @@ const Matrix = ({
             isSelectMode={isSelectMode}
             selectedMessages={selectedMessages}
             isDraggingSelected={isDraggingSelected}
-            isCopyMode={isCopyMode}
+            isCopyMode={isCopyModeUI}
             dragHoverCell={dragHoverCell}
-            dragOriginCell={dragOriginCell}
+            dragOriginCell={dragOriginCellUI}
             onMessageMouseDown={handleMessageMouseDown}
             onMessageMouseUp={handleMessageMouseUp}
           />
@@ -1617,7 +1679,7 @@ const Matrix = ({
         isSaving={isSaving}
         saveProgress={saveProgress}
         onSave={handleSaveWithProgress}
-        onClearReload={() => window.location.reload()}
+        onClearReload={clearAndReloadApp}
         onRegenerateTopicKeys={regenerateTopicKeys}
         downloadFeedCSV={downloadFeedCSV}
       />

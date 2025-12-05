@@ -3,6 +3,7 @@ import { X, RefreshCw, Save, Loader, ExternalLink, Download } from 'lucide-react
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 import SaveProgressDialog from './SaveProgressDialog';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -217,7 +218,7 @@ const StateManagementDialog = ({
               Close
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={clearAndReloadApp}
               className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
             >
               <RefreshCw size={16} />

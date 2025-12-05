@@ -4,6 +4,7 @@ import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
 import { apiGet, apiPost } from '../utils/api';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 import mainCss from '../templates/html/main.css?raw';
 import css300x250 from '../templates/html/300x250.css?raw';
 import css300x600 from '../templates/html/300x600.css?raw';
@@ -669,7 +670,7 @@ const MessageEditorDialog = ({
           });
 
           // Reload the page to refresh data
-          window.location.reload();
+          clearAndReloadApp();
         } else {
           const error = await response.json();
           alert(`Failed to save formatting: ${error.error || 'Unknown error'}`);
