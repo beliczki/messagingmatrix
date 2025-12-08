@@ -328,7 +328,7 @@ const MatrixGridView = ({
                             );
                           })}
 
-                          {/* Only render on hover, not during drag or space press */}
+                          {/* Add message button - appears on hover */}
                           {!spacePressed && !isDraggingSelected && (
                             <button
                               onClick={() => onAddMessage(topic.key, aud.key)}

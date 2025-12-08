@@ -94,11 +94,12 @@ class SyncService {
         image4: row[19] || '',
         image5: row[20] || '',
         image6: row[21] || '',
-        flash: row[22] || '',
-        flash_style: row[23] || '',
-        cta: row[24] || '',
-        landing_url: row[25] || '',
-        comment: row[26] || ''
+        video1: row[22] || '',
+        flash: row[23] || '',
+        flash_style: row[24] || '',
+        cta: row[25] || '',
+        landing_url: row[26] || '',
+        comment: row[27] || ''
       }));
   }
 
@@ -252,8 +253,8 @@ class SyncService {
         id, name, number, variant, audience, topic, version, pmmid,
         status, start_date, end_date, template, template_variant_classes,
         headline, copy1, copy2, image1, image2, image3, image4, image5,
-        image6, flash, flash_style, cta, landing_url, comment
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        image6, video1, flash, flash_style, cta, landing_url, comment
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertMany = sqlite.transaction((records) => {
@@ -266,7 +267,7 @@ class SyncService {
           record.headline, record.copy1, record.copy2,
           record.image1, record.image2, record.image3,
           record.image4, record.image5, record.image6,
-          record.flash, record.flash_style, record.cta,
+          record.video1, record.flash, record.flash_style, record.cta,
           record.landing_url, record.comment
         );
       }

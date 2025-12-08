@@ -418,6 +418,7 @@ const MessageEditorDialog = ({
             'image4': editingMessage.image4,
             'image5': editingMessage.image5,
             'image6': editingMessage.image6,
+            'video1': editingMessage.video1,
             'template_variant_classes': skipAnimation
               ? (editingMessage.template_variant_classes || '').replace(/\banimated\b/g, '').trim()
               : editingMessage.template_variant_classes,
@@ -1362,6 +1363,17 @@ const MessageEditorDialog = ({
                           placeholder="Sticker image URL or path"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Video 1 (Background)</label>
+                      <input
+                        type="text"
+                        value={editingMessage.video1 || ''}
+                        onChange={(e) => setEditingMessage({ ...editingMessage, video1: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Video URL or path"
+                      />
                     </div>
 
                     <div>

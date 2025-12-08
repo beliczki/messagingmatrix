@@ -273,72 +273,59 @@ class SheetsService {
       )
     ];
 
+    // Get topic structure from settings
+    const topicStructure = settings.getTopicStructure();
+
+    // Validate topic structure is configured
+    if (!topicStructure) {
+      console.error('❌ Topic structure not configured in Settings > Structure > Data Structure Configuration');
+      throw new Error('Topic structure not configured. Please configure it in Settings > Structure tab > Data Structure Configuration > Topic Structure');
+    }
+
+    const topicColumns = topicStructure.split(',').map(col => col.trim());
+
+    // Build topic rows dynamically based on structure
     const topicRows = [
-      ['ID', 'Name', 'Key', 'Order', 'Status', 'Product', 'Tag1', 'Tag2', 'Tag3', 'Tag4', 'Created', 'Comment'],
-      ...topics.map(t => [
-        t.id,
-        t.name,
-        t.key,
-        t.order,
-        t.status || '',
-        t.product || '',
-        t.tag1 || '',
-        t.tag2 || '',
-        t.tag3 || '',
-        t.tag4 || '',
-        t.created || '',
-        t.comment || ''
-      ])
+      topicColumns,
+      ...topics.map(t =>
+        topicColumns.map(col => {
+          // Map column names to object properties (converting to lowercase with underscores)
+          const key = col.toLowerCase().replace(/_/g, '_');
+          return t[key] !== undefined ? t[key] : '';
+        })
+      )
     ];
 
+    // Get messages structure from settings
+    const messagesStructure = settings.getMessagesStructure();
+
+    // Validate messages structure is configured
+    if (!messagesStructure) {
+      console.error('❌ Messages structure not configured in Settings > Structure > Data Structure Configuration');
+      throw new Error('Messages structure not configured. Please configure it in Settings > Structure tab > Data Structure Configuration > Messages Structure');
+    }
+
+    const messageColumns = messagesStructure.split(',').map(col => col.trim());
+
+    // Build message rows dynamically based on structure
     const messageRows = [
-      ['ID', 'POMS_ID', 'Name', 'Number', 'Variant', 'Audience_Key', 'Topic_Key', 'Version', 'PMMID', 'Status', 'Start_date', 'End_date', 'Template', 'Template_variant_classes', 'Headline', 'Copy1', 'Copy2', 'Disclaimer', 'Headline_style', 'Copy1_style', 'Copy2_style', 'Disclaimer_style', 'CSS', 'Image1', 'Image2', 'Image3', 'Image4', 'Image5', 'Image6', 'Flash', 'Flash_style', 'CTA', 'CTA_style', 'Landing_URL', 'Comment', 'UTM_Campaign', 'UTM_Source', 'UTM_Medium', 'UTM_Content', 'UTM_Term', 'UTM_CD26', 'Final_Trafficked_URL'],
+      messageColumns,
       ...messages
         .filter(m => m.status !== 'deleted')
-        .map(m => [
-          m.id || '',           // A: Numeric ID
-          m.poms_id || '',      // B: POMS_ID
-          m.name || '',         // C: Name (compound key like "aud1!top1!m1a!v1")
-          m.number || 1,        // D: Number
-          m.variant || 'a',     // E: Variant
-          m.audience,           // F: Audience_Key
-          m.topic,              // G: Topic_Key
-          m.version || 1,       // H: Version
-          m.pmmid || '',        // I: PMMID
-          m.status || '',       // J: Status
-          m.start_date || '',   // K: Start_date
-          m.end_date || '',     // L: End_date
-          m.template || '',     // M: Template
-          m.template_variant_classes || '', // N: Template_variant_classes
-          m.headline || '',     // O: Headline
-          m.copy1 || '',        // P: Copy1
-          m.copy2 || '',        // Q: Copy2
-          m.disclaimer || '',   // R: Disclaimer
-          m.headline_style || '', // S: Headline_style
-          m.copy1_style || '',  // T: Copy1_style
-          m.copy2_style || '',  // U: Copy2_style
-          m.disclaimer_style || '', // V: Disclaimer_style
-          m.css || '',          // W: CSS
-          m.image1 || '',       // X: Image1
-          m.image2 || '',       // Y: Image2
-          m.image3 || '',       // Z: Image3
-          m.image4 || '',       // AA: Image4
-          m.image5 || '',       // AB: Image5
-          m.image6 || '',       // AC: Image6
-          m.flash || '',        // AD: Flash
-          m.flash_style || '',  // AE: Flash_style
-          m.cta || '',          // AF: CTA
-          m.cta_style || '',    // AG: CTA_style
-          m.landingUrl || '',   // AH: Landing_URL
-          m.comment || '',      // AI: Comment
-          m.utm_campaign || '', // AJ: UTM_Campaign
-          m.utm_source || '',   // AK: UTM_Source
-          m.utm_medium || '',   // AL: UTM_Medium
-          m.utm_content || '',  // AM: UTM_Content
-          m.utm_term || '',     // AN: UTM_Term
-          m.utm_cd26 || '',     // AO: UTM_CD26
-          m.final_trafficked_url || '' // AP: Final_Trafficked_URL
-        ])
+        .map(m =>
+          messageColumns.map(col => {
+            // Map column names to object properties (converting to lowercase with underscores)
+            // Special handling for certain fields
+            const key = col.toLowerCase().replace(/_/g, '_');
+
+            // Handle special mappings
+            if (key === 'audience_key') return m.audience || '';
+            if (key === 'topic_key') return m.topic || '';
+            if (key === 'landing_url') return m.landingUrl || '';
+
+            return m[key] !== undefined ? m[key] : '';
+          })
+        )
     ];
 
     const promises = [
@@ -544,6 +531,7 @@ class SheetsService {
           image4: this.getValue(row, columnMap, 'Image4'),
           image5: this.getValue(row, columnMap, 'Image5'),
           image6: this.getValue(row, columnMap, 'Image6'),
+          video1: this.getValue(row, columnMap, 'Video1'),
           flash: this.getValue(row, columnMap, 'Flash'),
           flash_style: this.getValue(row, columnMap, 'Flash_style'),
           cta: this.getValue(row, columnMap, 'CTA'),

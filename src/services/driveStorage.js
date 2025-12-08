@@ -347,6 +347,8 @@ class DriveStorageService {
         ? this.config.creativesFolderId
         : this.config.assetsFolderId;
 
+      console.log(`🔍 searchFiles called: term="${searchTerm}", folderType="${folderType}", folderId="${folderId}"`);
+
       // Check if folder ID is configured
       if (!folderId) {
         console.warn(`Folder ID not configured for ${folderType}, returning empty results`);

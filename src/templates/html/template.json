@@ -74,7 +74,7 @@
             "type": "video",
 	        "default": "",
             "binding-messagingmatrix": "Video1",
-            "path-messagingmatrix": "/assets/",
+            "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/videos/",
             "path-google": "DRM_Asset:Erste/"

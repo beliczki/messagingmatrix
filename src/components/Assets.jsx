@@ -43,10 +43,24 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       const driveData = await loadDriveAssets('assets', { pageSize: 1000 });
       const driveFiles = driveData.files;
 
+      // Debug: Log all files found in Drive
+      console.log(`📂 Drive files found: ${driveFiles.length}`);
+      console.log('📂 Has more pages:', !!driveData.nextPageToken);
+      console.log('📂 Drive file names:', driveFiles.map(f => f.name));
+
+      // Check specifically for empty.mp4
+      const emptyMp4 = driveFiles.find(f => f.name.toLowerCase().includes('empty'));
+      if (emptyMp4) {
+        console.log('✅ Found empty.mp4:', emptyMp4);
+      } else {
+        console.log('❌ empty.mp4 NOT found in Drive response');
+      }
+
       // Get current spreadsheet File_driveIDs
       const spreadsheetDriveIds = new Set(
         (spreadsheetAssets || []).map(asset => asset.File_driveID).filter(id => id)
       );
+      console.log(`📋 Spreadsheet assets: ${spreadsheetAssets?.length || 0}, with DriveIDs: ${spreadsheetDriveIds.size}`);
 
       // Find new assets (in Drive but not in spreadsheet)
       const newAssets = driveFiles.filter(file => !spreadsheetDriveIds.has(file.id));
@@ -58,6 +72,12 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       );
 
       console.log(`🔄 Sync results: ${newAssets.length} new, ${deletedAssets.length} deleted`);
+      if (newAssets.length > 0) {
+        console.log('🆕 New assets:', newAssets.map(f => f.name));
+      }
+      if (deletedAssets.length > 0) {
+        console.log('🗑️ Deleted assets:', deletedAssets.map(a => a.File_name));
+      }
 
       // If no changes, just inform user
       if (newAssets.length === 0 && deletedAssets.length === 0) {

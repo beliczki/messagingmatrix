@@ -71,6 +71,7 @@ export const messages = sqliteTable('messages', {
   image4: text('image4'),
   image5: text('image5'),
   image6: text('image6'),
+  video1: text('video1'),
   flash: text('flash'),
   flash_style: text('flash_style'),
   cta: text('cta'),

@@ -11,19 +11,66 @@
     <meta name="click_url" content="{{click_url}}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"> 
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css" />
     <link rel="stylesheet" href="[[css]]" />
+    <style>
+      /* Preloader styles */
+      #preloader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgb(var(--blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.4s ease-out;
+      }
+      #preloader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #preloader svg {
+        width: 40px;
+        height: auto;
+      }
+      #preloader .s-outline {
+        fill: none;
+        stroke: #fff;
+        stroke-width: 2;
+      }
+      #preloader .s-fill {
+        fill: #fff;
+        clip-path: inset(100% 0 0 0);
+        transition: clip-path 0.3s ease-out;
+      }
+    </style>
   </head>
   <body>
-      <div class="click-url" id="clickLayer">
+    <!-- Preloader with S and dot -->
+    <div id="preloader">
+      <svg viewBox="397 0 116 151" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outline S and dot -->
+        <path class="s-outline" d="M397.08 123.39h88.43v-11.87h-88.26c-.07-1.37-.03-28.14-.21-40.51-.15-10.55 7.05-20.82 20.66-20.59 24.8.41 49.63.41 74.43-.02 10.69-.19 20.42 7.66 20.41 20.43 0 1.78-.01 3.96-.01 6.27h-88.51v11.59l88.51-.02c0 1.59.03 28.4 0 40.87-.04 12.55-8.08 20.44-20.78 20.45h-73.8c-12.8 0-20.81-7.98-20.86-20.77v-5.83"/>
+        <path class="s-outline" d="M454.91 38.03c-10.46 0-18.92-8.62-18.86-19.2C436.1 8.43 444.6-.02 454.98 0c10.37.02 18.85 8.51 18.87 18.9.02 10.56-8.47 19.14-18.94 19.13"/>
+        <!-- Fill S and dot (animated) -->
+        <path class="s-fill" id="sFill" d="M397.08 123.39h88.43v-11.87h-88.26c-.07-1.37-.03-28.14-.21-40.51-.15-10.55 7.05-20.82 20.66-20.59 24.8.41 49.63.41 74.43-.02 10.69-.19 20.42 7.66 20.41 20.43 0 1.78-.01 3.96-.01 6.27h-88.51v11.59l88.51-.02c0 1.59.03 28.4 0 40.87-.04 12.55-8.08 20.44-20.78 20.45h-73.8c-12.8 0-20.81-7.98-20.86-20.77v-5.83"/>
+        <path class="s-fill" id="dotFill" d="M454.91 38.03c-10.46 0-18.92-8.62-18.86-19.2C436.1 8.43 444.6-.02 454.98 0c10.37.02 18.85 8.51 18.87 18.9.02 10.56-8.47 19.14-18.94 19.13"/>
+      </svg>
+      <!--<div id="preloaderStatus" style="position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; color: #fff; font-size: 10px; font-family: monospace; opacity: 0.7;"></div>-->
+    </div>
+
+    <div class="click-url" id="clickLayer">
         <div id="adContainer" class="template_variant_class {{template_variant_class}}">
           <div id="backgroundContainer">
             <div id="imageWrapper">
               <div style="background-image:url('{{background_image_1}}')" class="background_image_1"></div>
             </div>
             <div id="videoWrapper">
-              <video autoplay muted playsinline loop onload="playVideo()">
+              <video autoplay muted playsinline loop crossorigin="anonymous">
                 <source src="{{background_video_1}}" type="video/mp4" class="background_video_1"></video>
             </div>
           </div>
@@ -88,6 +135,142 @@
     <script>
         const ad = document.querySelector('#adContainer');
         document.body.classList.add("size-" + ad.offsetWidth + "x" + ad.offsetHeight);
+
+        // Preloader logic - track loading of images and videos
+        (function() {
+          const preloader = document.getElementById('preloader');
+          const sFill = document.getElementById('sFill');
+          const dotFill = document.getElementById('dotFill');
+          const adContainer = document.getElementById('adContainer');
+          const statusEl = document.getElementById('preloaderStatus');
+          const startTime = Date.now();
+
+          function setStatus(text) {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            const msg = `[${elapsed}s] ${text}`;
+            console.log('🔄 Preloader:', msg);
+            if (statusEl) {
+              statusEl.textContent = msg;
+            }
+          }
+
+          setStatus('Init...');
+
+          // Save template variant classes and remove them until preload complete
+          const savedClasses = [];
+          if (adContainer) {
+            Array.from(adContainer.classList).forEach(cls => {
+              if (cls !== 'template_variant_class') {
+                savedClasses.push(cls);
+              }
+            });
+            // Remove all classes except template_variant_class placeholder
+            adContainer.className = 'template_variant_class';
+            setStatus('Classes saved: ' + savedClasses.join(', '));
+          }
+
+          // Function to trigger animations after preload
+          function triggerAnimations() {
+            if (adContainer && savedClasses.length > 0) {
+              adContainer.className = savedClasses.join(' ');
+            }
+          }
+
+          // Get all images to track (skip videos - they load async in srcDoc iframes)
+          const images = Array.from(document.querySelectorAll('img'));
+          const bgElements = Array.from(document.querySelectorAll('[style*="background-image"]'));
+
+          setStatus(`Found: ${images.length} img, ${bgElements.length} bg`);
+
+          // Extract background image URLs
+          const bgUrls = bgElements
+            .map(el => {
+              const style = el.getAttribute('style') || '';
+              const match = style.match(/url\(['"]?([^'")\s]+)['"]?\)/);
+              return match ? match[1] : null;
+            })
+            .filter(url => url && !url.includes('{{'));
+
+          setStatus(`BG URLs to load: ${bgUrls.length}`);
+
+          // Create image objects for background images
+          const bgImages = bgUrls.map(url => {
+            const img = new Image();
+            img.src = url;
+            return img;
+          });
+
+          const allImages = [...images, ...bgImages];
+          const totalItems = allImages.length;
+          let loadedItems = 0;
+
+          setStatus(`Total items to track: ${totalItems} images`);
+
+          function updateProgress(source) {
+            loadedItems++;
+            const progress = totalItems > 0 ? (loadedItems / totalItems) : 1;
+            const fillPercent = 100 - (progress * 100);
+
+            setStatus(`Loaded ${loadedItems}/${totalItems} (${source})`);
+
+            // Animate fill from bottom to top
+            const clipPath = `inset(${fillPercent}% 0 0 0)`;
+            if (sFill) sFill.style.clipPath = clipPath;
+            if (dotFill) dotFill.style.clipPath = clipPath;
+
+            // Hide preloader when all loaded
+            if (loadedItems >= totalItems) {
+              setStatus('All loaded! Hiding...');
+              setTimeout(() => {
+                if (preloader) preloader.classList.add('hidden');
+                triggerAnimations();
+                setTimeout(() => {
+                  if (preloader) preloader.remove();
+                }, 400);
+              }, 200);
+            }
+          }
+
+          // Track image loading
+          allImages.forEach((img, i) => {
+            const src = img.src ? img.src.split('/').pop() : `img${i}`;
+            if (img.complete) {
+              updateProgress(`img done: ${src}`);
+            } else {
+              img.addEventListener('load', () => updateProgress(`img load: ${src}`));
+              img.addEventListener('error', () => {
+                console.error('🔴 Image load failed:', img.src);
+                updateProgress(`img err: ${src}`);
+              });
+            }
+          });
+
+          // Fallback: hide preloader after max 5 seconds
+          setTimeout(() => {
+            if (preloader && !preloader.classList.contains('hidden')) {
+              setStatus(`TIMEOUT! Only ${loadedItems}/${totalItems} loaded`);
+              if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
+              if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
+              setTimeout(() => {
+                preloader.classList.add('hidden');
+                triggerAnimations();
+                setTimeout(() => preloader.remove(), 400);
+              }, 200);
+            }
+          }, 5000);
+
+          // If no items to load, hide immediately
+          if (totalItems === 0) {
+            setStatus('No items to load');
+            if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
+            if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
+            setTimeout(() => {
+              if (preloader) preloader.classList.add('hidden');
+              triggerAnimations();
+              setTimeout(() => preloader.remove(), 400);
+            }, 300);
+          }
+        })();
     </script>
   </body>
 </html>

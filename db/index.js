@@ -129,6 +129,7 @@ class DatabaseService {
         image4 TEXT,
         image5 TEXT,
         image6 TEXT,
+        video1 TEXT,
         flash TEXT,
         flash_style TEXT,
         cta TEXT,

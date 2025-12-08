@@ -2737,13 +2737,15 @@ app.get('/api/drive/files', async (req, res) => {
       orderBy
     });
 
-    // Debug: Check if metadata is in the response
-    if (result.files && result.files.length > 0) {
-      console.log('📤 Sending to client - first file:', {
-        name: result.files[0].name,
-        hasImageMeta: !!result.files[0].imageMediaMetadata,
-        imageMeta: result.files[0].imageMediaMetadata
-      });
+    // Debug: Check files returned
+    console.log(`📤 Drive files API returning ${result.files?.length || 0} files, hasNextPage: ${!!result.nextPageToken}`);
+
+    // Check for empty.mp4
+    const emptyFile = result.files?.find(f => f.name.toLowerCase().includes('empty'));
+    if (emptyFile) {
+      console.log('✅ Server found empty.mp4:', emptyFile.name, emptyFile.id);
+    } else {
+      console.log('❌ Server: empty.mp4 NOT in response');
     }
 
     res.json(result);
@@ -2973,6 +2975,8 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
   try {
     const { fileIdOrName } = req.params;
 
+    console.log(`🎬 Drive proxy request: ${fileIdOrName}`);
+
     // Check if Drive storage is initialized
     if (!driveStorage.initialized) {
       console.warn(`Drive proxy request for ${fileIdOrName} but Drive is not initialized`);
@@ -3029,6 +3033,12 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
 
     // Handle byte-range requests (crucial for video seeking and caching)
     const range = req.headers.range;
+
+    // Add CORS headers for srcDoc iframes and cross-origin video requests
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
     if (range) {
       // Parse range header (e.g., "bytes=0-1023")

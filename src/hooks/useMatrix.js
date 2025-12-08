@@ -227,6 +227,7 @@ export const useMatrix = (currentUser = null) => {
       image4: '',
       image5: '',
       image6: '',
+      video1: '',
       flash: '',
       cta: '',
       landingUrl: '',
