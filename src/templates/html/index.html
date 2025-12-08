@@ -133,22 +133,22 @@
     <!-- extra css to finetune -->
     <style type="text/css">{{css_styles}}</style>
     <script>
-        const ad = document.querySelector('#adContainer');
+        var ad = document.querySelector('#adContainer');
         document.body.classList.add("size-" + ad.offsetWidth + "x" + ad.offsetHeight);
 
         // Preloader logic - track loading of images and videos
         (function() {
-          const preloader = document.getElementById('preloader');
-          const sFill = document.getElementById('sFill');
-          const dotFill = document.getElementById('dotFill');
-          const adContainer = document.getElementById('adContainer');
-          const statusEl = document.getElementById('preloaderStatus');
-          const startTime = Date.now();
+          var preloader = document.getElementById('preloader');
+          var sFill = document.getElementById('sFill');
+          var dotFill = document.getElementById('dotFill');
+          var adContainer = document.getElementById('adContainer');
+          var statusEl = document.getElementById('preloaderStatus');
+          var startTime = Date.now();
 
           function setStatus(text) {
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            const msg = `[${elapsed}s] ${text}`;
-            console.log('🔄 Preloader:', msg);
+            var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            var msg = '[' + elapsed + 's] ' + text;
+            console.log('Preloader:', msg);
             if (statusEl) {
               statusEl.textContent = msg;
             }
@@ -157,9 +157,10 @@
           setStatus('Init...');
 
           // Save template variant classes and remove them until preload complete
-          const savedClasses = [];
+          var savedClasses = [];
           if (adContainer) {
-            Array.from(adContainer.classList).forEach(cls => {
+            var classList = Array.prototype.slice.call(adContainer.classList);
+            classList.forEach(function(cls) {
               if (cls !== 'template_variant_class') {
                 savedClasses.push(cls);
               }
@@ -177,54 +178,56 @@
           }
 
           // Get all images to track (skip videos - they load async in srcDoc iframes)
-          const images = Array.from(document.querySelectorAll('img'));
-          const bgElements = Array.from(document.querySelectorAll('[style*="background-image"]'));
+          var images = Array.prototype.slice.call(document.querySelectorAll('img'));
+          var bgElements = Array.prototype.slice.call(document.querySelectorAll('[style*="background-image"]'));
 
-          setStatus(`Found: ${images.length} img, ${bgElements.length} bg`);
+          setStatus('Found: ' + images.length + ' img, ' + bgElements.length + ' bg');
 
           // Extract background image URLs
-          const bgUrls = bgElements
-            .map(el => {
-              const style = el.getAttribute('style') || '';
-              const match = style.match(/url\(['"]?([^'")\s]+)['"]?\)/);
+          var bgUrls = bgElements
+            .map(function(el) {
+              var style = el.getAttribute('style') || '';
+              var match = style.match(/url\(['"]?([^'")\s]+)['"]?\)/);
               return match ? match[1] : null;
             })
-            .filter(url => url && !url.includes('{{'));
+            .filter(function(url) {
+              return url && url.indexOf('{{') === -1;
+            });
 
-          setStatus(`BG URLs to load: ${bgUrls.length}`);
+          setStatus('BG URLs to load: ' + bgUrls.length);
 
           // Create image objects for background images
-          const bgImages = bgUrls.map(url => {
-            const img = new Image();
+          var bgImages = bgUrls.map(function(url) {
+            var img = new Image();
             img.src = url;
             return img;
           });
 
-          const allImages = [...images, ...bgImages];
-          const totalItems = allImages.length;
-          let loadedItems = 0;
+          var allImages = images.concat(bgImages);
+          var totalItems = allImages.length;
+          var loadedItems = 0;
 
-          setStatus(`Total items to track: ${totalItems} images`);
+          setStatus('Total items to track: ' + totalItems + ' images');
 
           function updateProgress(source) {
             loadedItems++;
-            const progress = totalItems > 0 ? (loadedItems / totalItems) : 1;
-            const fillPercent = 100 - (progress * 100);
+            var progress = totalItems > 0 ? (loadedItems / totalItems) : 1;
+            var fillPercent = 100 - (progress * 100);
 
-            setStatus(`Loaded ${loadedItems}/${totalItems} (${source})`);
+            setStatus('Loaded ' + loadedItems + '/' + totalItems + ' (' + source + ')');
 
             // Animate fill from bottom to top
-            const clipPath = `inset(${fillPercent}% 0 0 0)`;
+            var clipPath = 'inset(' + fillPercent + '% 0 0 0)';
             if (sFill) sFill.style.clipPath = clipPath;
             if (dotFill) dotFill.style.clipPath = clipPath;
 
             // Hide preloader when all loaded
             if (loadedItems >= totalItems) {
               setStatus('All loaded! Hiding...');
-              setTimeout(() => {
+              setTimeout(function() {
                 if (preloader) preloader.classList.add('hidden');
                 triggerAnimations();
-                setTimeout(() => {
+                setTimeout(function() {
                   if (preloader) preloader.remove();
                 }, 400);
               }, 200);
@@ -232,29 +235,33 @@
           }
 
           // Track image loading
-          allImages.forEach((img, i) => {
-            const src = img.src ? img.src.split('/').pop() : `img${i}`;
+          allImages.forEach(function(img, i) {
+            var src = img.src ? img.src.split('/').pop() : 'img' + i;
             if (img.complete) {
-              updateProgress(`img done: ${src}`);
+              updateProgress('img done: ' + src);
             } else {
-              img.addEventListener('load', () => updateProgress(`img load: ${src}`));
-              img.addEventListener('error', () => {
-                console.error('🔴 Image load failed:', img.src);
-                updateProgress(`img err: ${src}`);
+              img.addEventListener('load', function() {
+                updateProgress('img load: ' + src);
+              });
+              img.addEventListener('error', function() {
+                console.error('Image load failed:', img.src);
+                updateProgress('img err: ' + src);
               });
             }
           });
 
           // Fallback: hide preloader after max 5 seconds
-          setTimeout(() => {
+          setTimeout(function() {
             if (preloader && !preloader.classList.contains('hidden')) {
-              setStatus(`TIMEOUT! Only ${loadedItems}/${totalItems} loaded`);
+              setStatus('TIMEOUT! Only ' + loadedItems + '/' + totalItems + ' loaded');
               if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
               if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
-              setTimeout(() => {
+              setTimeout(function() {
                 preloader.classList.add('hidden');
                 triggerAnimations();
-                setTimeout(() => preloader.remove(), 400);
+                setTimeout(function() {
+                  preloader.remove();
+                }, 400);
               }, 200);
             }
           }, 5000);
@@ -264,10 +271,12 @@
             setStatus('No items to load');
             if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
             if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
-            setTimeout(() => {
+            setTimeout(function() {
               if (preloader) preloader.classList.add('hidden');
               triggerAnimations();
-              setTimeout(() => preloader.remove(), 400);
+              setTimeout(function() {
+                preloader.remove();
+              }, 400);
             }, 300);
           }
         })();
