@@ -494,10 +494,28 @@ const Matrix = ({
   };
 
   // Generate feed data for state dialog and CSV export
+  // Only include messages with HTML templates (exclude Adobe PSD, Adobe AEP, and messages without templates)
   const feedData = useMemo(() => {
     if (!feedStructure) {
       return [];
     }
+
+    // Get non-HTML template names from keywords (e.g., Adobe PSD, Adobe AEP)
+    const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
+
+    // Filter messages to only include those with HTML templates
+    const htmlTemplateMessages = messages.filter(msg => {
+      // Exclude messages without a template
+      if (!msg.template || !msg.template.trim()) {
+        return false;
+      }
+      // Exclude messages with non-HTML templates (Adobe PSD, Adobe AEP, etc.)
+      if (nonHtmlTemplates.includes(msg.template)) {
+        return false;
+      }
+      // Include all other messages (they have HTML templates)
+      return true;
+    });
 
     const columns = feedStructure.split(',').map(col => col.trim());
 
@@ -568,7 +586,7 @@ const Matrix = ({
       return commonMappings[cleanNameLower] || `{{${cleanNameLower}}}`;
     };
 
-    return messages.map((msg) => {
+    return htmlTemplateMessages.map((msg) => {
       const status = (msg.status || 'PLANNED').toUpperCase();
       const context = {
         ...msg,
@@ -613,7 +631,7 @@ const Matrix = ({
 
       return feedRow;
     });
-  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting]);
+  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting, matrixData?.keywords]);
 
   // Generate feedFields structure for saving
   const feedFields = useMemo(() => {
