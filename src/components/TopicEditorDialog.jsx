@@ -20,7 +20,18 @@ const TopicEditorDialog = ({
     return { ...updatedTopic, key: generatedKey };
   };
 
-  // Auto-generate key when dialog opens or relevant fields change
+  // Auto-generate key when dialog opens (initial mount)
+  useEffect(() => {
+    if (editingTopic) {
+      const updatedTopic = updateTopicKey(editingTopic);
+      // Generate key on dialog open if different from current
+      if (updatedTopic.key !== editingTopic.key) {
+        setEditingTopic(updatedTopic);
+      }
+    }
+  }, [editingTopic?.id]);  // Run when a new topic is opened (id changes)
+
+  // Auto-regenerate key when relevant fields change
   useEffect(() => {
     if (editingTopic) {
       const updatedTopic = updateTopicKey(editingTopic);

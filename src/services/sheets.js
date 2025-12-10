@@ -171,10 +171,12 @@ class SheetsService {
 
   // Write data to localStorage and Google Sheets
   async write(sheetName, values) {
+    console.log(`📝 [write] Starting write for ${sheetName} with ${values?.length || 0} rows`);
     // Always save to localStorage
     localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
 
     // Try to write to Google Sheets via server API if configured
+    console.log(`📝 [write] spreadsheetId:`, this.spreadsheetId ? 'configured' : 'NOT SET');
     if (this.spreadsheetId) {
       try {
         // Step 1: Clear the entire sheet first
@@ -385,34 +387,79 @@ class SheetsService {
     }
 
     // Include creatives if provided
+    console.log('💾 [saveAll] creativesData received:', {
+      hasData: !!creativesData,
+      length: creativesData?.length || 0,
+      firstItem: creativesData?.[0] ? Object.keys(creativesData[0]) : 'none'
+    });
     if (creativesData && creativesData.length > 0) {
-      const creativesRows = [
-        ['ID', 'Brand', 'Product', 'Type', 'Visual_keyword', 'Visual_description', 'MC_Number', 'MC_Variant', 'Version', 'File_format', 'File_driveID', 'File_name', 'File_size', 'File_date', 'File_dimensions', 'File_DirectLink', 'File_thumbnail', 'Is_Dynamic'],
-        ...creativesData.map(creative => [
-          creative.ID || '',
-          creative.Brand || '',
-          creative.Product || '',
-          creative.Type || '',
-          creative.Visual_keyword || '',
-          creative.Visual_description || '',
-          creative.MC_Number || '',
-          creative.MC_Variant || '',
-          creative.Version || '',
-          creative.File_format || '',
-          creative.File_driveID || '',
-          creative.File_name || '',
-          creative.File_size || '',
-          creative.File_date || '',
-          creative.File_dimensions || '',
-          creative.File_DirectLink || '',
-          creative.File_thumbnail || '',
-          creative.Is_Dynamic || ''
-        ])
-      ];
+      // Get creative structure from settings (comma-separated column names)
+      const creativeStructure = settings.getCreativeStructure();
+      console.log('💾 [saveAll] creativeStructure:', creativeStructure ? 'configured' : 'null (using fallback)');
+
+      let creativesRows;
+      if (creativeStructure) {
+        // Use dynamic structure from settings
+        const creativeColumns = creativeStructure.split(',').map(col => col.trim());
+        console.log('📋 Using dynamic creative structure:', creativeColumns);
+
+        creativesRows = [
+          creativeColumns,
+          ...creativesData.map(creative =>
+            creativeColumns.map(col => {
+              // Direct property lookup - column names should match property names exactly
+              return creative[col] !== undefined ? creative[col] : '';
+            })
+          )
+        ];
+        console.log('📋 Built creativesRows with', creativesRows.length - 1, 'data rows');
+        // Log first data row for debugging
+        if (creativesRows.length > 1) {
+          console.log('📋 First creative row (column headers):', creativesRows[0]);
+          console.log('📋 First creative data:', creativesRows[1]);
+        }
+      } else {
+        // Fallback to hardcoded structure for backwards compatibility
+        console.log('⚠️ No creative structure configured, using default columns');
+        creativesRows = [
+          ['ID', 'Brand', 'Product', 'Type', 'Visual_keyword', 'Visual_description', 'MC_Number', 'MC_Variant', 'Version', 'File_format', 'File_driveID', 'File_name', 'File_size', 'File_date', 'File_dimensions', 'File_DirectLink', 'File_thumbnail', 'Is_Dynamic'],
+          ...creativesData.map(creative => [
+            creative.ID || '',
+            creative.Brand || '',
+            creative.Product || '',
+            creative.Type || '',
+            creative.Visual_keyword || '',
+            creative.Visual_description || '',
+            creative.MC_Number || '',
+            creative.MC_Variant || '',
+            creative.Version || '',
+            creative.File_format || '',
+            creative.File_driveID || '',
+            creative.File_name || '',
+            creative.File_size || '',
+            creative.File_date || '',
+            creative.File_dimensions || '',
+            creative.File_DirectLink || '',
+            creative.File_thumbnail || '',
+            creative.Is_Dynamic || ''
+          ])
+        ];
+        console.log('📋 Built creativesRows (fallback) with', creativesRows.length - 1, 'data rows');
+        // Log first data row for debugging
+        if (creativesRows.length > 1) {
+          console.log('📋 First creative (fallback) data:', creativesRows[1]);
+          console.log('📋 First creative object properties:', Object.keys(creativesData[0]));
+        }
+      }
+      console.log('📋 Adding Creatives write to promises array');
       promises.push(this.write('Creatives', creativesRows));
+    } else {
+      console.log('⚠️ No creativesData to save, skipping Creatives sheet');
     }
 
+    console.log('📋 Executing', promises.length, 'write promises');
     await Promise.all(promises);
+    console.log('✅ [saveAll] All write promises completed');
   }
 
   // Helper function to create a column map from header row

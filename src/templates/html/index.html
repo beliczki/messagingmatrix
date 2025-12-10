@@ -81,16 +81,12 @@
             <div id="textContainer">
               <div id="stickerContainer">
                 <div class="stickerTextWrapper">
-                  <p class="sticker_text_1 sticker_style_1" style="{{sticker_style_1}}">{{sticker_text_1}}</p>
-                  <!-- if p is empty p is not displayed, 
-                  content eg.: <b>flash</b> text -->
+                  <p class="sticker_text_1 sticker_style_1" style="{{sticker_style_1}}" data="{{sticker_text_1}}">{{sticker_text_1}}</p>
+              <!-- if p and p.data is "empty" or " " -> nothing displays
+              if p is "image" -> text wrapper does not display but the image wrapper -->
                 </div>
                 <div class="stickerImageWrapper">
-                  <div style="background-image:url('{{sticker_image_1}}')" class="sticker_image_1">
-                  {{sticker_image_1}}
-                  <!-- if div is empty it is not displayed so sticker_image_1 path must be placed into the div as well, 
-                  not just into style -->
-                  </div>
+                  <div style="background-image:url('{{sticker_image_1}}')" class="sticker_image_1"></div>
                 </div>
               </div>
               <div id="cardContainer">

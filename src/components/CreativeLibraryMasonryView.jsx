@@ -111,12 +111,19 @@ const CreativeLibraryMasonryView = ({
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ Failed to load creative:`, {
-                          filename: item.filename,
-                          url: item.url,
-                          item: item
-                        });
-                        setNextItemIndex(itemIndex + 1);
+                        // Try fullResUrl as fallback if thumbnail fails
+                        if (item.fullResUrl && e.target.src !== item.fullResUrl) {
+                          console.warn(`⚠️ Thumbnail failed, trying fullResUrl for ${item.filename}`);
+                          e.target.src = item.fullResUrl;
+                        } else {
+                          console.error(`❌ Failed to load creative:`, {
+                            filename: item.filename,
+                            url: item.url,
+                            fullResUrl: item.fullResUrl,
+                            item: item
+                          });
+                          setNextItemIndex(itemIndex + 1);
+                        }
                       }}
                     />
                   )}
@@ -134,12 +141,19 @@ const CreativeLibraryMasonryView = ({
                         handleImageLoaded(item, itemIndex, e);
                       }}
                       onError={(e) => {
-                        console.error(`❌ Failed to load creative:`, {
-                          filename: item.filename,
-                          url: item.url,
-                          item: item
-                        });
-                        setNextItemIndex(itemIndex + 1);
+                        // Try fullResUrl as fallback if thumbnail fails
+                        if (item.fullResUrl && e.target.src !== item.fullResUrl) {
+                          console.warn(`⚠️ Thumbnail failed, trying fullResUrl for ${item.filename}`);
+                          e.target.src = item.fullResUrl;
+                        } else {
+                          console.error(`❌ Failed to load creative:`, {
+                            filename: item.filename,
+                            url: item.url,
+                            fullResUrl: item.fullResUrl,
+                            item: item
+                          });
+                          setNextItemIndex(itemIndex + 1);
+                        }
                       }}
                       preload="metadata"
                     />

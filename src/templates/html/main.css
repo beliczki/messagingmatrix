@@ -244,12 +244,20 @@ main {
 }
 
 #stickerContainer p:empty,
+#stickerContainer .stickerImageWrapper,
 #stickerContainer > div:has(> p:empty),
 #stickerContainer > div:has(> p[data=" "]),
-#stickerContainer > div:has(> div:empty), 
 #stickerContainer > div:has(> div[style*="empty"]),
+#stickerContainer:has(p[data="empty"]) div, 
+#stickerContainer:has(p[data="image"]) .stickerTextWrapper, 
 #cardContainer > div:has(> div:empty), 
 #cardContainer > div:has(> div[style*="empty"]) { display: none; }
+
+#stickerContainer:has(p[data="image"]) .stickerImageWrapper  { display: block; }
+
+
+
+
 
 h1,
 h2,

@@ -65,6 +65,13 @@ export const useMatrix = (currentUser = null) => {
 
   // Save data to sheets
   const save = useCallback(async (feedData = null, feedFields = null, assetsData = null, creativesData = null) => {
+    console.log('💾 [useMatrix.save] called with:', {
+      hasFeedData: !!feedData,
+      hasFeedFields: !!feedFields,
+      hasAssetsData: !!assetsData,
+      hasCreativesData: !!creativesData,
+      creativesCount: creativesData?.length || 0
+    });
     setIsSaving(true);
     setError(null);
 
@@ -109,10 +116,17 @@ export const useMatrix = (currentUser = null) => {
       //   });
       // }
 
+      console.log('💾 [useMatrix.save] calling sheets.saveAll with creativesData:', {
+        creativesCount: creativesData?.length || 0,
+        firstCreative: creativesData?.[0] ? JSON.stringify(creativesData[0]).substring(0, 200) : 'none'
+      });
       await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData);
+      console.log('✅ [useMatrix.save] sheets.saveAll completed successfully');
       setLastSync(new Date());
     } catch (err) {
+      console.error('❌ [useMatrix.save] Error saving:', err);
       setError(err.message);
+      throw err; // Re-throw so callers can handle the error
     } finally {
       setIsSaving(false);
     }
@@ -143,22 +157,37 @@ export const useMatrix = (currentUser = null) => {
   // Add topic - accepts either a name string or a full object
   const addTopic = useCallback((nameOrObject) => {
     if (typeof nameOrObject === 'object') {
-      // Adding a full object
-      setTopics(prev => [...prev, nameOrObject]);
+      // Adding a full object - generate key from pattern if not provided
+      const topicKeyPattern = settings.getPattern('topicKey');
+      let topicWithKey = nameOrObject;
+      if (topicKeyPattern && !nameOrObject.key) {
+        topicWithKey = {
+          ...nameOrObject,
+          key: generateTopicKey(nameOrObject, topicKeyPattern)
+        };
+      }
+      setTopics(prev => [...prev, topicWithKey]);
     } else {
       // Legacy: just a name string
       const maxId = Math.max(0, ...topics.map(t => parseInt(t.id) || 0));
       const newId = maxId + 1;
       const order = Math.max(0, ...topics.map(t => t.order)) + 1;
-      const key = `top${order}`;
 
-      setTopics(prev => [...prev, {
+      // Create topic object first
+      const newTopic = {
         id: newId,
-        key,
         name: nameOrObject,
         order,
         status: ''
-      }]);
+      };
+
+      // Generate key from pattern if available, otherwise use fallback
+      const topicKeyPattern = settings.getPattern('topicKey');
+      newTopic.key = topicKeyPattern
+        ? generateTopicKey(newTopic, topicKeyPattern)
+        : `top${order}`;
+
+      setTopics(prev => [...prev, newTopic]);
     }
   }, [topics]);
 

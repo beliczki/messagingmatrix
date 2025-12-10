@@ -29,7 +29,8 @@ const MessageEditorDialog = ({
   isGeneratingContent,
   handleGenerateContent,
   selectedProducts = [],
-  selectedStatuses = []
+  selectedStatuses = [],
+  creatives = []
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -77,6 +78,54 @@ const MessageEditorDialog = ({
   useEffect(() => {
     localStorage.setItem('messageEditor_statusSyncMode', statusSyncMode);
   }, [statusSyncMode]);
+
+  // Check if template is a non-HTML template (from keywords, not from templates folder)
+  const isNonHtmlTemplate = useMemo(() => {
+    const selectedTemplate = editingMessage?.template;
+    if (!selectedTemplate) return false;
+    // Check if template exists in HTML templates list
+    const isHtmlTemplate = templates.some(t => t.name === selectedTemplate);
+    return !isHtmlTemplate;
+  }, [editingMessage?.template, templates]);
+
+  // Keep isAdobePSD for creative matching logic
+  const isAdobePSD = editingMessage?.template === 'Adobe PSD';
+
+  // Find matching creative for Adobe PSD templates
+  const matchingCreative = useMemo(() => {
+    if (!isAdobePSD || !editingMessage || !creatives?.length) return null;
+
+    // Get MC number and variant from the message
+    const mcNumber = editingMessage.number;
+    const mcVariant = editingMessage.variant;
+
+    // Find creative matching MC_Number, MC_Variant, and dimensions (previewSize)
+    const match = creatives.find(c => {
+      const matchesMC = String(c.MC_Number) === String(mcNumber);
+      const matchesVariant = (c.MC_Variant || '').toLowerCase() === (mcVariant || '').toLowerCase();
+      const matchesDimensions = c.File_dimensions === previewSize;
+
+      return matchesMC && matchesVariant && matchesDimensions;
+    });
+
+    if (match) {
+      console.log('🎨 Found matching creative for Adobe PSD:', {
+        mcNumber, mcVariant, previewSize,
+        creative: match.File_name
+      });
+    } else {
+      console.log('⚠️ No matching creative found for Adobe PSD:', {
+        mcNumber, mcVariant, previewSize,
+        availableCreatives: creatives.slice(0, 5).map(c => ({
+          MC_Number: c.MC_Number,
+          MC_Variant: c.MC_Variant,
+          File_dimensions: c.File_dimensions
+        }))
+      });
+    }
+
+    return match;
+  }, [isAdobePSD, editingMessage?.number, editingMessage?.variant, previewSize, creatives]);
 
   // Track which formatting scope is selected for each field
   const [selectedFormattingScopes, setSelectedFormattingScopes] = useState({
@@ -258,6 +307,32 @@ const MessageEditorDialog = ({
       return;
     }
 
+    // Handle Adobe PSD templates - get dimensions from matching creatives
+    if (editingMessage.template === 'Adobe PSD') {
+      const mcNumber = editingMessage.number;
+      const mcVariant = editingMessage.variant;
+
+      // Find all creatives that match this MC number and variant
+      const matchingCreatives = creatives.filter(c => {
+        const matchesMC = String(c.MC_Number) === String(mcNumber);
+        const matchesVariant = (c.MC_Variant || '').toLowerCase() === (mcVariant || '').toLowerCase();
+        return matchesMC && matchesVariant && c.File_dimensions;
+      });
+
+      // Get unique dimensions from matching creatives
+      const dimensions = [...new Set(matchingCreatives.map(c => c.File_dimensions))].sort();
+
+      console.log('📐 Adobe PSD dimensions for MC' + mcNumber + mcVariant + ':', dimensions);
+
+      setAvailableDimensions(dimensions);
+
+      // If current previewSize is not in the available dimensions, reset to first available
+      if (dimensions.length > 0 && !dimensions.includes(previewSize)) {
+        setPreviewSize(dimensions[0]);
+      }
+      return;
+    }
+
     // Find the template in the already-loaded templates array
     const selectedTemplate = templates.find(t => t.name === editingMessage.template);
 
@@ -271,7 +346,7 @@ const MessageEditorDialog = ({
     } else {
       setAvailableDimensions([]);
     }
-  }, [editingMessage?.template, templates]);
+  }, [editingMessage?.template, editingMessage?.number, editingMessage?.variant, templates, creatives]);
 
   if (!editingMessage) return null;
 
@@ -312,6 +387,71 @@ const MessageEditorDialog = ({
 
   // Generate preview HTML dynamically from template files
   const generatePreviewHtml = () => {
+    // Handle Adobe PSD templates - show creative image from library
+    if (isAdobePSD) {
+      if (matchingCreative) {
+        // Use proxy URL for the creative image
+        const imageUrl = matchingCreative.File_driveID
+          ? `/api/drive/proxy/${matchingCreative.File_driveID}`
+          : matchingCreative.File_DirectLink;
+
+        return `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f0f0f0;
+    }
+    img {
+      max-width: 100%;
+      max-height: 100vh;
+      object-fit: contain;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+  </style>
+</head>
+<body>
+  <img src="${imageUrl}" alt="${matchingCreative.File_name}" />
+</body>
+</html>`;
+      } else {
+        // No matching creative found
+        return `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #666;
+      text-align: center;
+      padding: 20px;
+    }
+    .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .message { font-size: 14px; margin-bottom: 8px; }
+    .details { font-size: 12px; color: #999; }
+  </style>
+</head>
+<body>
+  <div class="icon">🎨</div>
+  <div class="message">No matching creative found</div>
+  <div class="details">Looking for MC${editingMessage?.number || '?'}${editingMessage?.variant || ''} @ ${previewSize}</div>
+  <div class="details" style="margin-top: 8px;">Upload matching creative to Creative Library</div>
+</body>
+</html>`;
+      }
+    }
+
     // Return empty if no template HTML is loaded yet
     if (!templateHtml) {
       return '<html><body><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#999;">Loading template...</div></body></html>';
@@ -1066,8 +1206,13 @@ const MessageEditorDialog = ({
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Select a template</option>
+                      {/* HTML Templates from templates folder */}
                       {templates.map(t => (
                         <option key={t.name} value={t.name}>{t.name}</option>
+                      ))}
+                      {/* Keyword Templates from Keywords sheet (e.g., Adobe PSD, Adobe AEP) */}
+                      {keywords?.messages?.template?.map(t => (
+                        <option key={`kw-${t}`} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
@@ -1191,8 +1336,20 @@ const MessageEditorDialog = ({
 
                   {/* Content Fields */}
                   <div className={isWide ? 'w-full space-y-4' : 'w-[60%] space-y-4'}>
-                    {/* Warning about synced fields */}
-                    {syncedMessages.length > 0 && (
+                    {/* Notice for non-HTML templates */}
+                    {isNonHtmlTemplate && (
+                      <div className="bg-blue-50 border border-blue-300 rounded p-3 mb-4">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
+                          <div className="text-sm text-blue-800">
+                            <p className="font-semibold">Non-HTML Template: {editingMessage?.template}</p>
+                            <p>Content fields are disabled for this template type. Use external tools (e.g., Adobe Photoshop, After Effects) to edit the creative.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Warning about synced fields - only show for HTML templates */}
+                    {!isNonHtmlTemplate && syncedMessages.length > 0 && (
                       <div className="bg-yellow-50 border border-yellow-300 rounded p-3">
                         <div className="flex items-start gap-2">
                           <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={16} />
@@ -1219,6 +1376,7 @@ const MessageEditorDialog = ({
                       </div>
                     )}
 
+                    <div className={isNonHtmlTemplate ? 'opacity-50 pointer-events-none' : ''}>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Template Variant Classes
@@ -1385,6 +1543,7 @@ const MessageEditorDialog = ({
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
+                    </div>{/* End of disabled wrapper for non-HTML templates */}
                   </div>
 
                   {/* Right Column - Preview (40%) for narrow sizes */}
@@ -1575,6 +1734,19 @@ const MessageEditorDialog = ({
 
                   {/* Style Fields */}
                   <div className={isWide ? 'w-full space-y-4' : 'w-[60%] space-y-4'}>
+                    {/* Notice for non-HTML templates */}
+                    {isNonHtmlTemplate && (
+                      <div className="bg-blue-50 border border-blue-300 rounded p-3 mb-4">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
+                          <div className="text-sm text-blue-800">
+                            <p className="font-semibold">Non-HTML Template: {editingMessage?.template}</p>
+                            <p>Style fields are disabled for this template type.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className={isNonHtmlTemplate ? 'opacity-50 pointer-events-none space-y-4' : 'space-y-4'}>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Headline Style</label>
                       <input
@@ -1660,6 +1832,7 @@ const MessageEditorDialog = ({
 }"
                       />
                     </div>
+                    </div>{/* End of disabled wrapper for non-HTML templates */}
                   </div>
 
                   {/* Right Column - Preview (40%) for narrow sizes */}

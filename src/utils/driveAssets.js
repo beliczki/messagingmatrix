@@ -355,14 +355,228 @@ export const parseAssetFilename = (filename) => {
 };
 
 /**
+ * Helper to get nested keywords from dot notation path
+ * e.g., "creatives.product" -> keywords.creatives.product
+ * @param {Object} keywords - Keywords object
+ * @param {string} path - Dot notation path
+ * @returns {Array|null} - Array of keywords or null
+ */
+const getNestedKeywords = (keywords, path) => {
+  if (!path || !keywords) return null;
+  const parts = path.split('.');
+  let current = keywords;
+  for (const part of parts) {
+    if (!current || !current[part]) return null;
+    current = current[part];
+  }
+  return Array.isArray(current) ? current : null;
+};
+
+/**
+ * Apply a single parsing rule to extract a field value
+ * @param {Array} segments - Filename segments (split by _)
+ * @param {Object} rule - Parsing rule configuration
+ * @param {Object} keywords - Keywords for matching
+ * @param {string} extension - File extension
+ * @param {Set} usedIndices - Set of already-used segment indices (for 'remaining' rule)
+ * @returns {string|{value: string, index: number}} - Extracted value (or object with index for tracking)
+ */
+const applyParsingRule = (segments, rule, keywords, extension, usedIndices = new Set()) => {
+  if (!rule) return '';
+
+  switch (rule.rule) {
+    case 'fixed':
+      return rule.value || '';
+
+    case 'segment':
+      return segments[rule.index] || '';
+
+    case 'after_segment': {
+      // Find segment with afterValue and return next segment
+      const idx = segments.findIndex(s => s.toUpperCase() === (rule.afterValue || '').toUpperCase());
+      if (idx >= 0 && idx < segments.length - 1) {
+        const nextSegment = segments[idx + 1];
+        // Optionally match against keywords
+        if (rule.matchKeywords && keywords) {
+          const keywordList = getNestedKeywords(keywords, rule.keywordsCategory);
+          if (keywordList) {
+            // Check if next segment matches any keyword (case insensitive)
+            const matched = keywordList.find(k => k.toUpperCase() === nextSegment.toUpperCase());
+            if (matched) return matched;
+          }
+        }
+        return nextSegment;
+      }
+      return '';
+    }
+
+    case 'after_pattern': {
+      // Find segment matching pattern and return the NEXT segment
+      const regex = new RegExp(rule.pattern);
+      for (let i = 0; i < segments.length - 1; i++) {
+        if (regex.test(segments[i])) {
+          return segments[i + 1];
+        }
+      }
+      return '';
+    }
+
+    case 'last_segment': {
+      // Get the last segment and optionally validate with pattern
+      const lastSegment = segments[segments.length - 1] || '';
+      if (rule.pattern) {
+        const regex = new RegExp(rule.pattern);
+        const match = lastSegment.match(regex);
+        if (match) {
+          return rule.extractGroup !== undefined ? (match[rule.extractGroup] || match[0]) : match[0];
+        }
+      }
+      return lastSegment;
+    }
+
+    case 'pattern': {
+      const regex = new RegExp(rule.pattern);
+      // Search all segments for match
+      for (const segment of segments) {
+        const match = segment.match(regex);
+        if (match) {
+          return rule.extractGroup !== undefined ? (match[rule.extractGroup] || '') : match[0];
+        }
+      }
+      return '';
+    }
+
+    case 'remaining': {
+      // Collect all segments that weren't matched by other rules
+      // This should be processed LAST after all other rules have marked their used indices
+      const remaining = [];
+      for (let i = 0; i < segments.length; i++) {
+        if (!usedIndices.has(i)) {
+          remaining.push(segments[i]);
+        }
+      }
+      return remaining.join('_');
+    }
+
+    case 'extension_type': {
+      // Return "video" for video extensions, "image" otherwise
+      const videoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+      return videoExtensions.includes(extension?.toLowerCase()) ? 'video' : 'image';
+    }
+
+    case 'empty':
+      // Explicitly return empty string
+      return '';
+
+    default:
+      return '';
+  }
+};
+
+/**
+ * Parse creative filename using configurable rules
+ * @param {string} filename - Full filename
+ * @param {Object} parsingRules - Rules from settings.getCreativeParsingRules()
+ * @param {Object} keywords - Keywords from matrixData.keywords for product matching
+ * @returns {Object} - Parsed metadata
+ */
+export const parseCreativeFilename = (filename, parsingRules, keywords = {}) => {
+  // Remove extension
+  const parts = filename.split('.');
+  const extension = parts.pop();
+  const nameWithoutExt = parts.join('.');
+
+  // Split by underscore
+  const segments = nameWithoutExt.split('_');
+
+  const metadata = {
+    File_format: extension,
+    File_name: filename
+  };
+
+  // Track which segment indices are used
+  const usedIndices = new Set();
+
+  // Helper to mark segment index as used based on rule type and value
+  const markUsedIndex = (rule, value) => {
+    if (!rule || !value) return;
+
+    switch (rule.rule) {
+      case 'segment':
+        usedIndices.add(rule.index);
+        break;
+
+      case 'after_segment': {
+        const idx = segments.findIndex(s => s.toUpperCase() === (rule.afterValue || '').toUpperCase());
+        if (idx >= 0) {
+          usedIndices.add(idx); // Mark the "afterValue" segment
+          usedIndices.add(idx + 1); // Mark the next segment (the value)
+        }
+        break;
+      }
+
+      case 'after_pattern': {
+        const regex = new RegExp(rule.pattern);
+        for (let i = 0; i < segments.length - 1; i++) {
+          if (regex.test(segments[i])) {
+            usedIndices.add(i); // Mark the pattern segment
+            usedIndices.add(i + 1); // Mark the next segment (the value)
+            break;
+          }
+        }
+        break;
+      }
+
+      case 'last_segment':
+        usedIndices.add(segments.length - 1);
+        break;
+
+      case 'pattern': {
+        const regex = new RegExp(rule.pattern);
+        for (let i = 0; i < segments.length; i++) {
+          if (regex.test(segments[i])) {
+            usedIndices.add(i);
+            break;
+          }
+        }
+        break;
+      }
+    }
+  };
+
+  // Process each rule (except 'remaining' which must be last)
+  if (parsingRules) {
+    // First pass: process all non-remaining rules
+    Object.entries(parsingRules).forEach(([fieldName, rule]) => {
+      if (rule?.rule === 'remaining') return; // Skip for now
+      const value = applyParsingRule(segments, rule, keywords, extension, usedIndices);
+      metadata[fieldName] = value;
+      // Debug Type and Visual_keyword specifically
+      if (fieldName === 'Type' || fieldName === 'Visual_keyword') {
+        console.log(`🔍 parseCreativeFilename: ${fieldName} rule=${rule?.rule}, value="${value}", extension="${extension}"`);
+      }
+      markUsedIndex(rule, value);
+    });
+
+    // Second pass: process 'remaining' rules with the usedIndices set
+    Object.entries(parsingRules).forEach(([fieldName, rule]) => {
+      if (rule?.rule !== 'remaining') return;
+      metadata[fieldName] = applyParsingRule(segments, rule, keywords, extension, usedIndices);
+    });
+  }
+
+  return metadata;
+};
+
+/**
  * Parse Drive file to asset data structure
  * Creates structured asset data from Drive file metadata
  * @param {Object} driveFile - Drive file object from API
+ * @param {Object} parsingRules - Optional parsing rules from settings
+ * @param {Object} keywords - Optional keywords for product matching
  * @returns {Object} - Structured asset data
  */
-export const parseDriveAssetData = (driveFile) => {
-  const metadata = parseAssetFilename(driveFile.name);
-
+export const parseDriveAssetData = (driveFile, parsingRules = null, keywords = null) => {
   // Use proxy endpoint to serve Drive files through our backend
   const imageUrl = `/api/drive/proxy/${driveFile.id}`;
   const directLink = driveFile.webContentLink || `https://drive.google.com/uc?export=view&id=${driveFile.id}`;
@@ -383,21 +597,61 @@ export const parseDriveAssetData = (driveFile) => {
     });
   }
 
-  return {
+  // Use configurable parser if rules provided, otherwise fall back to legacy parser
+  let parsedData;
+  console.log(`🔧 parseDriveAssetData called for ${driveFile.name} with parsingRules:`, parsingRules ? `${Object.keys(parsingRules).length} rules (${Object.keys(parsingRules).join(', ')})` : 'null');
+  if (parsingRules && Object.keys(parsingRules).length > 0) {
+    // Use configurable parser
+    parsedData = parseCreativeFilename(driveFile.name, parsingRules, keywords || {});
+    console.log(`🔧 Parsed ${driveFile.name} with configurable parser:`, parsedData);
+  } else {
+    console.warn(`⚠️ Using LEGACY parser for ${driveFile.name} - no parsing rules provided!`);
+    // Fall back to legacy parser for backwards compatibility
+    const legacyMetadata = parseAssetFilename(driveFile.name);
+    parsedData = {
+      Brand: legacyMetadata.brand,
+      Product: legacyMetadata.product,
+      Type: legacyMetadata.type,
+      Visual_keyword: legacyMetadata.visualKeyword,
+      Visual_description: legacyMetadata.visualDescription,
+      Placeholder_name: legacyMetadata.placeholderName,
+      Version: legacyMetadata.version,
+      File_format: legacyMetadata.format,
+      File_name: driveFile.name
+    };
+  }
+
+  // Build result object merging parsed data with Drive file metadata
+  const result = {
+    // ID fields
     ID: driveFile.id,
-    Brand: metadata.brand,
-    Product: metadata.product,
-    Type: metadata.type,
-    Visual_keyword: metadata.visualKeyword,
-    Visual_description: metadata.visualDescription,
-    Placeholder_name: metadata.placeholderName,
-    Version: metadata.version,
-    Format: metadata.format,
+    File_driveID: driveFile.id,
+
+    // Parsed fields from filename (will be overwritten by parsedData)
+    Brand: '',
+    Product: '',
+    Type: '',
+    Visual_keyword: '',
+    Visual_description: '',
+    MC_Number: '',
+    MC_Variant: '',
+    Version: '',
+
+    // File metadata from Drive
+    File_format: parsedData.File_format || '',
     File_name: driveFile.name,
+    File_size: formatFileSize(parseInt(driveFile.size)),
     File_date: driveFile.modifiedTime || driveFile.createdTime,
-    File_dimensions: fileDimensions, // Actual dimensions from file properties
+    File_dimensions: fileDimensions, // From actual file properties (more accurate)
     File_DirectLink: directLink,
-    File_DriveID: driveFile.id,
+    File_thumbnail: driveFile.thumbnail || imageUrl,
+    Is_Dynamic: driveFile.mimeType?.includes('video') ? 'TRUE' : 'FALSE',
+
+    // Spread parsed data to fill in configured fields
+    ...parsedData,
+
+    // Override File_dimensions with actual dimensions if available (more accurate than filename)
+    File_dimensions: fileDimensions || parsedData.File_dimensions || '',
 
     // Additional fields for UI compatibility
     id: driveFile.id,
@@ -405,15 +659,17 @@ export const parseDriveAssetData = (driveFile) => {
     filename: driveFile.name,
     url: imageUrl, // Use proxy URL for display
     thumbnail: driveFile.thumbnail || imageUrl,
-    extension: metadata.format,
+    extension: parsedData.File_format || '',
     size: formatFileSize(parseInt(driveFile.size)),
     date: formatDate(driveFile.modifiedTime || driveFile.createdTime),
-    brand: metadata.brand,
-    product: metadata.product,
-    type: metadata.type,
-    variant: metadata.version,
+    brand: parsedData.Brand || '',
+    product: parsedData.Product || '',
+    type: parsedData.Type || '',
+    variant: parsedData.Version || '',
     platforms: [],
     tags: [],
     source: 'drive'
   };
+
+  return result;
 };

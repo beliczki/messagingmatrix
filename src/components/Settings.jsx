@@ -101,6 +101,8 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [audienceStructure, setAudienceStructure] = useState('');
   const [topicStructure, setTopicStructure] = useState('');
   const [messagesStructure, setMessagesStructure] = useState('');
+  const [creativeStructure, setCreativeStructure] = useState('');
+  const [creativeParsingRules, setCreativeParsingRules] = useState({});
 
   useEffect(() => {
     loadConfig();
@@ -147,6 +149,23 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         setAudienceStructure(allConfig.audienceStructure || '');
         setTopicStructure(allConfig.topicStructure || '');
         setMessagesStructure(allConfig.messagesStructure || '');
+        setCreativeStructure(allConfig.creativeStructure || '');
+        // Initialize with default parsing rules if not configured
+        // Example filename: ERSTE_SZK_MC171_b_calculator_mockup_lakasfelujitas_n3_1200x628.png
+        const defaultParsingRules = {
+          Brand: { rule: 'fixed', value: 'ERSTE' },
+          Product: { rule: 'after_segment', afterValue: 'ERSTE', matchKeywords: false },
+          Type: { rule: 'extension_type' },
+          Visual_keyword: { rule: 'empty' },
+          MC_Number: { rule: 'pattern', pattern: 'MC(\\d+)', extractGroup: 1 },
+          MC_Variant: { rule: 'after_pattern', pattern: '^MC\\d+$' },
+          Version: { rule: 'pattern', pattern: '[nv](\\d+)', extractGroup: 1 },
+          File_dimensions: { rule: 'last_segment', pattern: '(\\d+)x(\\d+)' },
+          Visual_description: { rule: 'remaining' }
+        };
+        setCreativeParsingRules(allConfig.creativeParsingRules && Object.keys(allConfig.creativeParsingRules).length > 0
+          ? allConfig.creativeParsingRules
+          : defaultParsingRules);
       }
     } catch (error) {
       console.error('Error loading config:', error);
@@ -210,7 +229,9 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         emailAccount,
         audienceStructure,
         topicStructure,
-        messagesStructure
+        messagesStructure,
+        creativeStructure,
+        creativeParsingRules
       });
 
       if (!sqliteConfigResponse.ok) {
@@ -1121,6 +1142,267 @@ Guidelines for creating instructions:
                 <p className="text-xs text-gray-500 mt-1">
                   Comma-separated column names for the Messages sheet structure
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Creative Structure
+                </label>
+                <textarea
+                  value={creativeStructure}
+                  onChange={(e) => setCreativeStructure(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  rows="2"
+                  placeholder="ID,Brand,Product,Type,Visual_keyword,Visual_description,MC_Number,MC_Variant,Version,File_format,File_driveID,File_name,File_size,File_date,File_dimensions,File_DirectLink,File_thumbnail,Is_Dynamic"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Comma-separated column names for the Creatives sheet structure
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Creative Filename Parsing Rules */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Creative Filename Parsing Rules</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Configure how creative filenames are parsed. Filenames are split by underscore (_).
+              <br />
+              <span className="font-mono text-xs">Example: ERSTE_SZK_MC171_b_calculator_mockup_lakasfelujitas_n3_1200x628.png</span>
+              <br />
+              <span className="text-xs text-gray-500">Brand=ERSTE, Product=SZK, Type=image, Visual_keyword=(empty), MC_Number=171, MC_Variant=b, Version=3, Dimensions=1200x628, Visual_description=calculator_mockup_lakasfelujitas</span>
+            </p>
+            <div className="space-y-4">
+              {/* Brand Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Brand</label>
+                <select
+                  value={creativeParsingRules.Brand?.rule || 'fixed'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Brand: { ...creativeParsingRules.Brand, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="fixed">Fixed Value</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <input
+                  type="text"
+                  value={creativeParsingRules.Brand?.value || 'ERSTE'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Brand: { ...creativeParsingRules.Brand, value: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  placeholder="ERSTE"
+                />
+              </div>
+
+              {/* Product Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Product</label>
+                <select
+                  value={creativeParsingRules.Product?.rule || 'after_segment'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Product: { ...creativeParsingRules.Product, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="after_segment">After Segment</option>
+                  <option value="segment">Segment Index</option>
+                  <option value="pattern">Regex Pattern</option>
+                </select>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={creativeParsingRules.Product?.afterValue || 'ERSTE'}
+                    onChange={(e) => setCreativeParsingRules({
+                      ...creativeParsingRules,
+                      Product: { ...creativeParsingRules.Product, afterValue: e.target.value }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                    placeholder="After value (e.g., ERSTE)"
+                  />
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={creativeParsingRules.Product?.matchKeywords || false}
+                      onChange={(e) => setCreativeParsingRules({
+                        ...creativeParsingRules,
+                        Product: { ...creativeParsingRules.Product, matchKeywords: e.target.checked }
+                      })}
+                      className="rounded"
+                    />
+                    Match against Keywords
+                  </label>
+                </div>
+              </div>
+
+              {/* Type Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Type</label>
+                <select
+                  value={creativeParsingRules.Type?.rule || 'extension_type'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Type: { ...creativeParsingRules.Type, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="extension_type">Based on Extension (image/video)</option>
+                  <option value="fixed">Fixed Value</option>
+                  <option value="pattern">Regex Pattern</option>
+                </select>
+                <div className="text-xs text-gray-500 pt-2">
+                  Returns "video" for mp4, "image" otherwise
+                </div>
+              </div>
+
+              {/* Visual_keyword Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Visual_keyword</label>
+                <select
+                  value={creativeParsingRules.Visual_keyword?.rule || 'empty'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Visual_keyword: { ...creativeParsingRules.Visual_keyword, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="empty">Empty (leave blank)</option>
+                  <option value="pattern">Regex Pattern</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <div className="text-xs text-gray-500 pt-2">
+                  Leave empty unless you have a specific keyword pattern
+                </div>
+              </div>
+
+              {/* Dimensions Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Dimensions</label>
+                <select
+                  value={creativeParsingRules.File_dimensions?.rule || 'last_segment'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    File_dimensions: { ...creativeParsingRules.File_dimensions, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="last_segment">Last Segment</option>
+                  <option value="pattern">Regex Pattern</option>
+                </select>
+                <input
+                  type="text"
+                  value={creativeParsingRules.File_dimensions?.pattern || '(\\d+)x(\\d+)'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    File_dimensions: { ...creativeParsingRules.File_dimensions, pattern: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  placeholder="(\d+)x(\d+)"
+                />
+              </div>
+
+              {/* MC_Number Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">MC_Number</label>
+                <select
+                  value={creativeParsingRules.MC_Number?.rule || 'pattern'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    MC_Number: { ...creativeParsingRules.MC_Number, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="pattern">Regex Pattern</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <input
+                  type="text"
+                  value={creativeParsingRules.MC_Number?.pattern || 'MC(\\d+)'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    MC_Number: { ...creativeParsingRules.MC_Number, pattern: e.target.value, extractGroup: 1 }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  placeholder="MC(\d+)"
+                />
+              </div>
+
+              {/* MC_Variant Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">MC_Variant</label>
+                <select
+                  value={creativeParsingRules.MC_Variant?.rule || 'after_pattern'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    MC_Variant: { ...creativeParsingRules.MC_Variant, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="after_pattern">After Pattern Match</option>
+                  <option value="pattern">Regex Pattern</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <input
+                  type="text"
+                  value={creativeParsingRules.MC_Variant?.pattern || '^MC\\d+$'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    MC_Variant: { ...creativeParsingRules.MC_Variant, pattern: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  placeholder="^MC\d+$ (segment after this pattern)"
+                />
+              </div>
+
+              {/* Version Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Version</label>
+                <select
+                  value={creativeParsingRules.Version?.rule || 'pattern'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Version: { ...creativeParsingRules.Version, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="pattern">Regex Pattern</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <input
+                  type="text"
+                  value={creativeParsingRules.Version?.pattern || '[nv](\\d+)'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Version: { ...creativeParsingRules.Version, pattern: e.target.value, extractGroup: 1 }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                  placeholder="[nv](\d+) - matches n3 or v3"
+                />
+              </div>
+
+              {/* Visual_description Rule */}
+              <div className="grid grid-cols-3 gap-4 items-start">
+                <label className="text-sm font-medium text-gray-700 pt-2">Visual_description</label>
+                <select
+                  value={creativeParsingRules.Visual_description?.rule || 'remaining'}
+                  onChange={(e) => setCreativeParsingRules({
+                    ...creativeParsingRules,
+                    Visual_description: { ...creativeParsingRules.Visual_description, rule: e.target.value }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="remaining">Remaining (unmatched segments)</option>
+                  <option value="pattern">Regex Pattern</option>
+                  <option value="segment">Segment Index</option>
+                </select>
+                <div className="text-xs text-gray-500 pt-2">
+                  Collects all segments not matched by other rules
+                </div>
               </div>
             </div>
           </div>

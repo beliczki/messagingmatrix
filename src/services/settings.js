@@ -182,6 +182,41 @@ class SettingsService {
   getMessagesStructure() {
     return this.settings?.messagesStructure || null;
   }
+
+  // Get creative structure (comma-separated column names)
+  // Returns default structure if not configured
+  getCreativeStructure() {
+    if (this.settings?.creativeStructure) {
+      return this.settings.creativeStructure;
+    }
+    // Return default structure matching the creative parsing rules
+    return 'ID,Brand,Product,Type,Visual_keyword,Visual_description,MC_Number,MC_Variant,Version,File_format,File_driveID,File_name,File_size,File_date,File_dimensions,File_DirectLink,File_thumbnail,Is_Dynamic';
+  }
+
+  // Get creative parsing rules (object with field rules)
+  // Returns default rules merged with any configured rules
+  getCreativeParsingRules() {
+    // Default parsing rules
+    // Example filename: ERSTE_SZK_MC171_b_calculator_mockup_lakasfelujitas_n3_1200x628.png
+    const defaults = {
+      Brand: { rule: 'fixed', value: 'ERSTE' },
+      Product: { rule: 'after_segment', afterValue: 'ERSTE', matchKeywords: false },
+      Type: { rule: 'extension_type' },
+      Visual_keyword: { rule: 'empty' },
+      MC_Number: { rule: 'pattern', pattern: 'MC(\\d+)', extractGroup: 1 },
+      MC_Variant: { rule: 'after_pattern', pattern: '^MC\\d+$' },
+      Version: { rule: 'pattern', pattern: '[nv](\\d+)', extractGroup: 1 },
+      File_dimensions: { rule: 'last_segment', pattern: '(\\d+)x(\\d+)' },
+      Visual_description: { rule: 'remaining' }
+    };
+
+    const configuredRules = this.settings?.creativeParsingRules;
+    if (configuredRules && Object.keys(configuredRules).length > 0) {
+      // Merge defaults with configured rules (configured takes precedence)
+      return { ...defaults, ...configuredRules };
+    }
+    return defaults;
+  }
 }
 
 export default new SettingsService();

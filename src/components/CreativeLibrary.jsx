@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiPost, authenticatedFetch } from '../utils/api';
-import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check } from 'lucide-react';
+import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check, FileText } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
@@ -13,6 +13,7 @@ import MediaLibraryBase from './MediaLibraryBase';
 import { processAssets } from '../utils/assetUtils';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
+import settings from '../services/settings';
 import templateHtmlRaw from '../templates/html/index.html?raw';
 import templateConfigUrl from '../templates/html/template.json?url';
 import mainCss from '../templates/html/main.css?raw';
@@ -195,8 +196,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       // Add new creatives with incremental IDs
       if (newCreatives.length > 0) {
         const maxId = Math.max(0, ...updatedCreatives.map(c => parseInt(c.ID) || 0));
+
+        // Ensure settings are loaded before getting parsing rules
+        await settings.ensureInitialized();
+
+        // Get parsing rules from settings
+        const parsingRules = settings.getCreativeParsingRules();
+        const keywords = matrixData.keywords || {};
+
+        console.log('🔧 Parsing new creatives with rules:', parsingRules);
+        console.log('🔧 Keywords available:', Object.keys(keywords));
+
         const parsedNewCreatives = newCreatives.map((file, index) => {
-          const parsedData = parseDriveAssetData(file);
+          // Pass parsing rules and keywords to get configurable parsing
+          const parsedData = parseDriveAssetData(file, parsingRules, keywords);
 
           // Check if this is an HTML creative
           const isHtml = parsedData.extension === 'html';
@@ -211,24 +224,15 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             }
           }
 
-          return {
+          // Build creative object - use parsed data directly since it now contains all configured fields
+          const creative = {
+            ...parsedData, // Include all parsed fields from configurable parser
             ID: maxId + index + 1,
-            Brand: parsedData.Brand || '',
-            Product: parsedData.Product || '',
-            Copy_keyword: '',
-            Visual_keyword: parsedData.Visual_keyword || '',
-            Template: '',
-            Version: parsedData.Version || '',
-            File_format: parsedData.extension || '',
-            File_driveID: file.id || '',
-            File_name: parsedData.filename || '',
-            File_size: parsedData.size || '',
-            File_date: parsedData.File_date || '',
+            File_driveID: file.id || parsedData.File_driveID || '',
             File_dimensions: parsedData.File_dimensions || (bannerSize ? `${bannerSize.width}x${bannerSize.height}` : ''),
-            File_DirectLink: parsedData.File_DirectLink || '',
-            File_thumbnail: parsedData.thumbnail || '',
-            Comment: ''
           };
+
+          return creative;
         });
 
         updatedCreatives = [...updatedCreatives, ...parsedNewCreatives];
@@ -253,6 +257,194 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       setSyncProgress({
         type: 'error',
         message: `Failed to sync with Google Drive:\n${err.message}`
+      });
+    } finally {
+      setLoadingDrive(false);
+    }
+  };
+
+  // Re-parse all creatives with current parsing rules
+  const reparseAllCreatives = async () => {
+    try {
+      setLoadingDrive(true);
+      setSyncProgress({ type: 'loading', message: 'Re-parsing all creatives with current rules...' });
+
+      // Ensure settings are loaded
+      await settings.ensureInitialized();
+
+      const parsingRules = settings.getCreativeParsingRules();
+      const keywords = matrixData.keywords || {};
+
+      console.log('🔧 Re-parsing all creatives with rules:', parsingRules);
+
+      const spreadsheetCreatives = matrixData?.creatives || [];
+      if (spreadsheetCreatives.length === 0) {
+        setSyncProgress({ type: 'error', message: 'No creatives found to re-parse.' });
+        setTimeout(() => setSyncProgress(null), 3000);
+        return;
+      }
+
+      // Re-parse each creative's filename
+      const reparsedCreatives = spreadsheetCreatives.map(creative => {
+        const filename = creative.File_name;
+        if (!filename) return creative;
+
+        // Parse filename with current rules
+        const parts = filename.split('.');
+        const extension = parts.pop();
+        const nameWithoutExt = parts.join('.');
+        const segments = nameWithoutExt.split('_');
+
+        // Track used segment indices for 'remaining' rule
+        const usedIndices = new Set();
+
+        // Helper to mark segment as used
+        const markUsed = (rule, value) => {
+          if (!rule || !value) return;
+          switch (rule.rule) {
+            case 'segment':
+              usedIndices.add(rule.index);
+              break;
+            case 'after_segment': {
+              const idx = segments.findIndex(s => s.toUpperCase() === (rule.afterValue || '').toUpperCase());
+              if (idx >= 0) { usedIndices.add(idx); usedIndices.add(idx + 1); }
+              break;
+            }
+            case 'after_pattern': {
+              const regex = new RegExp(rule.pattern);
+              for (let i = 0; i < segments.length - 1; i++) {
+                if (regex.test(segments[i])) { usedIndices.add(i); usedIndices.add(i + 1); break; }
+              }
+              break;
+            }
+            case 'last_segment':
+              usedIndices.add(segments.length - 1);
+              break;
+            case 'pattern': {
+              const regex = new RegExp(rule.pattern);
+              for (let i = 0; i < segments.length; i++) {
+                if (regex.test(segments[i])) { usedIndices.add(i); break; }
+              }
+              break;
+            }
+          }
+        };
+
+        // Apply parsing rules (non-remaining first)
+        const parsedFields = {};
+        if (parsingRules) {
+          Object.entries(parsingRules).forEach(([fieldName, rule]) => {
+            if (!rule || rule.rule === 'remaining') return;
+
+            let value = '';
+            switch (rule.rule) {
+              case 'fixed':
+                value = rule.value || '';
+                break;
+
+              case 'segment':
+                value = segments[rule.index] || '';
+                break;
+
+              case 'after_segment': {
+                const idx = segments.findIndex(s => s.toUpperCase() === (rule.afterValue || '').toUpperCase());
+                if (idx >= 0 && idx < segments.length - 1) {
+                  value = segments[idx + 1];
+                }
+                break;
+              }
+
+              case 'after_pattern': {
+                const regex = new RegExp(rule.pattern);
+                for (let i = 0; i < segments.length - 1; i++) {
+                  if (regex.test(segments[i])) {
+                    value = segments[i + 1];
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case 'last_segment': {
+                const lastSegment = segments[segments.length - 1] || '';
+                if (rule.pattern) {
+                  const regex = new RegExp(rule.pattern);
+                  const match = lastSegment.match(regex);
+                  if (match) {
+                    value = rule.extractGroup !== undefined ? (match[rule.extractGroup] || match[0]) : match[0];
+                  }
+                } else {
+                  value = lastSegment;
+                }
+                break;
+              }
+
+              case 'pattern': {
+                const regex = new RegExp(rule.pattern);
+                for (const segment of segments) {
+                  const match = segment.match(regex);
+                  if (match) {
+                    value = rule.extractGroup !== undefined ? (match[rule.extractGroup] || '') : match[0];
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case 'extension_type': {
+                // Return "video" for video extensions, "image" otherwise
+                const videoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+                value = videoExtensions.includes(extension?.toLowerCase()) ? 'video' : 'image';
+                break;
+              }
+
+              case 'empty':
+                // Explicitly return empty string
+                value = '';
+                break;
+            }
+            parsedFields[fieldName] = value;
+            markUsed(rule, value);
+          });
+
+          // Now process 'remaining' rules
+          Object.entries(parsingRules).forEach(([fieldName, rule]) => {
+            if (rule?.rule !== 'remaining') return;
+            const remaining = [];
+            for (let i = 0; i < segments.length; i++) {
+              if (!usedIndices.has(i)) remaining.push(segments[i]);
+            }
+            parsedFields[fieldName] = remaining.join('_');
+          });
+        }
+
+        console.log(`📝 Re-parsed ${filename}:`, parsedFields);
+
+        return {
+          ...creative,
+          ...parsedFields,
+          File_format: extension
+        };
+      });
+
+      // Update spreadsheet
+      matrixData.setCreatives(reparsedCreatives);
+
+      // Save to spreadsheet
+      await matrixData.save(null, null, null, reparsedCreatives);
+
+      setSyncProgress({
+        type: 'success',
+        message: `Successfully re-parsed ${reparsedCreatives.length} creatives with current parsing rules.`
+      });
+
+      setTimeout(() => setSyncProgress(null), 3000);
+
+    } catch (err) {
+      console.error('Re-parse error:', err);
+      setSyncProgress({
+        type: 'error',
+        message: `Failed to re-parse creatives:\n${err.message}`
       });
     } finally {
       setLoadingDrive(false);
@@ -811,6 +1003,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                   )}
                 </button>
               )}
+
+              {/* Re-parse All Button */}
+              <button
+                onClick={reparseAllCreatives}
+                className="p-2 text-white rounded hover:opacity-90 transition-opacity"
+                style={getButtonStyle(lookAndFeel)}
+                title="Re-parse all filenames with current rules"
+                disabled={loadingDrive}
+              >
+                <FileText size={20} />
+              </button>
 
               {/* Sync with Drive Button */}
               <button

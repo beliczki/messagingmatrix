@@ -910,7 +910,7 @@ const Matrix = ({
     setEditingTopic({
       id: newId,
       name: '',
-      key: `top${newOrder}`,
+      key: '',  // Will be auto-generated from pattern when tags are set
       order: newOrder,
       status: '',
       product: '',
@@ -1599,6 +1599,7 @@ const Matrix = ({
         handleGenerateContent={handleGenerateContent}
         selectedProducts={currentProducts}
         selectedStatuses={currentStatuses}
+        creatives={matrixData?.creatives || []}
       />
 
       {/* Audience Edit Dialog */}

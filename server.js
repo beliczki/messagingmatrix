@@ -569,6 +569,8 @@ app.post('/api/config', (req, res) => {
         else if (key === 'feedStructure') category = 'feed';
         else if (key === 'lookAndFeel') category = 'ui';
         else if (key.includes('imageBaseUrl')) category = 'assets';
+        else if (key.includes('Structure')) category = 'structure';
+        else if (key === 'creativeParsingRules') category = 'structure';
 
         stmt.run(key, jsonValue, category, null, new Date().toISOString());
       });
