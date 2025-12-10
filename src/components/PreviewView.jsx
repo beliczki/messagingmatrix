@@ -49,11 +49,13 @@ const PublicPreviewView = ({ previewId }) => {
   const [showOnlyCommented, setShowOnlyCommented] = useState(false);
   const [downloadingAdId, setDownloadingAdId] = useState(null);
 
-  // Load configuration
+  // Load configuration (use public endpoint - no auth required for share links)
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await apiGet('/api/config');
+        // Use relative URL in production, localhost in development
+        const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3003' : '');
+        const response = await fetch(`${API_URL}/api/config-basic`);
         if (response.ok) {
           const config = await response.json();
           setLookAndFeel(config.lookAndFeel);
