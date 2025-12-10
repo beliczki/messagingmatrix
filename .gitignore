@@ -41,3 +41,6 @@ db/*.db-shm
 db/*.db-wal
 cache/drive/*
 !cache/drive/.gitkeep
+
+# Server config
+nginx-*.conf

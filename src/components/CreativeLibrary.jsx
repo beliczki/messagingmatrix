@@ -509,9 +509,12 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       };
     }).filter(Boolean); // Remove null entries (creatives with invalid URLs)
 
-    // Generate dynamic message creatives for ALL messages if matrixData is available
+    // Generate dynamic message creatives for messages with HTML templates only
     if (matrixData?.messages && matrixData.messages.length > 0) {
       const activeMessages = matrixData.messages.filter(m => m.status !== 'deleted');
+
+      // Get non-HTML template names from keywords (e.g., Adobe PSD, Adobe AEP)
+      const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
 
       if (activeMessages.length > 0) {
         // Deduplicate messages by number+variant combination
@@ -528,8 +531,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
         const allMessageCreatives = [];
 
-        // Create creatives for each unique message
+        // Create creatives for each unique message that uses an HTML template
         uniqueMessages.forEach(message => {
+          // Skip messages with non-HTML templates (Adobe PSD, Adobe AEP, etc.)
+          if (message.template && nonHtmlTemplates.includes(message.template)) {
+            return; // Skip - this message uses a non-HTML template
+          }
+
           // Look up product from audiences based on message.audience
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
           const product = audience?.product || message.name || `Message ${message.number}`;
