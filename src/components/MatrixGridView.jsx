@@ -9,6 +9,7 @@ const MatrixGridView = ({
   displayMode,
   audienceFilter,
   topicFilter,
+  mcFilter,
   filteredAudiences,
   filteredTopics,
   lookAndFeel,
@@ -22,6 +23,7 @@ const MatrixGridView = ({
   onPanEnd,
   onAudienceFilterChange,
   onTopicFilterChange,
+  onMcFilterChange,
   onEditAudience,
   onAddAudience,
   onEditTopic,
@@ -43,6 +45,86 @@ const MatrixGridView = ({
   onMessageMouseDown,
   onMessageMouseUp
 }) => {
+  // Helper function to filter messages by status and MC filter
+  const filterMessages = (messages) => {
+    let filtered = messages;
+
+    // Apply status filter
+    if (statusFilters.length > 0) {
+      filtered = filtered.filter(msg => {
+        const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+        return statusFilters.includes(msgStatus);
+      });
+    }
+
+    // Apply MC filter
+    if (mcFilter && mcFilter.trim()) {
+      const filterLower = mcFilter.trim().toLowerCase();
+      filtered = filtered.filter(msg => {
+        const msgNumber = String(msg.number || '').toLowerCase();
+        const msgVariant = String(msg.variant || '').toLowerCase();
+        const numberVariant = msgNumber + msgVariant;
+        const mcNumberVariant = 'mc' + numberVariant;
+
+        // Basic MC identifier matching
+        if (msgNumber.includes(filterLower) ||
+            msgVariant.includes(filterLower) ||
+            numberVariant.includes(filterLower) ||
+            mcNumberVariant.includes(filterLower) ||
+            filterLower.includes(msgNumber) ||
+            filterLower.includes(numberVariant)) {
+          return true;
+        }
+
+        // Search in name
+        if (msg.name && msg.name.toLowerCase().includes(filterLower)) return true;
+
+        // Search in images (image1-6)
+        for (let i = 1; i <= 6; i++) {
+          const imgField = msg['image' + i];
+          if (imgField && imgField.toLowerCase().includes(filterLower)) return true;
+        }
+
+        // Search in video, headline, copy texts, CTA, disclaimer, sticker, template, variant class
+        if (msg.video1 && msg.video1.toLowerCase().includes(filterLower)) return true;
+        if (msg.headline && msg.headline.toLowerCase().includes(filterLower)) return true;
+        if (msg.copy1 && msg.copy1.toLowerCase().includes(filterLower)) return true;
+        if (msg.copy2 && msg.copy2.toLowerCase().includes(filterLower)) return true;
+        if (msg.cta && msg.cta.toLowerCase().includes(filterLower)) return true;
+        if (msg.disclaimer && msg.disclaimer.toLowerCase().includes(filterLower)) return true;
+        if (msg.sticker && msg.sticker.toLowerCase().includes(filterLower)) return true;
+        if (msg.template && msg.template.toLowerCase().includes(filterLower)) return true;
+        if (msg.template_variant_class && msg.template_variant_class.toLowerCase().includes(filterLower)) return true;
+
+        return false;
+      });
+    }
+
+    return filtered;
+  };
+
+  // When MC filter is active, filter out empty rows and columns
+  let visibleAudiences = filteredAudiences;
+  let visibleTopics = filteredTopics;
+
+  if (mcFilter && mcFilter.trim()) {
+    // Find audiences that have at least one visible message
+    visibleAudiences = filteredAudiences.filter(aud => {
+      return filteredTopics.some(topic => {
+        const msgs = getMessages(topic.key, aud.key);
+        return filterMessages(msgs).length > 0;
+      });
+    });
+
+    // Find topics that have at least one visible message
+    visibleTopics = filteredTopics.filter(topic => {
+      return filteredAudiences.some(aud => {
+        const msgs = getMessages(topic.key, aud.key);
+        return filterMessages(msgs).length > 0;
+      });
+    });
+  }
+
   return (
     <div
       ref={matrixContainerRef}
@@ -83,9 +165,16 @@ const MatrixGridView = ({
                     placeholder="Filter Topics"
                     className="w-full px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <input
+                    type="text"
+                    value={mcFilter}
+                    onChange={(e) => onMcFilterChange(e.target.value)}
+                    placeholder="Search MC, name, images, text..."
+                    className="w-full px-2 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
                 </div>
               </th>
-              {filteredAudiences.map((aud) => {
+              {visibleAudiences.map((aud) => {
                 const colors = getStatusColors(aud.status);
                 const strategyPrefix = aud.strategy ? aud.strategy.substring(0, 3).toUpperCase() : '';
                 return (
@@ -135,7 +224,7 @@ const MatrixGridView = ({
           </thead>
 
           <tbody>
-            {filteredTopics.map((topic) => {
+            {visibleTopics.map((topic) => {
               const colors = getStatusColors(topic.status);
               return (
                 <tr key={topic.key}>
@@ -164,16 +253,11 @@ const MatrixGridView = ({
                     </div>
                   </td>
 
-                  {filteredAudiences.map((aud) => {
+                  {visibleAudiences.map((aud) => {
                     const allCellMsgs = getMessages(topic.key, aud.key);
 
-                    // Filter messages by status if any status filters are selected
-                    const cellMsgs = statusFilters.length === 0
-                      ? allCellMsgs
-                      : allCellMsgs.filter(msg => {
-                          const msgStatus = (msg.status || 'PLANNED').toUpperCase();
-                          return statusFilters.includes(msgStatus);
-                        });
+                    // Filter messages using the shared filter function
+                    const cellMsgs = filterMessages(allCellMsgs);
 
                     // Check if this cell is the drag hover target
                     const isHoverCell = dragHoverCell && dragHoverCell.topic === topic.key && dragHoverCell.audience === aud.key;
@@ -359,7 +443,7 @@ const MatrixGridView = ({
                   </button>
                 )}
               </td>
-              {filteredAudiences.map((aud) => (
+              {visibleAudiences.map((aud) => (
                 <td key={aud.key} className="border border-gray-300"></td>
               ))}
               <td className="border border-gray-300"></td>

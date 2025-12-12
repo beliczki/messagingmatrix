@@ -77,29 +77,29 @@
         <div id="adContainer" class="template_variant_class {{template_variant_class}}">
           <div id="backgroundContainer">
             <div id="imageWrapper">
-              <div style="background-image:url('empty.png')" class="background_image_1" data-src="{{background_image_1}}"></div>
+              <div style="background-image:url('empty.png')" class="background_image_1" data-placeholder="{{background_image_1}}"></div>
             </div>
             <div id="videoWrapper">
               <video autoplay muted playsinline loop crossorigin="anonymous">
-                <source src="" data-src="{{background_video_1}}" type="video/mp4" class="background_video_1"></video>
+                <source src="" data-placeholder="{{background_video_1}}" type="video/mp4" class="background_video_1"></video>
             </div>
           </div>
           <main>
             <div id="objectWrapper">
-              <div style="background-image:url('empty.png')" class="background_image_2" data-src="{{background_image_2}}"></div>
+              <div style="background-image:url('empty.png')" class="background_image_2" data-placeholder="{{background_image_2}}"></div>
             </div>
             <div id="textContainer">
               <div id="stickerContainer">
                 <div class="stickerTextWrapper">
-                  <p class="sticker_text_1 sticker_style_1" style="{{sticker_style_1}}" data-src="{{sticker_text_1}}">{{sticker_text_1}}</p>
+                  <p class="sticker_text_1 sticker_style_1" style="{{sticker_style_1}}">{{sticker_text_1}}</p>
                 </div>
                 <div class="stickerImageWrapper">
-                  <div style="background-image:url('empty.png')" class="sticker_image_1" data-src="{{sticker_image_1}}"></div>
+                  <div style="background-image:url('empty.png')" class="sticker_image_1" data-placeholder="{{sticker_image_1}}"></div>
                 </div>
               </div>
               <div id="cardContainer">
                 <div class="cardImageWrapper">
-                  <div style="background-image:url('empty.png')" class="background_image_3" data-src="{{background_image_3}}"></div>
+                  <div style="background-image:url('empty.png')" class="background_image_3" data-placeholder="{{background_image_3}}"></div>
                 </div>
               </div>
               <div id="headlineWrapper">
@@ -122,7 +122,7 @@
           <div id="frameContainer"></div>
           <div id="logoContainer">
             <div id="logoWrapper">
-              <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" data-src="{{brand_image_1}}" class="logo logo_image_1 brand_image_1"/>
+              <img src="empty.png" data-placeholder="{{brand_image_1}}" class="logo logo_image_1 brand_image_1"/>
             </div>
           </div>
         </div>
@@ -155,6 +155,7 @@
     // Preloader state - will be started after content replacement
     var preloaderStarted = false;
     var savedClasses = [];
+    var hasAnimatedClass = false;
     var adContainer = document.getElementById('adContainer');
 
     // Save template variant classes immediately (before any modifications)
@@ -162,12 +163,18 @@
       var classList = Array.prototype.slice.call(adContainer.classList);
       classList.forEach(function(cls) {
         if (cls !== 'template_variant_class') {
-          savedClasses.push(cls);
+          // Check for "animated" class - will be added back after preloader
+          if (cls === 'animated') {
+            hasAnimatedClass = true;
+            console.log('Found "animated" class - will apply after preloader completes');
+          } else {
+            savedClasses.push(cls);
+          }
         }
       });
       // Remove classes until preload complete (prevents animations from starting)
       adContainer.className = 'template_variant_class';
-      console.log('Saved classes:', savedClasses.join(', '));
+      console.log('Saved classes:', savedClasses.join(', '), hasAnimatedClass ? '(+ animated deferred)' : '');
     }
 
     // Set body size class
@@ -199,20 +206,20 @@
       }
     }
 
-    // Apply data-src attributes directly to elements (for local preview)
+    // Apply data-placeholder attributes directly to elements (for local preview)
     function applyDataAttributes() {
       console.log('🔄 applyDataAttributes() called');
 
-      // Apply data-src to images (background-image and img src)
-      var srcElements = document.querySelectorAll('[data-src]');
-      console.log('Found', srcElements.length, 'elements with data-src');
+      // Apply data-placeholder to images (background-image and img src)
+      var srcElements = document.querySelectorAll('[data-placeholder]');
+      console.log('Found', srcElements.length, 'elements with data-placeholder');
 
       for (var i = 0; i < srcElements.length; i++) {
         var el = srcElements[i];
-        var dataSrc = el.getAttribute('data-src');
+        var dataSrc = el.getAttribute('data-placeholder');
         var className = el.className || el.tagName;
 
-        console.log('Element', i, ':', className, '-> data-src =', dataSrc ? dataSrc.substring(0, 60) : 'null');
+        console.log('Element', i, ':', className, '-> data-placeholder =', dataSrc ? dataSrc.substring(0, 60) : 'null');
 
         // Skip if still a placeholder or empty
         if (!dataSrc || dataSrc.indexOf('{{') !== -1) {
@@ -264,13 +271,13 @@
         values[meta.name] = meta.content;
       }
 
-      // Get from data-src attributes (images)
-      var srcElements = document.querySelectorAll('[data-src]');
+      // Get from data-placeholder attributes (images)
+      var srcElements = document.querySelectorAll('[data-placeholder]');
       for (var i = 0; i < srcElements.length; i++) {
         var el = srcElements[i];
         var classList = el.className || '';
         var fieldName = findKnownField(classList, knownImageFields);
-        var dataSrc = el.getAttribute('data-src');
+        var dataSrc = el.getAttribute('data-placeholder');
         if (fieldName && dataSrc && dataSrc.indexOf('{{') === -1) {
           values[fieldName] = dataSrc;
         }
@@ -322,49 +329,12 @@
       }
 
       // 6. Handle sticker mode for local preview (CSS visibility control)
-      // In AdForm context, this is handled in replaceContent()
-      if (!isAdformContext) {
-        updateStickerMode();
-      }
 
       // 7. Start preloader image tracking (now that real URLs are in place)
       startPreloaderTracking();
     }
 
-    // Update sticker data-src attribute based on content (for CSS visibility control)
-    function updateStickerMode() {
-      var stickerTextEl = document.querySelector('.sticker_text_1');
-      var stickerImageEl = document.querySelector('.sticker_image_1');
-
-      if (!stickerTextEl) return;
-
-      // Get current data-src value (populated by React)
-      var dataSrc = stickerTextEl.getAttribute('data-src') || '';
-      var stickerText = stickerTextEl.textContent || '';
-      var stickerImageSrc = stickerImageEl ? (stickerImageEl.getAttribute('data-src') || stickerImageEl.style.backgroundImage || '') : '';
-
-      // Clean up placeholders
-      if (dataSrc.indexOf('{{') !== -1) dataSrc = '';
-      if (stickerImageSrc.indexOf('{{') !== -1) stickerImageSrc = '';
-
-      // Check if we have an actual sticker image
-      var hasImage = stickerImageSrc && stickerImageSrc.indexOf('empty.png') === -1 && stickerImageSrc.length > 0;
-      var hasText = stickerText && stickerText.trim().length > 0;
-
-      if (hasImage) {
-        stickerTextEl.setAttribute('data-src', 'image');
-        console.log('Sticker mode (local): image');
-      } else if (hasText) {
-        // Keep the text in data-src (already set by React if it was populated)
-        if (!dataSrc || dataSrc === 'empty') {
-          stickerTextEl.setAttribute('data-src', stickerText);
-        }
-        console.log('Sticker mode (local): text');
-      } else {
-        stickerTextEl.setAttribute('data-src', 'empty');
-        console.log('Sticker mode (local): empty (hidden)');
-      }
-    }
+    
 
     // ============================================================
     // PHASE 4: CONTENT REPLACEMENT
@@ -440,34 +410,6 @@
         }
       }
 
-      // Handle sticker mode (data-src attribute for CSS visibility control)
-      // CSS uses data-src on .sticker_text_1 to determine which wrapper to show:
-      // - data-src="image" -> show stickerImageWrapper, hide stickerTextWrapper
-      // - data-src="empty" -> hide entire sticker
-      // - data-src="<text>" -> show stickerTextWrapper, hide stickerImageWrapper
-      var stickerTextEl = document.querySelector('.sticker_text_1');
-      if (stickerTextEl) {
-        var stickerText = variables['sticker_text_1'] || '';
-        var stickerImage = variables['sticker_image_1'] || '';
-
-        // Clean up placeholders
-        if (stickerText.indexOf('{{') !== -1) stickerText = '';
-        if (stickerImage.indexOf('{{') !== -1) stickerImage = '';
-
-        if (stickerImage && stickerImage !== 'empty.png') {
-          // Has image - set to "image" mode
-          stickerTextEl.setAttribute('data-src', 'image');
-          console.log('Sticker mode: image');
-        } else if (stickerText && stickerText.trim()) {
-          // Has text - set to the text value
-          stickerTextEl.setAttribute('data-src', stickerText);
-          console.log('Sticker mode: text');
-        } else {
-          // Empty - hide sticker
-          stickerTextEl.setAttribute('data-src', 'empty');
-          console.log('Sticker mode: empty (hidden)');
-        }
-      }
     }
 
     // ============================================================
@@ -587,9 +529,20 @@
 
       // Function to restore classes and trigger animations
       function triggerAnimations() {
-        if (adContainer && savedClasses.length > 0) {
-          adContainer.className = savedClasses.join(' ');
-          console.log('Restored classes:', savedClasses.join(' '));
+        if (adContainer) {
+          // Restore saved classes
+          if (savedClasses.length > 0) {
+            adContainer.className = savedClasses.join(' ');
+          }
+          // Add "animated" class after preloader to start CSS animations
+          if (hasAnimatedClass) {
+            // Small delay to ensure layout is stable before animations start
+            setTimeout(function() {
+              adContainer.classList.add('animated');
+              console.log('Added "animated" class - CSS animations starting');
+            }, 50);
+          }
+          console.log('Restored classes:', adContainer.className);
         }
       }
 

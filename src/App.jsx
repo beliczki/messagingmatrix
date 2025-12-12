@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
-import { Routes, Route, useParams } from 'react-router-dom';
+import { Routes, Route, useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
@@ -33,10 +33,136 @@ const PreviewViewWrapper = () => {
   return <PreviewView previewId={shareId} />;
 };
 
+// Module definitions - shared between components
+const modules = [
+  { id: 'matrix', name: 'Messaging Matrix', icon: Table, component: Matrix, color: 'blue' },
+  { id: 'creative-library', name: 'Creative Library', icon: Image, component: CreativeLibrary, color: 'blue' },
+  { id: 'assets', name: 'Assets', icon: Package, component: Assets, color: 'purple' },
+  { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
+  { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
+  { id: 'tasks', name: 'Tasks', icon: CheckSquare, component: Tasks, color: 'indigo' },
+  { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple' },
+  { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray' }
+];
+
+// Authenticated layout component with menu
+const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, matrixViewState, setMatrixViewState }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Get current module from URL path (handle nested paths like /templates/edit/html)
+  const pathParts = location.pathname.slice(1).split('/');
+  const currentModule = pathParts[0] || 'matrix';
+  const CurrentModuleComponent = modules.find(m => m.id === currentModule)?.component || Matrix;
+  const currentModuleName = modules.find(m => m.id === currentModule)?.name || 'Messaging Matrix';
+
+  const handleModuleChange = (moduleId) => {
+    navigate(`/${moduleId}`);
+    setMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    setMenuOpen(false);
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Slide-in Menu */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col ${
+          menuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Menu Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-xl font-bold text-gray-800">Menu</h2>
+          <button
+            onClick={() => setMenuOpen(false)}
+            className="p-2 hover:bg-gray-100 rounded"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Menu Items */}
+        <nav className="p-4 flex-1">
+          {modules.map((module) => {
+            const Icon = module.icon;
+            const isActive = currentModule === module.id;
+            return (
+              <button
+                key={module.id}
+                onClick={() => handleModuleChange(module.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Icon size={20} />
+                <span>{module.name}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Info & Logout */}
+        <div className="border-t p-4">
+          <div className="flex items-center gap-3 px-4 py-2 mb-2 text-gray-700">
+            <User size={20} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{currentUser?.email}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={20} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Overlay */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Module Content with Suspense for lazy-loaded components */}
+        <div className="flex-1 overflow-auto">
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                <div className="text-gray-600 text-sm">Loading module...</div>
+              </div>
+            </div>
+          }>
+            <CurrentModuleComponent
+              onMenuToggle={() => setMenuOpen(!menuOpen)}
+              currentModuleName={currentModuleName}
+              matrixData={matrixData}
+              lookAndFeel={lookAndFeel}
+              matrixViewState={matrixViewState}
+              setMatrixViewState={setMatrixViewState}
+            />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
   const { currentUser, loading, logout } = useAuth();
-  const [currentModule, setCurrentModule] = useState('matrix');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [lookAndFeel, setLookAndFeel] = useState({
     logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
     headerColor: '#2870ed',
@@ -118,38 +244,6 @@ const App = () => {
     loadLookAndFeel();
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    setMenuOpen(false);
-  };
-
-  // Show loading state while checking authentication
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
-      </div>
-    );
-  }
-
-  const modules = [
-    { id: 'matrix', name: 'Messaging Matrix', icon: Table, component: Matrix, color: 'blue' },
-    { id: 'creative-library', name: 'Creative Library', icon: Image, component: CreativeLibrary, color: 'blue' },
-    { id: 'assets', name: 'Assets', icon: Package, component: Assets, color: 'purple' },
-    { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
-    { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
-    { id: 'tasks', name: 'Tasks', icon: CheckSquare, component: Tasks, color: 'indigo' },
-    { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple' },
-    { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray' }
-  ];
-
-  const CurrentModuleComponent = modules.find(m => m.id === currentModule)?.component || Matrix;
-
-  const handleModuleChange = (moduleId) => {
-    setCurrentModule(moduleId);
-    setMenuOpen(false);
-  };
-
   // Show loading state while checking authentication
   if (loading) {
     return (
@@ -165,112 +259,42 @@ const App = () => {
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
-          <Route path="*" element={<Login />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Suspense>
     );
   }
 
-  // Authenticated app layout - inline JSX to prevent remounting
+  // Authenticated app layout with URL-based routing
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
-        {/* Public preview route - no authentication required */}
+        {/* Public preview route */}
         <Route path="/share/:shareId" element={<PreviewViewWrapper />} />
 
-        {/* All other routes require authentication */}
-        <Route path="*" element={
-          <div className="flex h-screen overflow-hidden bg-gray-50">
-          {/* Slide-in Menu */}
-          <div
-            className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col ${
-              menuOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-          >
-            {/* Menu Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-xl font-bold text-gray-800">Menu</h2>
-              <button
-                onClick={() => setMenuOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        {/* Module routes - use /* for modules that support deep linking */}
+        {modules.map(module => (
+          <Route
+            key={module.id}
+            path={`/${module.id}/*`}
+            element={
+              <AuthenticatedLayout
+                currentUser={currentUser}
+                logout={logout}
+                matrixData={matrixData}
+                lookAndFeel={lookAndFeel}
+                matrixViewState={matrixViewState}
+                setMatrixViewState={setMatrixViewState}
+              />
+            }
+          />
+        ))}
 
-            {/* Menu Items */}
-            <nav className="p-4 flex-1">
-              {modules.map((module) => {
-                const Icon = module.icon;
-                const isActive = currentModule === module.id;
-                return (
-                  <button
-                    key={module.id}
-                    onClick={() => handleModuleChange(module.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-semibold'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon size={20} />
-                    <span>{module.name}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            {/* User Info & Logout */}
-            <div className="border-t p-4">
-              <div className="flex items-center gap-3 px-4 py-2 mb-2 text-gray-700">
-                <User size={20} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{currentUser?.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <LogOut size={20} />
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Overlay */}
-          {menuOpen && (
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              onClick={() => setMenuOpen(false)}
-            />
-          )}
-
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Module Content with Suspense for lazy-loaded components */}
-            <div className="flex-1 overflow-auto">
-              <Suspense fallback={
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                    <div className="text-gray-600 text-sm">Loading module...</div>
-                  </div>
-                </div>
-              }>
-                <CurrentModuleComponent
-                  onMenuToggle={() => setMenuOpen(!menuOpen)}
-                  currentModuleName={modules.find(m => m.id === currentModule)?.name}
-                  matrixData={matrixData}
-                  lookAndFeel={lookAndFeel}
-                  matrixViewState={matrixViewState}
-                  setMatrixViewState={setMatrixViewState}
-                />
-              </Suspense>
-            </div>
-          </div>
-        </div>
-        } />
+        {/* Default redirect to matrix */}
+        <Route path="/" element={<Navigate to="/matrix" replace />} />
+        <Route path="/login" element={<Navigate to="/matrix" replace />} />
+        <Route path="*" element={<Navigate to="/matrix" replace />} />
       </Routes>
     </Suspense>
   );

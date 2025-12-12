@@ -1,20 +1,79 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FileCode, Menu, Edit, AlertCircle, X, Code, Eye, Save, ChevronDown, AlertTriangle, ChevronLeft, ChevronRight, Moon, Grid, Sun, Type, Image, Video, Link, Tag, Palette, Filter } from 'lucide-react';
 import { apiGet, apiPost } from '../utils/api';
 import TemplatePreview from './TemplatePreview';
 import CodeEditor from './CodeEditor';
 import TemplateClaudeChat from './TemplateClaudeChat';
 import PageHeader from './PageHeader';
+import MatrixStatePanel from './MatrixStatePanel';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [templates, setTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingTemplate, setEditingTemplate] = useState(null);
+  const [saveProgress, setSaveProgress] = useState(null);
+
+  // Check URL for edit mode: /templates/edit/{templateName}
+  const pathParts = location.pathname.split('/');
+  const isEditMode = pathParts[2] === 'edit';
+  const urlTemplateName = isEditMode ? decodeURIComponent(pathParts[3] || '') : null;
+
+  // Save with progress tracking
+  const handleSaveWithProgress = async () => {
+    const steps = [
+      'Preparing data for save...',
+      'Saving to spreadsheet...',
+      'Finalizing save operation...',
+      'Save complete!'
+    ];
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        setSaveProgress({ step: i + 1, total: steps.length, message: steps[i] });
+        if (i === 1 && matrixData?.handleSave) {
+          await matrixData.handleSave();
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      setSaveProgress({ step: -1, message: 'Save failed: ' + error.message });
+    } finally {
+      setTimeout(() => setSaveProgress(null), 2000);
+    }
+  };
 
   useEffect(() => {
     loadTemplates();
   }, []);
+
+  // Track if editor was ever opened (to distinguish initial mount from intentional close)
+  const editorWasOpenedRef = useRef(false);
+
+  // Auto-open editor when URL contains template name
+  useEffect(() => {
+    if (urlTemplateName && templates.length > 0 && !editingTemplate) {
+      const template = templates.find(t => t.name === urlTemplateName);
+      if (template) {
+        editorWasOpenedRef.current = true;
+        setEditingTemplate(template);
+      }
+    }
+  }, [urlTemplateName, templates]);
+
+  // Sync URL when editingTemplate changes (for closing)
+  // Only navigate away if editor was previously open (not on initial mount)
+  useEffect(() => {
+    if (!editingTemplate && isEditMode && editorWasOpenedRef.current) {
+      navigate('/templates', { replace: true });
+    }
+  }, [editingTemplate]);
 
   const loadTemplates = async () => {
     try {
@@ -31,11 +90,15 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
   };
 
   const handleEdit = (template) => {
+    // Update URL to reflect editing state
+    navigate(`/templates/edit/${encodeURIComponent(template.name)}`);
+    editorWasOpenedRef.current = true;
     setEditingTemplate(template);
   };
 
   const handleCloseEditor = () => {
     setEditingTemplate(null);
+    // URL will be updated by the effect above
   };
 
   return (
@@ -140,6 +203,25 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
           textFormatting={matrixData?.textFormatting || []}
         />
       )}
+
+      {/* Matrix State Panel */}
+      <MatrixStatePanel
+        audiences={matrixData?.audiences || []}
+        topics={matrixData?.topics || []}
+        messages={matrixData?.messages || []}
+        keywords={matrixData?.keywords || {}}
+        assets={matrixData?.assets || []}
+        creatives={matrixData?.creatives || []}
+        textFormatting={matrixData?.textFormatting || []}
+        feedData={[]}
+        lastSync={matrixData?.lastSync}
+        isSaving={matrixData?.isSaving}
+        saveProgress={saveProgress}
+        onSave={handleSaveWithProgress}
+        onClearReload={clearAndReloadApp}
+        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+        downloadFeedCSV={() => {}}
+      />
     </div>
   );
 };
@@ -171,7 +253,11 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   const [fileContent, setFileContent] = useState('');
   const [templateHtmlContent, setTemplateHtmlContent] = useState('');
   const [previewSize, setPreviewSize] = useState(() => {
-    // Set initial preview size to first available dimension
+    // Load from localStorage, fallback to first available dimension
+    const saved = localStorage.getItem('templateEditor_previewSize');
+    if (saved && template.dimensions?.includes(saved)) {
+      return saved;
+    }
     return template.dimensions && template.dimensions.length > 0
       ? template.dimensions[0]
       : '300x250';
@@ -192,6 +278,17 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   const [previewBackground, setPreviewBackground] = useState('light'); // 'dark', 'checkboard', 'light'
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalContent, setOriginalContent] = useState('');
+
+  // Skip animation state (persisted to localStorage)
+  const [skipAnimation, setSkipAnimation] = useState(() => {
+    const saved = localStorage.getItem('templateEditor_skipAnimation');
+    return saved === 'true';
+  });
+
+  // Persist skipAnimation to localStorage
+  useEffect(() => {
+    localStorage.setItem('templateEditor_skipAnimation', skipAnimation);
+  }, [skipAnimation]);
   const [typeFilters, setTypeFilters] = useState({
     text: true,
     image: true,
@@ -221,13 +318,46 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     }
   });
 
-  // Select a random message initially
+  // Load last selected message from localStorage, or use first message
   useEffect(() => {
     if (messages.length > 0 && !selectedMessage) {
-      const randomIndex = Math.floor(Math.random() * messages.length);
-      setSelectedMessage(messages[randomIndex]);
+      const savedMcId = localStorage.getItem('templateEditor_selectedMC');
+      if (savedMcId) {
+        // Parse saved MC ID (e.g., "1a" -> number=1, variant="a")
+        const match = savedMcId.match(/^(\d+)([a-z]?)$/i);
+        if (match) {
+          const number = parseInt(match[1], 10);
+          const variant = match[2]?.toLowerCase() || 'a';
+          const message = messages.find(m =>
+            m.number === number &&
+            (m.variant || 'a').toLowerCase() === variant &&
+            m.status !== 'deleted'
+          );
+          if (message) {
+            setSelectedMessage(message);
+            return;
+          }
+        }
+      }
+      // Fallback to first message if no saved or not found
+      setSelectedMessage(messages[0]);
     }
   }, [messages]);
+
+  // Save selectedMessage to localStorage when it changes
+  useEffect(() => {
+    if (selectedMessage) {
+      const mcId = `${selectedMessage.number}${selectedMessage.variant || 'a'}`;
+      localStorage.setItem('templateEditor_selectedMC', mcId);
+    }
+  }, [selectedMessage]);
+
+  // Save previewSize to localStorage when it changes
+  useEffect(() => {
+    if (previewSize) {
+      localStorage.setItem('templateEditor_previewSize', previewSize);
+    }
+  }, [previewSize]);
 
   // Navigation helpers
   const currentIndex = uniqueCards.findIndex(m => m.id === selectedMessage?.id);
@@ -612,13 +742,28 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     // Always show complete template preview regardless of selected file
     return (
       <div
-        className={`w-full h-full flex items-center justify-center overflow-auto p-4 rounded-lg border border-gray-300 ${backgroundClass}`}
+        className={`w-full h-full flex items-center justify-center overflow-auto p-4 rounded-lg border border-gray-300 relative ${backgroundClass}`}
         style={backgroundStyle}
       >
+        {/* Skip animation checkbox - top left corner */}
+        <label className="absolute top-2 left-2 flex items-center gap-2 text-sm text-gray-600 cursor-pointer bg-white/80 px-2 py-1 rounded">
+          <input
+            type="checkbox"
+            checked={skipAnimation}
+            onChange={(e) => setSkipAnimation(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span>skip animation</span>
+        </label>
         {templateHtmlContent ? (
           <TemplatePreview
             templateHtml={templateHtmlContent}
-            message={selectedMessage}
+            message={selectedMessage ? {
+              ...selectedMessage,
+              template_variant_classes: skipAnimation
+                ? (selectedMessage.template_variant_classes || '').replace(/\banimated\b/g, '').trim()
+                : selectedMessage.template_variant_classes
+            } : null}
             previewSize={previewSize}
             templateConfig={templateConfig}
             textFormatting={textFormatting}

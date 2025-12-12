@@ -243,18 +243,22 @@ main {
   background-position: left bottom;
 }
 
-#stickerContainer p:empty,
+/*#stickerContainer p:empty,
 #stickerContainer .stickerImageWrapper,
 #stickerContainer > div:has(> p:empty),
-#stickerContainer > div:has(> p[data-src=" "]),
+#stickerContainer > div:has(> p[data-placeholder=" "]),
 #stickerContainer > div:has(> div[style*="empty"]),
-#stickerContainer:has(p[data-src="empty"]) div, 
-#stickerContainer:has(p[data-src="image"]) .stickerTextWrapper, 
+#stickerContainer:has(p[data-placeholder="empty"]) div, 
+#stickerContainer:has(p[data-placeholder="image"]) .stickerTextWrapper, 
 #cardContainer > div:has(> div:empty), 
 #cardContainer > div:has(> div[style*="empty"]) { display: none; }
 
-#stickerContainer:has(p[data-src="image"]) .stickerImageWrapper  { display: block; }
+#stickerContainer:has(p[data-placeholder="image"]) .stickerImageWrapper  { display: block; }*/
 
+#stickerContainer p:empty,
+#stickerContainer > div:has(> p:empty) { display: none; } 
+#stickerContainer .stickerImageWrapper {display:none;}
+.stickerImage #stickerContainer .stickerImageWrapper {display:block;}
 
 h1,
 h2,
@@ -760,7 +764,7 @@ main,
 .sizebr { display: none;}
 
 span[class^="text-"] {display: none;}
-body #textContainer .text-allSizes {display: inline;}
+body #adContainer .text-allSizes {display: inline;}
 
 
 

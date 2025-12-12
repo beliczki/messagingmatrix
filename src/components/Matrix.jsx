@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon, Check, ChevronDown } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
@@ -46,7 +47,14 @@ const Matrix = ({
   setMatrixViewState,
   matrixData
 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const claudeChatRef = useRef(null);
+
+  // Check URL for edit mode: /matrix/edit/{number}{variant} e.g., /matrix/edit/1a
+  const pathParts = location.pathname.split('/');
+  const isEditMode = pathParts[2] === 'edit';
+  const urlMessageId = isEditMode ? decodeURIComponent(pathParts[3] || '') : null;
 
   // Detect mount/unmount
   useEffect(() => {
@@ -141,11 +149,75 @@ const Matrix = ({
   const isCopyModeRef = useRef(false); // Use ref to avoid re-render during drag start
   const draggedMsgRef = useRef(null); // Use ref to avoid re-render during drag start
 
+  // Track if editor was ever opened (to distinguish initial mount from intentional close)
+  const editorWasOpenedRef = useRef(false);
+
+  // Auto-open message editor when URL contains message ID (e.g., /matrix/edit/1a)
+  // Use matrixData?.messages in dependency since 'messages' is from module-level ref
+  useEffect(() => {
+    if (urlMessageId && matrixData?.messages?.length > 0 && !editingMessage) {
+      // Parse the message ID: e.g., "1a" -> number=1, variant="a"
+      const match = urlMessageId.match(/^(\d+)([a-z]?)$/i);
+      if (match) {
+        const number = parseInt(match[1], 10);
+        const variant = match[2]?.toLowerCase() || 'a';
+        const message = matrixData.messages.find(m =>
+          m.number === number &&
+          (m.variant || 'a').toLowerCase() === variant &&
+          m.status !== 'deleted'
+        );
+        if (message) {
+          editorWasOpenedRef.current = true;
+          setEditingMessage(message);
+          setActiveTab('naming');
+        }
+      }
+    }
+  }, [urlMessageId, matrixData?.messages]);
+
+  // Sync URL when editingMessage changes (for closing)
+  // Only navigate away if editor was previously open (not on initial mount)
+  useEffect(() => {
+    if (!editingMessage && isEditMode && editorWasOpenedRef.current) {
+      navigate('/matrix', { replace: true });
+    }
+  }, [editingMessage]);
+
+  // Helper to open message editor with URL update
+  const openMessageEditor = (msg) => {
+    const messageId = `${msg.number}${msg.variant || 'a'}`;
+    navigate(`/matrix/edit/${messageId}`);
+    editorWasOpenedRef.current = true;
+    setEditingMessage(msg);
+    setActiveTab('naming');
+  };
+
+  // Wrapper for setEditingMessage that handles URL updates
+  // - null: close editor and navigate to /matrix
+  // - same message with updates: just update (no URL change)
+  // - different message (prev/next): update URL and set message
+  const handleSetEditingMessage = (msgOrNull) => {
+    if (msgOrNull === null) {
+      // Closing the editor
+      setEditingMessage(null);
+      // URL update handled by effect
+    } else if (editingMessage && msgOrNull.id === editingMessage.id) {
+      // Same message, just updating fields - no URL change
+      setEditingMessage(msgOrNull);
+    } else {
+      // Different message (e.g., prev/next navigation)
+      const messageId = `${msgOrNull.number}${msgOrNull.variant || 'a'}`;
+      navigate(`/matrix/edit/${messageId}`, { replace: true });
+      setEditingMessage(msgOrNull);
+    }
+  };
+
   // Use matrixViewState for persisted values - memoize arrays with stable references
   const viewMode = matrixViewState?.viewMode || 'matrix';
   const displayMode = matrixViewState?.displayMode || 'informative';
   const topicFilter = matrixViewState?.topicFilter || '';
   const audienceFilter = matrixViewState?.audienceFilter || '';
+  const mcFilter = matrixViewState?.mcFilter || '';
 
   // Update module-level filter refs when they change
   const currentStatuses = matrixViewState?.selectedStatuses || EMPTY_ARRAY;
@@ -170,6 +242,7 @@ const Matrix = ({
   const setDisplayMode = (value) => setMatrixViewState({ ...matrixViewState, displayMode: value });
   const setTopicFilter = (value) => setMatrixViewState({ ...matrixViewState, topicFilter: value });
   const setAudienceFilter = (value) => setMatrixViewState({ ...matrixViewState, audienceFilter: value });
+  const setMcFilter = (value) => setMatrixViewState({ ...matrixViewState, mcFilter: value });
   const setStatusFilters = (value) => setMatrixViewState({ ...matrixViewState, selectedStatuses: value });
   const setProductFilters = (value) => {
     // Reset pan to top-left when product filter changes
@@ -1547,10 +1620,7 @@ const Matrix = ({
             productFilters={productFilters}
             textFormatting={textFormatting}
             getStatusColors={getStatusColors}
-            onMessageClick={(msg) => {
-              setEditingMessage(msg);
-              setActiveTab('naming');
-            }}
+            onMessageClick={(msg) => openMessageEditor(msg)}
           />
         ) : (
           <MatrixGridView
@@ -1561,6 +1631,7 @@ const Matrix = ({
             displayMode={displayMode}
             audienceFilter={audienceFilter}
             topicFilter={topicFilter}
+            mcFilter={mcFilter}
             filteredAudiences={filteredAudiences}
             filteredTopics={filteredTopics}
             lookAndFeel={lookAndFeel}
@@ -1574,12 +1645,13 @@ const Matrix = ({
             onPanEnd={handleMatrixPanEnd}
             onAudienceFilterChange={setAudienceFilter}
             onTopicFilterChange={setTopicFilter}
+            onMcFilterChange={setMcFilter}
             onEditAudience={setEditingAudience}
             onAddAudience={handleAddAudience}
             onEditTopic={setEditingTopic}
             onAddTopic={handleAddTopic}
             onAddMessage={handleAddMessage}
-            onEditMessage={setEditingMessage}
+            onEditMessage={openMessageEditor}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -1601,7 +1673,7 @@ const Matrix = ({
       {/* Message Edit Dialog with Tabs */}
       <MessageEditorDialog
         editingMessage={editingMessage}
-        setEditingMessage={setEditingMessage}
+        setEditingMessage={handleSetEditingMessage}
         audiences={audiences}
         topics={topics}
         messages={messages}

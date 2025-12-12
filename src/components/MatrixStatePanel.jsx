@@ -157,7 +157,7 @@ const MatrixStatePanel = ({
 
   if (isCollapsed) {
     return (
-      <div className="fixed bottom-0 right-[250px] bg-white shadow-lg rounded-tl-lg z-40 flex items-center gap-2 px-2 py-2">
+      <div className="fixed bottom-0 right-[250px] bg-white shadow-lg rounded-tl-lg z-50 flex items-center gap-2 px-2 py-2">
         <button
           onClick={() => setIsCollapsed(false)}
           className="px-4 py-2 flex items-center gap-2 hover:bg-gray-50 rounded"
@@ -215,7 +215,7 @@ const MatrixStatePanel = ({
 
   return (
     <div
-      className="fixed bottom-0 right-0 bg-white shadow-2xl flex flex-col z-40 rounded-tl-lg"
+      className="fixed bottom-0 right-0 bg-white shadow-2xl flex flex-col z-50 rounded-tl-lg"
       style={{ height: `${height}px`, width: '90%' }}
     >
       {/* Resize Handle */}
