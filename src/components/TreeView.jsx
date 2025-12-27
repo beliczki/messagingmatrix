@@ -7,7 +7,10 @@ import {
   calculateBranchWidth,
   calculateDescendantsSpan,
   calculateTreeWidth,
-  calculateTotalHeight
+  calculateTotalHeight,
+  calculateNodeWidth,
+  splitTextIntoLines,
+  getMaxChildrenPerLevel
 } from '../utils/treeLayout';
 
 // Persistent state outside component to maintain zoom/pan when switching views
@@ -17,6 +20,8 @@ let persistentTreeState = {
   nodePositions: {},
   connectorType: 'curved',
   layerHeight: 1.0, // Layer height multiplier (0.5 to 2.0)
+  baseNodeSize: 1.0, // Base node size multiplier (0.5 to 2.0)
+  flattenMode: false, // Toggle between tree and flat view
   initialized: false,
   prevTreeKeys: new Set() // Persist tree keys to detect actual structure changes
 };
@@ -31,9 +36,15 @@ const TreeView = React.memo(({
   setZoom: externalSetZoom,
   connectorType: externalConnectorType,
   setConnectorType: externalSetConnectorType,
+  flattenMode: externalFlattenMode,
+  onFlattenModeChange: externalOnFlattenModeChange,
   treeStructure = 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
   onTreeStructureChange,
-  lookAndFeel = {}
+  lookAndFeel = {},
+  // Edit callbacks for double-click functionality
+  onEditAudience,
+  onEditTopic,
+  onEditMessage
 }) => {
   console.log('🟣 TreeView component render', {
     audiencesLength: audiences?.length,
@@ -46,6 +57,26 @@ const TreeView = React.memo(({
   const [tempTreeStructure, setTempTreeStructure] = React.useState(treeStructure);
   const [hasChanges, setHasChanges] = React.useState(false);
   const [layerHeight, setLayerHeight] = useState(persistentTreeState.layerHeight);
+  const [baseNodeSize, setBaseNodeSize] = useState(persistentTreeState.baseNodeSize);
+  const [internalFlattenMode, setInternalFlattenMode] = useState(persistentTreeState.flattenMode);
+  const [showTreeStructure, setShowTreeStructure] = useState(false); // Toggle tree structure input visibility
+
+  // Use external flattenMode if provided, otherwise use internal state
+  const flattenMode = externalFlattenMode !== undefined ? externalFlattenMode : internalFlattenMode;
+  const setFlattenMode = externalOnFlattenModeChange || setInternalFlattenMode;
+  const [isDragging, setIsDragging] = useState(false); // Track if user is dragging (to prevent double-click during drag)
+
+  // React to external flattenMode changes - reset node positions
+  const prevFlattenModeRef = React.useRef(flattenMode);
+  React.useEffect(() => {
+    if (prevFlattenModeRef.current !== flattenMode) {
+      console.log('🟣 Flatten mode changed to:', flattenMode);
+      setNodePositions({});
+      persistentTreeState.nodePositions = {};
+      persistentTreeState.flattenMode = flattenMode;
+      prevFlattenModeRef.current = flattenMode;
+    }
+  }, [flattenMode]);
 
   // Use external zoom/connector if provided, otherwise use internal state
   const zoom = externalZoom !== undefined ? externalZoom : persistentTreeState.zoom;
@@ -122,6 +153,57 @@ const TreeView = React.memo(({
     return buildTree(audiences, topics, getFilteredMessages, treeStructure);
   }, [audiences, topics, getFilteredMessages, treeStructure]);
 
+  // Build flat levels data for flatten mode - unique values per level
+  const flatLevels = React.useMemo(() => {
+    if (!flattenMode) return [];
+
+    const parsedLevels = parseTreeStructure(treeStructure);
+    const levels = [];
+
+    // Collect unique values at each level by traversing the tree
+    const collectLevelValues = (nodes, levelIndex, collected = []) => {
+      if (levelIndex >= parsedLevels.length) return;
+
+      // Initialize level if not exists
+      if (!collected[levelIndex]) {
+        collected[levelIndex] = {
+          level: levelIndex,
+          source: parsedLevels[levelIndex].source,
+          field: parsedLevels[levelIndex].field,
+          label: parsedLevels[levelIndex].label,
+          uniqueValues: new Map() // Map of value -> first node with that value
+        };
+      }
+
+      Object.values(nodes).forEach(node => {
+        const value = node.value;
+        // Only add if we haven't seen this value at this level
+        if (!collected[levelIndex].uniqueValues.has(value)) {
+          collected[levelIndex].uniqueValues.set(value, {
+            value,
+            source: node.source,
+            field: node.field,
+            data: node.data,
+            label: node.label
+          });
+        }
+
+        // Recurse to children
+        if (node.children && Object.keys(node.children).length > 0) {
+          collectLevelValues(node.children, levelIndex + 1, collected);
+        }
+      });
+    };
+
+    collectLevelValues(treeData, 0, levels);
+
+    // Convert Maps to arrays for easier rendering
+    return levels.map(level => ({
+      ...level,
+      uniqueValues: Array.from(level.uniqueValues.values())
+    }));
+  }, [treeData, treeStructure, flattenMode]);
+
   // Reset node positions when tree structure changes (messages added/removed)
   React.useEffect(() => {
     console.log('🟣 TreeView: Reset positions useEffect fired');
@@ -171,41 +253,25 @@ const TreeView = React.memo(({
     persistentTreeState.prevTreeKeys = currentTreeKeys;
   }, [messages, audiences, topics, treeStructure]);
 
-  // Handle mouse down - start dragging
+  // DRAG FUNCTIONALITY DISABLED - Double-click edit is priority
+  // Handle mouse down - disabled for now
   const handleMouseDown = (e, nodeKey, nodeData, defaultX, defaultY) => {
-    e.preventDefault();
     e.stopPropagation();
-    const svg = svgRef.current;
-    const rect = svg.getBoundingClientRect();
-    const startX = (e.clientX - rect.left - pan.x) / zoom;
-    const startY = (e.clientY - rect.top - pan.y) / zoom;
-
-    const currentPos = getNodePosition(nodeKey, nodeData, defaultX, defaultY);
-
-    setDragging({
-      nodeKey: nodeKey,
-      data: nodeData,
-      offsetX: startX - currentPos.x,
-      offsetY: startY - currentPos.y
-    });
+    // Drag disabled to allow double-click to work
   };
 
-  // Handle mouse move - update position while dragging
+  // Track mouse movement - disabled
+  const dragStartPos = React.useRef(null);
+  const handleMouseMoveForDrag = (e) => {
+    // Disabled
+  };
+
+  // Handle mouse move - disabled
   const handleMouseMove = (e) => {
-    if (!dragging) return;
-
-    const svg = svgRef.current;
-    const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left - pan.x) / zoom - dragging.offsetX;
-    const y = (e.clientY - rect.top - pan.y) / zoom - dragging.offsetY;
-
-    setNodePositions(prev => ({
-      ...prev,
-      [dragging.nodeKey]: { x, y }
-    }));
+    // Disabled
   };
 
-  // Handle mouse up - stop dragging
+  // Handle mouse up
   const handleMouseUp = () => {
     setDragging(null);
     setIsPanning(false);
@@ -282,7 +348,7 @@ const TreeView = React.memo(({
       const svgWidth = svg.width.baseVal.value;
       const parsedLevels = parseTreeStructure(treeStructure);
       const levelCount = parsedLevels.length;
-      const svgHeight = calculateTotalHeight(levelCount, 40, layerHeight);
+      const svgHeight = calculateTotalHeight(levelCount, 40, layerHeight, baseNodeSize);
 
       // Calculate zoom to fit: use 90% of container to leave some padding
       const zoomToFitWidth = (containerWidth * 0.9) / svgWidth;
@@ -433,6 +499,57 @@ const TreeView = React.memo(({
     const newHeight = parseFloat(e.target.value);
     setLayerHeight(newHeight);
     persistentTreeState.layerHeight = newHeight;
+    // Reset node positions so new layout takes effect
+    setNodePositions({});
+    persistentTreeState.nodePositions = {};
+  };
+
+  const handleBaseNodeSizeChange = (e) => {
+    const newSize = parseFloat(e.target.value);
+    setBaseNodeSize(newSize);
+    persistentTreeState.baseNodeSize = newSize;
+    // Reset node positions so new layout takes effect
+    setNodePositions({});
+    persistentTreeState.nodePositions = {};
+  };
+
+  const handleFlattenModeToggle = (newMode) => {
+    const mode = typeof newMode === 'boolean' ? newMode : !flattenMode;
+    setFlattenMode(mode);
+    persistentTreeState.flattenMode = mode;
+    // Reset node positions when switching modes
+    setNodePositions({});
+    persistentTreeState.nodePositions = {};
+  };
+
+  // Fit and center the tree in the viewport
+  const handleFitAndCenter = () => {
+    if (!containerRef.current || !svgRef.current || containerHeight <= 0) return;
+
+    const container = containerRef.current;
+    const svg = svgRef.current;
+
+    const containerWidth = container.clientWidth;
+    const svgWidth = svg.width.baseVal.value;
+    const parsedLevels = parseTreeStructure(treeStructure);
+    const levelCount = parsedLevels.length;
+    const svgHeight = calculateTotalHeight(levelCount, 40, layerHeight, baseNodeSize);
+
+    // Calculate zoom to fit: use 90% of container to leave some padding
+    const zoomToFitWidth = (containerWidth * 0.9) / svgWidth;
+    const zoomToFitHeight = (containerHeight * 0.9) / svgHeight;
+    const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1);
+
+    // Calculate pan to center the tree at the optimal zoom
+    const scaledWidth = svgWidth * optimalZoom;
+    const scaledHeight = svgHeight * optimalZoom;
+    const centerX = (containerWidth - scaledWidth) / 2;
+    const centerY = (containerHeight - scaledHeight) / 2;
+
+    setZoom(optimalZoom);
+    setPan({ x: centerX, y: centerY });
+    persistentTreeState.zoom = optimalZoom;
+    persistentTreeState.pan = { x: centerX, y: centerY };
   };
 
   // Get position for a node (custom or default)
@@ -444,6 +561,38 @@ const TreeView = React.memo(({
     return { x: defaultX, y: defaultY };
   };
 
+  // Handle double-click on a node to open edit dialog
+  const handleNodeDoubleClick = (node) => {
+    const source = node.source;
+    const data = node.data;
+
+    if (!data) {
+      console.log('No data associated with this node');
+      return;
+    }
+
+    // Determine which edit dialog to open based on the node's source type
+    if ((source === 'Audiences' || source === 'Audience') && onEditAudience) {
+      // Find the full audience object by key
+      const audience = audiences.find(a => a.key === data.key);
+      if (audience) {
+        console.log('Opening audience editor:', audience.name);
+        onEditAudience(audience);
+      }
+    } else if ((source === 'Topics' || source === 'Topic') && onEditTopic) {
+      // Find the full topic object by key
+      const topic = topics.find(t => t.key === data.key);
+      if (topic) {
+        console.log('Opening topic editor:', topic.name);
+        onEditTopic(topic);
+      }
+    } else if ((source === 'Messages' || source === 'Message') && onEditMessage) {
+      // For messages, the data is already the message object
+      console.log('Opening message editor:', data.number, data.variant);
+      onEditMessage(data);
+    }
+  };
+
   // Helper to render decision node
   const DecisionNode = ({ label, value, x, y, nodeKey, nodeData, color = '#6366f1', bgColor = '#e0e7ff', node, levelIndex, isRoot, totalLevels }) => {
     const pos = getNodePosition(nodeKey, nodeData, x, y);
@@ -451,7 +600,12 @@ const TreeView = React.memo(({
     // Calculate size based on level - use getNodeSizeScale for consistency with connector calculations
     let sizeScale;
     let heightMultiplier = 1; // For making second-to-last level taller
-    let valueTextSize = 14; // Base text size for value
+    // Base text sizes - larger defaults (equivalent to old 1.8x node size)
+    let valueTextSize = 25; // Was 14, now starts larger
+    let labelTextSize = 22; // Was 12, now starts larger
+
+    // Check if this is a Message node (Number or Variant) - these should NOT scale with baseNodeSize
+    const isMessageNode = node && (node.source === 'Messages' || node.source === 'Message');
 
     if (isRoot) {
       sizeScale = 3;
@@ -463,13 +617,33 @@ const TreeView = React.memo(({
       // Since getNodeSizeScale already returns 1.5 for this level, we only need a smaller additional multiplier
       if (levelIndex === totalLevels - 2) {
         heightMultiplier = 1.67; // 1.5 * 1.67 = 2.5x total height
-        valueTextSize = 32; // Much bigger text for the number
+        valueTextSize = 32; // Original size for MC Number
       }
     }
 
-    const width = 140 * sizeScale;
-    const height = 40 * sizeScale * heightMultiplier;
-    const borderRadius = 5 * sizeScale;
+    // Apply base node size multiplier from slider - but NOT to Message nodes (MC Number/Variant)
+    if (!isMessageNode) {
+      sizeScale = sizeScale * baseNodeSize;
+    }
+
+    // Calculate dynamic width based on text - uses shared function for consistency with layout
+    // Pass actual label and value being rendered to ensure width matches
+    const width = calculateNodeWidth(node, levelIndex, levelCount, baseNodeSize, label, value);
+
+    // For non-last-level nodes, make height taller to fit two lines
+    const isLastLevel = levelIndex === levelCount - 1;
+    const twoLineHeightMultiplier = (!isLastLevel && !isMessageNode) ? 1.5 : 1;
+    // Base height 70 (was 40) to accommodate larger fonts
+    const baseHeight = 70;
+    const height = baseHeight * sizeScale * heightMultiplier * twoLineHeightMultiplier;
+    const borderRadius = 8 * sizeScale;
+
+    // Font sizes - scale with sizeScale (which includes baseNodeSize for non-message nodes)
+    const labelFontSize = labelTextSize * sizeScale;
+    const valueFontSize = valueTextSize * sizeScale;
+
+    // Split value text into lines for non-last-level nodes
+    const valueLines = (!isLastLevel && value) ? splitTextIntoLines(value) : [value];
 
     // Use status-based coloring if node has children (for Message.Number nodes)
     let nodeColor = color;
@@ -486,10 +660,20 @@ const TreeView = React.memo(({
     // Hide label if it's "Name" or "Number"
     const showLabel = label !== 'Name' && label !== 'Number';
 
+    // Check if this node is editable (has an edit callback for its type)
+    const isEditable = node && (
+      ((node.source === 'Audiences' || node.source === 'Audience') && onEditAudience) ||
+      ((node.source === 'Topics' || node.source === 'Topic') && onEditTopic) ||
+      ((node.source === 'Messages' || node.source === 'Message') && onEditMessage)
+    );
+
     return (
       <g
         onMouseDown={(e) => handleMouseDown(e, nodeKey, nodeData, x, y)}
+        onMouseMove={handleMouseMoveForDrag}
+        onDoubleClick={() => node && handleNodeDoubleClick(node)}
         className="transition-opacity hover:opacity-80"
+        style={{ cursor: isEditable ? 'pointer' : 'grab' }}
       >
         <rect
           x={pos.x - width/2}
@@ -503,23 +687,48 @@ const TreeView = React.memo(({
         {showLabel && (
           <text
             x={pos.x}
-            y={pos.y - (6 * sizeScale)}
+            y={pos.y - (height / 2) + labelFontSize + 4 * sizeScale}
             textAnchor="middle"
             className="text-xs font-semibold pointer-events-none select-none fill-white"
-            style={{ fontSize: `${12 * sizeScale}px` }}
+            style={{ fontSize: `${labelFontSize}px` }}
           >
             {label}
           </text>
         )}
-        <text
-          x={pos.x}
-          y={pos.y + (showLabel ? (10 * sizeScale) : (valueTextSize * sizeScale * 0.35))}
-          textAnchor="middle"
-          className="text-sm font-bold pointer-events-none select-none fill-white"
-          style={{ fontSize: `${valueTextSize * sizeScale}px` }}
-        >
-          {value}
-        </text>
+        {valueLines.length === 1 ? (
+          <text
+            x={pos.x}
+            y={pos.y + (showLabel ? (10 * sizeScale) : (valueFontSize * 0.35))}
+            textAnchor="middle"
+            className="text-sm font-bold pointer-events-none select-none fill-white"
+            style={{ fontSize: `${valueFontSize}px` }}
+          >
+            {value}
+          </text>
+        ) : (
+          <>
+            <text
+              x={pos.x}
+              y={pos.y + (showLabel ? 0 : -valueFontSize * 0.3)}
+              textAnchor="middle"
+              className="text-sm font-bold pointer-events-none select-none fill-white"
+              style={{ fontSize: `${valueFontSize}px` }}
+            >
+              {valueLines[0]}
+            </text>
+            <text
+              x={pos.x}
+              y={pos.y + (showLabel ? valueFontSize * 1.1 : valueFontSize * 0.8)}
+              textAnchor="middle"
+              className="text-sm font-bold pointer-events-none select-none fill-white"
+              style={{ fontSize: `${valueFontSize}px` }}
+            >
+              {valueLines[1]}
+            </text>
+          </>
+        )}
+        {/* Tooltip - show full text and edit hint */}
+        <title>{value}{isEditable ? ' (double-click to edit)' : ''}</title>
       </g>
     );
   };
@@ -585,15 +794,26 @@ const TreeView = React.memo(({
     const statusColor = getStatusColor(message.status);
     const displayVariant = variant || message.variant;
 
-    // Smaller variant cards
+    // Smaller variant cards - fixed size (NOT affected by baseNodeSize)
     const cardWidth = 60;
     const cardHeight = 40;
     const fontSize = 24;
 
+    // Handle double-click on message card
+    const handleMessageDoubleClick = () => {
+      if (onEditMessage && message) {
+        console.log('Opening message editor from card:', message.number, message.variant);
+        onEditMessage(message);
+      }
+    };
+
     return (
       <g
         onMouseDown={(e) => handleMouseDown(e, nodeKey, message, x, y)}
+        onMouseMove={handleMouseMoveForDrag}
+        onDoubleClick={handleMessageDoubleClick}
         className="transition-opacity hover:opacity-80"
+        style={{ cursor: onEditMessage ? 'pointer' : 'grab' }}
       >
         <rect
           x={pos.x - cardWidth/2}
@@ -613,6 +833,10 @@ const TreeView = React.memo(({
         >
           {displayVariant}
         </text>
+        {/* Tooltip hint for editable message cards */}
+        {onEditMessage && (
+          <title>Double-click to edit message</title>
+        )}
       </g>
     );
   };
@@ -622,8 +846,9 @@ const TreeView = React.memo(({
     const midY = (y1 + y2) / 2;
 
     // Calculate stroke width: 40px at level 0, scaling down to 1px at last level
-    const maxStroke = 40;
-    const minStroke = 1;
+    // Apply baseNodeSize multiplier for visual consistency
+    const maxStroke = 40 * baseNodeSize;
+    const minStroke = 1 * baseNodeSize;
     let strokeWidth;
     if (levelCount > 1) {
       const progress = levelIndex / (levelCount - 1);
@@ -692,9 +917,17 @@ const TreeView = React.memo(({
   const parsedLevels = parseTreeStructure(treeStructure);
   const levelCount = parsedLevels.length;
 
-  // Layout calculations - dynamic spacing based on tree depth
+  // Calculate max children per level for dynamic spacing
+  const maxChildrenPerLevel = React.useMemo(() => {
+    const result = getMaxChildrenPerLevel(treeData, levelCount);
+    console.log('🌳 maxChildrenPerLevel:', result, 'levelCount:', levelCount);
+    return result;
+  }, [treeData, levelCount]);
+
+  // Layout calculations - dynamic spacing based on tree depth and node size
   const startY = 40; // Reduced from 80 to move first layer higher
-  const leafSpacing = 65; // Space between leaf nodes (messages)
+  // Scale spacing with baseNodeSize to prevent node overlap
+  const leafSpacing = 65 + (baseNodeSize - 1) * 100; // Increases as nodes get bigger
 
   // Color palette for different levels using secondary colors
   const secondaryColor1 = lookAndFeel.secondaryColor1 || '#eb4c79';
@@ -711,8 +944,8 @@ const TreeView = React.memo(({
   ];
 
   // Calculate dimensions using imported utilities
-  const svgWidth = calculateTreeWidth(treeData, levelCount, leafSpacing);
-  const totalHeight = calculateTotalHeight(levelCount, startY, layerHeight);
+  const svgWidth = calculateTreeWidth(treeData, levelCount, leafSpacing, baseNodeSize);
+  const totalHeight = calculateTotalHeight(levelCount, startY, layerHeight, baseNodeSize, maxChildrenPerLevel);
   const svgHeight = containerHeight > 0 ? containerHeight : Math.max(1200, totalHeight);
 
   // Calculate total tree width to determine root X position
@@ -720,15 +953,17 @@ const TreeView = React.memo(({
   const treeEndX = svgWidth - 200; // Right margin
   const startX = (treeStartX + treeEndX) / 2; // Center of entire tree
 
-  // Recursive function to render tree nodes
-  const renderTreeLevel = (nodes, levelIndex, parentX, parentY, startXOffset) => {
+  // Recursive function to collect tree connectors and nodes separately for proper z-order
+  const collectTreeElements = (nodes, levelIndex, parentX, parentY, startXOffset, allConnectors, allNodes) => {
     const entries = Object.entries(nodes);
-    if (entries.length === 0) return null;
+    if (entries.length === 0) return;
 
-    // Calculate cumulative Y position using variable spacing
+    // Calculate cumulative Y position using variable spacing (with baseNodeSize and dynamic children-based spacing)
+    // The spacing above level i should be based on how many children level i-1 nodes have (fan-out effect)
     let cumulativeY = startY;
     for (let i = 0; i <= levelIndex; i++) {
-      cumulativeY += getLevelSpacing(i, levelCount, layerHeight);
+      const childrenCountForSpacing = i > 0 ? (maxChildrenPerLevel[i - 1] || 1) : 1;
+      cumulativeY += getLevelSpacing(i, levelCount, layerHeight, baseNodeSize, childrenCountForSpacing);
     }
     const currentY = cumulativeY;
     const colors = levelColors[levelIndex % levelColors.length];
@@ -739,7 +974,7 @@ const TreeView = React.memo(({
     const nodeInfo = [];
 
     entries.forEach(([key, node], index) => {
-      const branchWidth = calculateBranchWidth(node, levelCount, leafSpacing);
+      const branchWidth = calculateBranchWidth(node, levelCount, leafSpacing, baseNodeSize);
       const minX = currentX;
       const maxX = currentX + branchWidth;
 
@@ -750,7 +985,7 @@ const TreeView = React.memo(({
       const nodeData = node.data || node.value;
 
       // Calculate the actual span of descendants to center parent over them
-      const descendantsSpan = calculateDescendantsSpan(node, minX, levelCount, leafSpacing);
+      const descendantsSpan = calculateDescendantsSpan(node, minX, levelCount, leafSpacing, baseNodeSize);
 
       nodeInfo.push({
         key,
@@ -766,37 +1001,38 @@ const TreeView = React.memo(({
       currentX += branchWidth;
     });
 
-    // Calculate center of all children
-    const totalMinX = nodeInfo[0]?.minX || startXOffset;
-    const totalMaxX = nodeInfo[nodeInfo.length - 1]?.maxX || startXOffset;
-    const childrenCenterX = (totalMinX + totalMaxX) / 2;
-
-    // Second pass: render connectors and nodes
-    const connectors = [];
-    const nodesElements = [];
-
+    // Second pass: collect connectors and nodes separately
     nodeInfo.forEach(({ key, node, nodeKey, nodeData, minX, maxX, branchWidth, descendantsSpan }) => {
       // Position node at center of its descendants' span for proper centering
-      // This ensures parent nodes are centered over all their descendant leaves
       const defaultNodeX = (descendantsSpan.minX + descendantsSpan.maxX) / 2;
       const nodePos = getNodePosition(nodeKey, nodeData, defaultNodeX, currentY);
 
-      // Render connector from parent - connectors rendered first for proper z-order
+      // Collect connector from parent
       if (parentX !== undefined && parentY !== undefined) {
         // Calculate connector attachment points based on node scaling
-        const parentScale = levelIndex > 0 ? getNodeSizeScale(levelIndex - 1, levelCount) : 3; // parent node scale
-        const currentScale = isLastLevel ? 0.5 : getNodeSizeScale(levelIndex, levelCount); // current node scale
+        const parentScale = levelIndex > 0 ? getNodeSizeScale(levelIndex - 1, levelCount) : 3;
+        const currentScale = isLastLevel ? 0.5 : getNodeSizeScale(levelIndex, levelCount);
+
+        // Apply baseNodeSize to parent scale (except for Message nodes at parent level)
+        const parentLevelIndex = levelIndex - 1;
+        const isParentMessageNode = parentLevelIndex >= 0 && (node.source === 'Messages' || node.source === 'Message');
+        const adjustedParentScale = isParentMessageNode ? parentScale : parentScale * baseNodeSize;
 
         // Check if parent is at second-to-last level (has heightMultiplier)
-        // Since getNodeSizeScale already returns 1.5 for second-to-last, we use 1.67 multiplier
-        const parentHeightMultiplier = (levelIndex - 1) === levelCount - 2 ? 1.67 : 1;
-        // Current node only gets heightMultiplier if it's at second-to-last level AND not last level
+        const parentHeightMultiplier = parentLevelIndex === levelCount - 2 ? 1.67 : 1;
         const currentHeightMultiplier = (levelIndex === levelCount - 2 && !isLastLevel) ? 1.67 : 1;
 
-        const parentHeight = levelIndex > 0 ? 40 * parentScale * parentHeightMultiplier : 200; // root is 200px tall
-        const currentHeight = isLastLevel ? 40 : 40 * currentScale * currentHeightMultiplier;
+        // Two-line height multiplier for non-last-level, non-message nodes
+        const isCurrentMessageNode = node && (node.source === 'Messages' || node.source === 'Message');
+        const parentTwoLineMultiplier = (parentLevelIndex < levelCount - 1 && !isParentMessageNode) ? 1.5 : 1;
+        const currentTwoLineMultiplier = (!isLastLevel && !isCurrentMessageNode) ? 1.5 : 1;
 
-        connectors.push(
+        // Base height 70 (matches DecisionNode)
+        const baseHeight = 70;
+        const parentHeight = levelIndex > 0 ? baseHeight * adjustedParentScale * parentHeightMultiplier * parentTwoLineMultiplier : 200 * baseNodeSize;
+        const currentHeight = isLastLevel ? 40 : baseHeight * currentScale * baseNodeSize * currentHeightMultiplier * currentTwoLineMultiplier;
+
+        allConnectors.push(
           <Connector
             key={`connector-${key}`}
             x1={parentX}
@@ -808,10 +1044,9 @@ const TreeView = React.memo(({
         );
       }
 
-      // Render node (either DecisionNode or MessageCard for last level)
+      // Collect node (either DecisionNode or MessageCard for last level)
       if (isLastLevel && node.data && node.data.type === 'message') {
-        // Render as message card (leaf node showing variant)
-        nodesElements.push(
+        allNodes.push(
           <MessageCard
             key={key}
             message={node.data}
@@ -822,8 +1057,7 @@ const TreeView = React.memo(({
           />
         );
       } else {
-        // Render as decision node
-        nodesElements.push(
+        allNodes.push(
           <DecisionNode
             key={key}
             label={node.label || node.field || `Level ${levelIndex + 1}`}
@@ -842,27 +1076,145 @@ const TreeView = React.memo(({
         );
       }
 
-      // Recursively render children - pass the actual node position for connector alignment
+      // Recursively collect children
       if (node.children && Object.keys(node.children).length > 0) {
-        const childElements = renderTreeLevel(
+        collectTreeElements(
           node.children,
           levelIndex + 1,
           nodePos.x,
           nodePos.y,
-          minX
+          minX,
+          allConnectors,
+          allNodes
         );
-        if (childElements) {
-          nodesElements.push(
-            <g key={`children-${key}`}>
-              {childElements}
-            </g>
-          );
-        }
       }
     });
+  };
 
-    // Return connectors first, then nodes (for proper z-order)
-    return [...connectors, ...nodesElements];
+  // Wrapper function to render tree with proper z-order (connectors behind nodes)
+  const renderTreeLevel = (nodes, parentX, parentY, startXOffset) => {
+    const allConnectors = [];
+    const allNodes = [];
+
+    collectTreeElements(nodes, 0, parentX, parentY, startXOffset, allConnectors, allNodes);
+
+    // Return connectors first (rendered behind), then all nodes (rendered on top)
+    return (
+      <>
+        <g className="tree-connectors">
+          {allConnectors}
+        </g>
+        <g className="tree-nodes">
+          {allNodes}
+        </g>
+      </>
+    );
+  };
+
+  // Render flat mode - horizontal rows of unique values per level
+  const renderFlatMode = () => {
+    if (flatLevels.length === 0) return null;
+
+    const elements = [];
+    const nodeSpacing = 180 * baseNodeSize; // Horizontal spacing between nodes
+    // For flat mode, use average children count for consistent spacing
+    const avgChildren = Math.max(1, Math.ceil(flatLevels.reduce((sum, l) => sum + l.uniqueValues.length, 0) / flatLevels.length));
+    const levelSpacing = getLevelSpacing(0, flatLevels.length, layerHeight, baseNodeSize, avgChildren); // Vertical spacing between levels
+
+    flatLevels.forEach((level, levelIndex) => {
+      const levelY = startY + (levelIndex + 1) * levelSpacing;
+      const levelWidth = level.uniqueValues.length * nodeSpacing;
+      const levelStartX = startX - levelWidth / 2 + nodeSpacing / 2;
+      const colors = levelColors[levelIndex % levelColors.length];
+
+      // Draw vertical connector from previous level (centered)
+      if (levelIndex > 0) {
+        const prevLevelY = startY + levelIndex * levelSpacing;
+        const connectorStrokeWidth = Math.max(2, 20 * baseNodeSize * (1 - levelIndex / flatLevels.length));
+
+        elements.push(
+          <line
+            key={`level-connector-${levelIndex}`}
+            x1={startX}
+            y1={prevLevelY + 30 * baseNodeSize}
+            x2={startX}
+            y2={levelY - 30 * baseNodeSize}
+            stroke="#94a3b8"
+            strokeWidth={connectorStrokeWidth}
+          />
+        );
+      }
+
+      // Draw level label
+      elements.push(
+        <text
+          key={`level-label-${levelIndex}`}
+          x={levelStartX - 100}
+          y={levelY + 5}
+          textAnchor="end"
+          className="text-sm font-semibold fill-gray-500 select-none pointer-events-none"
+          style={{ fontSize: `${14 * baseNodeSize}px` }}
+        >
+          {level.label}
+        </text>
+      );
+
+      // Draw nodes for this level in a horizontal row
+      level.uniqueValues.forEach((item, itemIndex) => {
+        const nodeX = levelStartX + itemIndex * nodeSpacing;
+        const nodeKey = `flat-${levelIndex}-${item.value}`;
+        const nodeWidth = 140 * baseNodeSize;
+        const nodeHeight = 40 * baseNodeSize;
+
+        // Check if this is a message node (last level with Message source)
+        const isMessage = item.source === 'Messages' || item.source === 'Message';
+
+        // Determine node color
+        let nodeColor = colors.color;
+        if (isMessage && item.data?.status) {
+          nodeColor = getStatusColor(item.data.status);
+        }
+
+        // Check if editable
+        const isEditable =
+          ((item.source === 'Audiences' || item.source === 'Audience') && onEditAudience) ||
+          ((item.source === 'Topics' || item.source === 'Topic') && onEditTopic) ||
+          ((item.source === 'Messages' || item.source === 'Message') && onEditMessage);
+
+        elements.push(
+          <g
+            key={nodeKey}
+            onMouseDown={(e) => handleMouseDown(e, nodeKey, item.data, nodeX, levelY)}
+            onMouseMove={handleMouseMoveForDrag}
+            onDoubleClick={() => handleNodeDoubleClick(item)}
+            className="transition-opacity hover:opacity-80"
+            style={{ cursor: isEditable ? 'pointer' : 'grab' }}
+          >
+            <rect
+              x={nodeX - nodeWidth / 2}
+              y={levelY - nodeHeight / 2}
+              width={nodeWidth}
+              height={nodeHeight}
+              rx={5 * baseNodeSize}
+              fill={nodeColor}
+              stroke="none"
+            />
+            <text
+              x={nodeX}
+              y={levelY + 5 * baseNodeSize}
+              textAnchor="middle"
+              className="text-sm font-bold pointer-events-none select-none fill-white"
+              style={{ fontSize: `${14 * baseNodeSize}px` }}
+            >
+              {item.value}
+            </text>
+            {isEditable && <title>Double-click to edit</title>}
+          </g>
+        );
+      });
+    });
+
+    return elements;
   };
 
   return (
@@ -881,21 +1233,59 @@ const TreeView = React.memo(({
           minHeight: 0
         }}
       >
-        {/* Tree structure input overlay */}
-        <div className="absolute top-4 left-4 z-10" style={{ width: '90%' }}>
-          <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-              Tree structure:
-            </label>
+        {/* Top right control buttons */}
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          {/* Fit and center button */}
+          <button
+            onClick={handleFitAndCenter}
+            className="p-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
+            title="Fit and center tree"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          </button>
+
+          {/* Tree structure toggle button */}
+          <button
+            onClick={() => setShowTreeStructure(!showTreeStructure)}
+            className={`p-2 border rounded-lg shadow-sm transition-colors ${
+              showTreeStructure
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white border-gray-300 hover:bg-gray-50'
+            }`}
+            title="Edit tree structure"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v18"/>
+              <path d="M5 8h14"/>
+              <path d="M5 16h14"/>
+              <circle cx="12" cy="3" r="2"/>
+              <circle cx="5" cy="8" r="2"/>
+              <circle cx="19" cy="8" r="2"/>
+              <circle cx="5" cy="16" r="2"/>
+              <circle cx="19" cy="16" r="2"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Tree structure input panel (hidden behind icon) */}
+        {showTreeStructure && (
+          <div className="absolute top-16 right-4 z-10 bg-white border border-gray-300 rounded-lg shadow-lg p-4" style={{ width: '500px' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Tree structure:
+              </label>
+            </div>
             <input
               type="text"
               value={tempTreeStructure}
               onChange={handleInputChange}
-              className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none mb-3"
               placeholder="e.g., Product → Strategy → Targeting Type → Audience → Topic → Messages"
             />
             {hasChanges && (
-              <>
+              <div className="flex gap-2">
                 <button
                   onClick={handleSave}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm"
@@ -908,14 +1298,17 @@ const TreeView = React.memo(({
                 >
                   Cancel
                 </button>
-              </>
+              </div>
             )}
           </div>
+        )}
 
+        {/* Left side sliders */}
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-4">
           {/* Layer height slider */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-              Layer height:
+              Layer:
             </label>
             <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm">
               <input
@@ -925,9 +1318,28 @@ const TreeView = React.memo(({
                 step="0.1"
                 value={layerHeight}
                 onChange={handleLayerHeightChange}
-                className="w-32"
+                className="w-24"
               />
               <span className="text-sm text-gray-600 font-mono w-8">{layerHeight.toFixed(1)}x</span>
+            </div>
+          </div>
+
+          {/* Node size slider */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Node:
+            </label>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm">
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={baseNodeSize}
+                onChange={handleBaseNodeSizeChange}
+                className="w-24"
+              />
+              <span className="text-sm text-gray-600 font-mono w-8">{baseNodeSize.toFixed(1)}x</span>
             </div>
           </div>
         </div>
@@ -944,7 +1356,7 @@ const TreeView = React.memo(({
           }}
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-            {/* Root node - 3x bigger and blue */}
+            {/* Root node - scales with baseNodeSize */}
             <g
               onMouseDown={(e) => handleMouseDown(e, '__root__', { type: 'root' }, startX, startY)}
               className="transition-opacity hover:opacity-80"
@@ -952,15 +1364,15 @@ const TreeView = React.memo(({
               <rect
                 x={(() => {
                   const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.x - 360;
+                  return pos.x - 360 * baseNodeSize;
                 })()}
                 y={(() => {
                   const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.y - 100;
+                  return pos.y - 100 * baseNodeSize;
                 })()}
-                width={720}
-                height={200}
-                rx={24}
+                width={720 * baseNodeSize}
+                height={200 * baseNodeSize}
+                rx={24 * baseNodeSize}
                 fill="#2563eb"
                 stroke="none"
               />
@@ -971,31 +1383,35 @@ const TreeView = React.memo(({
                 })()}
                 y={(() => {
                   const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-                  return pos.y + 15;
+                  return pos.y + 15 * baseNodeSize;
                 })()}
                 textAnchor="middle"
                 className="fill-white select-none pointer-events-none"
-                style={{ fontSize: '48px', fontWeight: 'bold' }}
+                style={{ fontSize: `${48 * baseNodeSize}px`, fontWeight: 'bold' }}
               >
                 Decision tree
               </text>
             </g>
 
-            {/* Recursively render tree levels */}
-            {renderTreeLevel(treeData, 0, (() => {
-              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-              return pos.x;
-            })(), (() => {
-              const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
-              return pos.y;
-            })(), treeStartX)}
+            {/* Render tree or flat mode based on toggle */}
+            {flattenMode ? (
+              renderFlatMode()
+            ) : (
+              renderTreeLevel(treeData, (() => {
+                const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                return pos.x;
+              })(), (() => {
+                const pos = getNodePosition('__root__', { type: 'root' }, startX, startY);
+                return pos.y;
+              })(), treeStartX)
+            )}
           </g>
         </svg>
       </div>
     </div>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison - only re-render if arrays/zoom actually changed by reference
+  // Custom comparison - only re-render if props actually changed
   return (
     prevProps.audiences === nextProps.audiences &&
     prevProps.topics === nextProps.topics &&
@@ -1004,7 +1420,8 @@ const TreeView = React.memo(({
     prevProps.statusFilters === nextProps.statusFilters &&
     prevProps.zoom === nextProps.zoom &&
     prevProps.treeStructure === nextProps.treeStructure &&
-    prevProps.connectorType === nextProps.connectorType
+    prevProps.connectorType === nextProps.connectorType &&
+    prevProps.flattenMode === nextProps.flattenMode
   );
 });
 

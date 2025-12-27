@@ -65,6 +65,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       creativesFolderId: ''
     },
     treeStructure: 'Product → Strategy → Targeting Type → Audience → Topic → Messages',
+    sankeyStructure: 'Product → Strategy → Audience → Topic → Message',
     feedStructure: 'Text:advert_id,Text:pmmid,AdformSignal:ADFPLAID,ReportingLabel,IsDefault,IsActive,DateFrom,DateTo,Text:messaging_card_id,Text:messaging_card_variant,Text:advert_name,Text:template_variant_class,LP:clickTAG,Asset:background_image_1,Asset:background_image_2,Asset:background_image_3,Asset:background_image_4,Asset:sticker_image_1,Asset:background_image_logo,Text:headline_text_1,Text:copy_text_1,Text:copy_text_2,Text:click_text,Text:headline_style_1,Text:copy_style_1,Text:copy_style_2',
     lookAndFeel: {
       logo: '',
@@ -200,6 +201,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         imageBaseUrls: config.imageBaseUrls,
         patterns: config.patterns,
         treeStructure: config.treeStructure,
+        sankeyStructure: config.sankeyStructure,
         feedStructure: config.feedStructure,
         lookAndFeel: config.lookAndFeel
       });
@@ -1045,6 +1047,29 @@ Guidelines for creating instructions:
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Define the hierarchy levels for the tree view using → arrows to separate levels
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sankey Structure Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Sankey Structure</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sankey Diagram Hierarchy
+                </label>
+                <input
+                  type="text"
+                  value={config.sankeyStructure || 'Product → Strategy → Audience → Topic → Message'}
+                  onChange={(e) => handleInputChange('sankeyStructure', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  placeholder="Product → Strategy → Audience → Topic → Message"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define the hierarchy levels for the Sankey diagram using → arrows to separate levels.
+                  Available: Product, Strategy, Targeting Type, Audience, Topic, Message
                 </p>
               </div>
             </div>
