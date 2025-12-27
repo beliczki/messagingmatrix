@@ -8,6 +8,8 @@ import { clearAndReloadApp } from '../utils/clearAndReload';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import TreeView from './TreeView';
+import Tree2View from './Tree2View';
+import SankeyView from './SankeyView';
 import KeywordEditor from './KeywordEditor';
 import MessageEditorDialog from './MessageEditorDialog';
 import AudienceEditorDialog from './AudienceEditorDialog';
@@ -237,6 +239,14 @@ const Matrix = ({
   const matrixPan = useMemo(() => matrixViewState?.matrixPan || { x: 0, y: 0 }, [matrixViewState?.matrixPan]);
   const treeZoom = matrixViewState?.treeZoom || 1;
 
+  // Refs for tree views to access zoom controls
+  const tree2Ref = useRef(null);
+  const sankeyRef = useRef(null);
+
+  // State to track zoom from tree views (for header display)
+  const [tree2Zoom, setTree2Zoom] = useState(0.5);
+  const [sankeyZoom, setSankeyZoom] = useState(0.5);
+
   // Setter functions that update matrixViewState
   const setViewMode = (value) => setMatrixViewState({ ...matrixViewState, viewMode: value });
   const setDisplayMode = (value) => setMatrixViewState({ ...matrixViewState, displayMode: value });
@@ -264,6 +274,7 @@ const Matrix = ({
 
   // Tree view controls state
   const [treeConnectorType, setTreeConnectorType] = useState('curved');
+  const [treeFlattenMode, setTreeFlattenMode] = useState(false);
   const [treeStructure, setTreeStructure] = useState(() => {
     // Initialize from settings synchronously to prevent oscillation
     try {
@@ -272,6 +283,16 @@ const Matrix = ({
     } catch (e) {
       console.warn('Could not load tree structure from settings on init:', e);
       return 'Audiences.Product → Audiences.Strategy → Audiences.Targeting_type → Audiences.Name → Topics.Name → Messages.Number → Messages.Variant';
+    }
+  });
+
+  const [sankeyStructure, setSankeyStructure] = useState(() => {
+    try {
+      const config = settings.getAll();
+      return config.sankeyStructure || 'Audiences.Product → Audiences.Strategy → Audiences.Name → Topics.Name → Messages.Number';
+    } catch (e) {
+      console.warn('Could not load sankey structure from settings on init:', e);
+      return 'Audiences.Product → Audiences.Strategy → Audiences.Name → Topics.Name → Messages.Number';
     }
   });
 
@@ -412,6 +433,9 @@ const Matrix = ({
         });
         if (config.treeStructure) {
           setTreeStructure(config.treeStructure);
+        }
+        if (config.sankeyStructure) {
+          setSankeyStructure(config.sankeyStructure);
         }
         if (config.feedStructure) {
           setFeedStructure(config.feedStructure);
@@ -875,7 +899,7 @@ const Matrix = ({
   if (deps.audiences !== audiences || deps.audienceFilter !== audienceFilter || deps.productFilters !== productFilters) {
     console.log('🟣 filteredAudiences RECOMPUTING (module-level cache miss)');
     persistentMatrixRefs.cachedFilteredAudiences = audiences.filter(aud => {
-      const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || ''), audienceFilter);
+      const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || '') + ' ' + (aud.lineitem_id || ''), audienceFilter);
       const matchesProduct = productFilters.length === 0 || (aud.product && productFilters.includes(aud.product));
       return matchesText && matchesProduct;
     });
@@ -1115,6 +1139,45 @@ const Matrix = ({
     setIsPanning(false);
   };
 
+  // Handle fit to view - calculate optimal zoom to fit content in viewport
+  const handleMatrixFit = () => {
+    const container = matrixContainerRef.current;
+    if (!container) return;
+
+    // Get the table element inside the zoomed div
+    const table = container.querySelector('table');
+    if (!table) return;
+
+    // Get viewport dimensions (container size)
+    const viewportWidth = container.clientWidth;
+    const viewportHeight = container.clientHeight;
+
+    // Get content dimensions at 100% zoom
+    // We need to temporarily reset zoom to measure actual content size
+    const zoomedDiv = container.querySelector('div[style*="zoom"]');
+    if (!zoomedDiv) return;
+
+    const currentZoom = matrixZoom;
+    zoomedDiv.style.zoom = '1';
+
+    const contentWidth = table.offsetWidth;
+    const contentHeight = table.offsetHeight;
+
+    // Restore zoom
+    zoomedDiv.style.zoom = currentZoom;
+
+    // Calculate zoom to fit (with some padding)
+    const padding = 20;
+    const zoomX = (viewportWidth - padding) / contentWidth;
+    const zoomY = (viewportHeight - padding) / contentHeight;
+
+    // Use the smaller zoom to ensure both dimensions fit
+    const newZoom = Math.min(zoomX, zoomY, 1); // Cap at 100%
+    const clampedZoom = Math.max(0.1, Math.min(newZoom, 3)); // Clamp between 10% and 300%
+
+    setMatrixZoom(clampedZoom);
+  };
+
   // Handle long press for select mode
   const handleMessageMouseDown = (e, msg) => {
     // Don't start long press if:
@@ -1140,7 +1203,6 @@ const Matrix = ({
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
       // If NOT in select mode and we're clearing a timer, it was just a short click
-      // Don't enter select mode, just return
       if (!isSelectMode) {
         return;
       }
@@ -1570,12 +1632,19 @@ const Matrix = ({
           matrixZoom={matrixZoom}
           treeZoom={treeZoom}
           treeConnectorType={treeConnectorType}
+          treeFlattenMode={treeFlattenMode}
           lookAndFeel={lookAndFeel}
           onViewModeChange={setViewMode}
           onDisplayModeChange={setDisplayMode}
           onMatrixZoomChange={setMatrixZoom}
+          onMatrixFit={handleMatrixFit}
           onTreeZoomChange={setTreeZoom}
           onTreeConnectorTypeChange={setTreeConnectorType}
+          onTreeFlattenModeChange={setTreeFlattenMode}
+          tree2Ref={tree2Ref}
+          sankeyRef={sankeyRef}
+          tree2Zoom={tree2Zoom}
+          sankeyZoom={sankeyZoom}
         />
 
         <button
@@ -1605,9 +1674,42 @@ const Matrix = ({
             setZoom={setTreeZoom}
             connectorType={treeConnectorType}
             setConnectorType={setTreeConnectorType}
+            flattenMode={treeFlattenMode}
+            onFlattenModeChange={setTreeFlattenMode}
             treeStructure={treeStructure}
             onTreeStructureChange={saveTreeStructure}
             lookAndFeel={lookAndFeel}
+            onEditAudience={setEditingAudience}
+            onEditTopic={setEditingTopic}
+            onEditMessage={openMessageEditor}
+          />
+        ) : viewMode === 'tree2' ? (
+          <Tree2View
+            ref={tree2Ref}
+            audiences={filteredAudiences}
+            topics={filteredTopics}
+            getMessages={getMessages}
+            statusFilters={statusFilters}
+            treeStructure={treeStructure}
+            lookAndFeel={lookAndFeel}
+            onEditAudience={setEditingAudience}
+            onEditTopic={setEditingTopic}
+            onEditMessage={openMessageEditor}
+            onZoomChange={setTree2Zoom}
+          />
+        ) : viewMode === 'tree3' ? (
+          <SankeyView
+            ref={sankeyRef}
+            audiences={filteredAudiences}
+            topics={filteredTopics}
+            getMessages={getMessages}
+            statusFilters={statusFilters}
+            sankeyStructure={sankeyStructure}
+            lookAndFeel={lookAndFeel}
+            onEditAudience={setEditingAudience}
+            onEditTopic={setEditingTopic}
+            onEditMessage={openMessageEditor}
+            onZoomChange={setSankeyZoom}
           />
         ) : viewMode === 'feed' ? (
           <FeedTableView
@@ -1629,6 +1731,7 @@ const Matrix = ({
             matrixPan={matrixPan}
             spacePressed={spacePressed}
             displayMode={displayMode}
+            onDisplayModeChange={setDisplayMode}
             audienceFilter={audienceFilter}
             topicFilter={topicFilter}
             mcFilter={mcFilter}
