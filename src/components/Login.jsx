@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Mail, AlertCircle, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../utils/api';
 
 // Messaging Matrix Logo Component
 const MessagingMatrixLogo = ({ className = "", color = "#2870ed" }) => (
@@ -42,7 +43,26 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lookAndFeel, setLookAndFeel] = useState(null);
   const { login } = useAuth();
+
+  // Fetch public config for design colors
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await api.get('/api/config-basic');
+        if (response.data?.lookAndFeel) {
+          setLookAndFeel(response.data.lookAndFeel);
+        }
+      } catch (err) {
+        console.log('Could not fetch design config, using defaults');
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  const headerColor = lookAndFeel?.headerColor || '#2870ed';
+  const buttonColor = lookAndFeel?.buttonColor || headerColor;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,9 +84,13 @@ const Login = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
-            <MessagingMatrixLogo className="w-full h-full" color="#2870ed" />
+            {lookAndFeel?.logo ? (
+              <img src={lookAndFeel.logo} alt="Logo" className="max-w-full max-h-full object-contain" />
+            ) : (
+              <MessagingMatrixLogo className="w-full h-full" color={headerColor} />
+            )}
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Messaging Matrix</h1>
+          <h1 className="text-3xl font-bold mb-2" style={{ color: headerColor }}>Messaging Matrix</h1>
           <p className="text-gray-600">Sign in to continue</p>
         </div>
 
@@ -94,7 +118,10 @@ const Login = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
+                style={{ '--tw-ring-color': headerColor, borderColor: undefined }}
+                onFocus={(e) => e.target.style.borderColor = headerColor}
+                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                 placeholder="your.email@example.com"
                 required
                 autoComplete="email"
@@ -117,7 +144,10 @@ const Login = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
+                style={{ '--tw-ring-color': headerColor, borderColor: undefined }}
+                onFocus={(e) => e.target.style.borderColor = headerColor}
+                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
@@ -130,7 +160,13 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white font-semibold rounded-lg focus:ring-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{
+              backgroundColor: buttonColor,
+              '--tw-ring-color': `${buttonColor}40`
+            }}
+            onMouseEnter={(e) => e.target.style.filter = 'brightness(0.9)'}
+            onMouseLeave={(e) => e.target.style.filter = 'brightness(1)'}
           >
             {loading ? (
               <>
