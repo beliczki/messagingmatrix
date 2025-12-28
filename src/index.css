@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -31,3 +31,57 @@ code {
   background-color: #f9fafb;
   color: #d1d5db;
 }
+
+/* Login input autofill transparent background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: #ffffff !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Blob floating animations */
+@keyframes blob-float-1 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(15px, -20px) rotate(5deg); }
+  50% { transform: translate(-10px, 15px) rotate(-3deg); }
+  75% { transform: translate(20px, 10px) rotate(2deg); }
+}
+
+@keyframes blob-float-2 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(-20px, 10px) rotate(-4deg); }
+  50% { transform: translate(15px, -15px) rotate(6deg); }
+  75% { transform: translate(-10px, -20px) rotate(-2deg); }
+}
+
+@keyframes blob-float-3 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(25px, 15px) rotate(3deg); }
+  66% { transform: translate(-15px, -10px) rotate(-5deg); }
+}
+
+@keyframes blob-float-4 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20% { transform: translate(-15px, 25px) rotate(-3deg); }
+  40% { transform: translate(10px, -10px) rotate(4deg); }
+  60% { transform: translate(20px, 15px) rotate(-2deg); }
+  80% { transform: translate(-20px, -15px) rotate(5deg); }
+}
+
+@keyframes blob-float-5 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  30% { transform: translate(18px, -18px) rotate(6deg); }
+  60% { transform: translate(-12px, 22px) rotate(-4deg); }
+}
+
+.blob-animate-1 { animation: blob-float-1 12s ease-in-out infinite; }
+.blob-animate-2 { animation: blob-float-2 14s ease-in-out infinite; }
+.blob-animate-3 { animation: blob-float-3 10s ease-in-out infinite; }
+.blob-animate-4 { animation: blob-float-4 16s ease-in-out infinite; }
+.blob-animate-5 { animation: blob-float-5 11s ease-in-out infinite; }

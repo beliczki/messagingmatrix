@@ -19,11 +19,8 @@ const PreviewView = lazy(() => import('./components/PreviewView'));
 
 // Loading component
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div className="text-center">
-      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-      <div className="text-gray-600">Loading...</div>
-    </div>
+  <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#2870ed' }}>
+    <div className="text-white text-lg">Loading...</div>
   </div>
 );
 
@@ -139,11 +136,8 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
         {/* Module Content with Suspense for lazy-loaded components */}
         <div className="flex-1 overflow-auto">
           <Suspense fallback={
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                <div className="text-gray-600 text-sm">Loading module...</div>
-              </div>
+            <div className="flex items-center justify-center h-full" style={{ backgroundColor: '#2870ed' }}>
+              <div className="text-white text-lg">Loading...</div>
             </div>
           }>
             <CurrentModuleComponent
@@ -247,8 +241,8 @@ const App = () => {
   // Show loading state while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#2870ed' }}>
+        <div className="text-white text-lg">Loading...</div>
       </div>
     );
   }

@@ -38,21 +38,68 @@ const MessagingMatrixLogo = ({ className = "", color = "#2870ed" }) => (
   </svg>
 );
 
-// Animated gradient blob component
-const GradientBlob = ({ color, size, top, left, delay = 0 }) => (
-  <div
-    className="absolute rounded-full blur-3xl opacity-60 animate-pulse"
-    style={{
-      background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
-      width: size,
-      height: size,
-      top,
-      left,
-      animationDelay: `${delay}s`,
-      animationDuration: '4s',
-    }}
-  />
-);
+// Generate random bezier blob path
+const generateBlobPath = () => {
+  const points = 6; // number of points around the blob
+  const angleStep = (Math.PI * 2) / points;
+  const radius = 42; // base radius as percentage of viewBox
+  const variance = 12; // how much the radius can vary
+
+  let path = '';
+  const controlPoints = [];
+
+  // Generate points around the circle with random radius variation
+  for (let i = 0; i < points; i++) {
+    const angle = i * angleStep - Math.PI / 2;
+    const r = radius + (Math.random() - 0.5) * variance * 2;
+    const x = 50 + Math.cos(angle) * r;
+    const y = 50 + Math.sin(angle) * r;
+    controlPoints.push({ x, y, angle });
+  }
+
+  // Create smooth bezier path through points
+  path = `M ${controlPoints[0].x} ${controlPoints[0].y}`;
+
+  for (let i = 0; i < points; i++) {
+    const curr = controlPoints[i];
+    const next = controlPoints[(i + 1) % points];
+
+    // Calculate control points for smooth curve
+    const tension = 0.3 + Math.random() * 0.3;
+    const dist = Math.sqrt(Math.pow(next.x - curr.x, 2) + Math.pow(next.y - curr.y, 2));
+
+    const cp1x = curr.x + Math.cos(curr.angle + Math.PI / 2) * dist * tension;
+    const cp1y = curr.y + Math.sin(curr.angle + Math.PI / 2) * dist * tension;
+    const cp2x = next.x - Math.cos(next.angle + Math.PI / 2) * dist * tension;
+    const cp2y = next.y - Math.sin(next.angle + Math.PI / 2) * dist * tension;
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
+  }
+
+  return path + ' Z';
+};
+
+// SVG Blob component with bezier curves
+const GradientBlob = ({ color, size, top, left, opacity = 0.6, blendMode = null }) => {
+  const [path] = React.useState(() => generateBlobPath());
+  return (
+    <svg
+      className="absolute"
+      style={{
+        width: size,
+        height: size,
+        top,
+        left,
+        opacity,
+        mixBlendMode: blendMode,
+        overflow: 'visible',
+      }}
+      viewBox="0 0 100 100"
+    >
+      <path d={path} fill={color} />
+    </svg>
+  );
+};
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -97,23 +144,33 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 overflow-hidden relative">
-      {/* Animated gradient blobs */}
-      <GradientBlob color={secondaryColor1} size="500px" top="-150px" left="-100px" delay={0} />
-      <GradientBlob color={secondaryColor3} size="400px" top="10%" left="20%" delay={1} />
-      <GradientBlob color={secondaryColor2} size="450px" top="50%" left="60%" delay={0.5} />
-      <GradientBlob color={headerColor} size="350px" top="70%" left="-50px" delay={1.5} />
-      <GradientBlob color={buttonColor} size="300px" top="-50px" left="70%" delay={2} />
+    <div className="min-h-screen flex items-center justify-center p-4 overflow-hidden relative" style={{ backgroundColor: headerColor }}>
+      {/* Overlapping solid color blobs - clustered around login card */}
+      <GradientBlob color={secondaryColor1} size="450px" top="20%" left="calc(50% - 400px)" opacity={0.8} />
+      <GradientBlob color={secondaryColor3} size="400px" top="15%" left="calc(50% - 100px)" opacity={0.75} />
+      <GradientBlob color={headerColor} size="420px" top="25%" left="calc(50% + 150px)" opacity={0.7} />
+      <GradientBlob color={secondaryColor2} size="380px" top="45%" left="calc(50% - 300px)" opacity={0.8} />
+      <GradientBlob color={buttonColor} size="350px" top="45%" left="calc(50% - 50px)" opacity={0.75} />
+
+      {/* Additional blue blobs */}
+      <GradientBlob color={headerColor} size="380px" top="10%" left="calc(50% - 250px)" opacity={0.7} />
+      <GradientBlob color={headerColor} size="320px" top="50%" left="calc(50% + 100px)" opacity={0.65} />
+      <GradientBlob color={headerColor} size="280px" top="35%" left="calc(50% - 50px)" opacity={0.6} />
+
+      {/* Blue accent blobs with blend modes */}
+      <GradientBlob color={headerColor} size="320px" top="30%" left="calc(50% - 160px)" opacity={0.6} blendMode="color-dodge" />
+      <GradientBlob color={headerColor} size="280px" top="40%" left="calc(50% + 50px)" opacity={0.5} blendMode="color-dodge" />
+      <GradientBlob color={headerColor} size="260px" top="20%" left="calc(50% - 250px)" opacity={0.55} blendMode="color-burn" />
 
       {/* Glassmorphism card */}
       <div
         className="relative z-10 w-full max-w-md p-8 rounded-3xl"
         style={{
-          background: 'rgba(255, 255, 255, 0.25)',
+          background: 'rgba(255, 255, 255, 0.3)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.4)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.05)',
         }}
       >
         {/* Header */}
@@ -122,11 +179,10 @@ const Login = () => {
             {lookAndFeel?.logo ? (
               <img src={lookAndFeel.logo} alt="Logo" className="max-w-full max-h-full object-contain" />
             ) : (
-              <MessagingMatrixLogo className="w-full h-full" color={headerColor} />
+              <MessagingMatrixLogo className="w-full h-full" color="#ffffff" />
             )}
           </div>
-          <h1 className="text-3xl font-bold mb-2 text-gray-800">Messaging Matrix</h1>
-          <p className="text-gray-600">Sign in to continue</p>
+          <h1 className="text-5xl font-bold text-white leading-tight">Messaging<br/>Matrix</h1>
         </div>
 
         {/* Error Message */}
@@ -147,29 +203,26 @@ const Login = () => {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email Field */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Mail size={18} className="text-gray-400" />
+                <Mail size={18} className="text-white/70" />
               </div>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all"
+                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all text-white placeholder-white/50 autofill:bg-transparent autofill:shadow-none"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.5)',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
                 }}
                 onFocus={(e) => {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.8)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.25)';
                   e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
                 }}
                 onBlur={(e) => {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
                   e.target.style.boxShadow = 'none';
                 }}
                 placeholder="your.email@example.com"
@@ -182,29 +235,26 @@ const Login = () => {
 
           {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Lock size={18} className="text-gray-400" />
+                <Lock size={18} className="text-white/70" />
               </div>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all"
+                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all text-white placeholder-white/50"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.5)',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
                 }}
                 onFocus={(e) => {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.8)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.25)';
                   e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
                 }}
                 onBlur={(e) => {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
                   e.target.style.boxShadow = 'none';
                 }}
                 placeholder="Enter your password"
@@ -219,18 +269,21 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-white font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
             style={{
-              background: `linear-gradient(135deg, ${buttonColor} 0%, ${secondaryColor1} 100%)`,
-              boxShadow: `0 4px 15px ${buttonColor}50`,
+              background: headerColor,
+              color: '#ffffff',
+              boxShadow: `0 4px 15px ${headerColor}50`,
             }}
             onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = `0 6px 20px ${buttonColor}60`;
+              e.target.style.background = '#ffffff';
+              e.target.style.color = headerColor;
+              e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = `0 4px 15px ${buttonColor}50`;
+              e.target.style.background = headerColor;
+              e.target.style.color = '#ffffff';
+              e.target.style.boxShadow = `0 4px 15px ${headerColor}50`;
             }}
           >
             {loading ? (
@@ -246,7 +299,7 @@ const Login = () => {
 
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-white/30 text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-xs text-white/60">
             Secure authentication powered by Web Crypto API
           </p>
         </div>
