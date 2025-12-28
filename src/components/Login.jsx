@@ -38,6 +38,22 @@ const MessagingMatrixLogo = ({ className = "", color = "#2870ed" }) => (
   </svg>
 );
 
+// Animated gradient blob component
+const GradientBlob = ({ color, size, top, left, delay = 0 }) => (
+  <div
+    className="absolute rounded-full blur-3xl opacity-60 animate-pulse"
+    style={{
+      background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
+      width: size,
+      height: size,
+      top,
+      left,
+      animationDelay: `${delay}s`,
+      animationDuration: '4s',
+    }}
+  />
+);
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -62,7 +78,10 @@ const Login = () => {
   }, []);
 
   const headerColor = lookAndFeel?.headerColor || '#2870ed';
-  const buttonColor = lookAndFeel?.buttonColor || headerColor;
+  const buttonColor = lookAndFeel?.buttonColor || '#ff6130';
+  const secondaryColor1 = lookAndFeel?.secondaryColor1 || '#eb4c79';
+  const secondaryColor2 = lookAndFeel?.secondaryColor2 || '#02a3a4';
+  const secondaryColor3 = lookAndFeel?.secondaryColor3 || '#711c7a';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -75,12 +94,28 @@ const Login = () => {
       setError(result.error);
       setLoading(false);
     }
-    // If successful, the AuthContext will update and App will re-render
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 overflow-hidden relative">
+      {/* Animated gradient blobs */}
+      <GradientBlob color={secondaryColor1} size="500px" top="-150px" left="-100px" delay={0} />
+      <GradientBlob color={secondaryColor3} size="400px" top="10%" left="20%" delay={1} />
+      <GradientBlob color={secondaryColor2} size="450px" top="50%" left="60%" delay={0.5} />
+      <GradientBlob color={headerColor} size="350px" top="70%" left="-50px" delay={1.5} />
+      <GradientBlob color={buttonColor} size="300px" top="-50px" left="70%" delay={2} />
+
+      {/* Glassmorphism card */}
+      <div
+        className="relative z-10 w-full max-w-md p-8 rounded-3xl"
+        style={{
+          background: 'rgba(255, 255, 255, 0.25)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+        }}
+      >
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
@@ -90,38 +125,53 @@ const Login = () => {
               <MessagingMatrixLogo className="w-full h-full" color={headerColor} />
             )}
           </div>
-          <h1 className="text-3xl font-bold mb-2" style={{ color: headerColor }}>Messaging Matrix</h1>
+          <h1 className="text-3xl font-bold mb-2 text-gray-800">Messaging Matrix</h1>
           <p className="text-gray-600">Sign in to continue</p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+          <div
+            className="mb-6 p-4 rounded-xl flex items-start gap-3"
+            style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+            }}
+          >
             <AlertCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
-            <p className="text-red-800 text-sm">{error}</p>
+            <p className="text-red-700 text-sm">{error}</p>
           </div>
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email Field */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
               Email Address
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Mail size={20} className="text-gray-400" />
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Mail size={18} className="text-gray-400" />
               </div>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                style={{ '--tw-ring-color': headerColor, borderColor: undefined }}
-                onFocus={(e) => e.target.style.borderColor = headerColor}
-                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  border: '1px solid rgba(255, 255, 255, 0.5)',
+                }}
+                onFocus={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.8)';
+                  e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.boxShadow = 'none';
+                }}
                 placeholder="your.email@example.com"
                 required
                 autoComplete="email"
@@ -136,18 +186,27 @@ const Login = () => {
               Password
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock size={20} className="text-gray-400" />
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Lock size={18} className="text-gray-400" />
               </div>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                style={{ '--tw-ring-color': headerColor, borderColor: undefined }}
-                onFocus={(e) => e.target.style.borderColor = headerColor}
-                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                className="block w-full pl-11 pr-4 py-3 rounded-xl focus:outline-none transition-all"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.5)',
+                  border: '1px solid rgba(255, 255, 255, 0.5)',
+                }}
+                onFocus={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.8)';
+                  e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.5)';
+                  e.target.style.boxShadow = 'none';
+                }}
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
@@ -160,13 +219,19 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white font-semibold rounded-lg focus:ring-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-white font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             style={{
-              backgroundColor: buttonColor,
-              '--tw-ring-color': `${buttonColor}40`
+              background: `linear-gradient(135deg, ${buttonColor} 0%, ${secondaryColor1} 100%)`,
+              boxShadow: `0 4px 15px ${buttonColor}50`,
             }}
-            onMouseEnter={(e) => e.target.style.filter = 'brightness(0.9)'}
-            onMouseLeave={(e) => e.target.style.filter = 'brightness(1)'}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = `0 6px 20px ${buttonColor}60`;
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = `0 4px 15px ${buttonColor}50`;
+            }}
           >
             {loading ? (
               <>
@@ -180,8 +245,8 @@ const Login = () => {
         </form>
 
         {/* Footer */}
-        <div className="mt-8 pt-6 border-t text-center">
-          <p className="text-sm text-gray-500">
+        <div className="mt-8 pt-6 border-t border-white/30 text-center">
+          <p className="text-sm text-gray-600">
             Secure authentication powered by Web Crypto API
           </p>
         </div>
