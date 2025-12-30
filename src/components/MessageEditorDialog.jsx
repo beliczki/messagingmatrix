@@ -59,6 +59,16 @@ const MessageEditorDialog = ({
   const [availableDimensions, setAvailableDimensions] = useState([]);
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  // Handle close with animation
+  const handleClose = useCallback(() => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setEditingMessage(null);
+      setIsClosing(false);
+    }, 200); // Match animation duration
+  }, [setEditingMessage]);
 
   // Skip animation state (persisted to localStorage)
   const [skipAnimation, setSkipAnimation] = useState(() => {
@@ -600,7 +610,7 @@ const MessageEditorDialog = ({
     }
   }, [editingMessage?.template, editingMessage?.number, editingMessage?.variant, templates, creatives]);
 
-  if (!editingMessage) return null;
+  if (!editingMessage && !isClosing) return null;
 
   // Helper function to build full image URL using template.json path-messagingmatrix parameter
   const buildImageUrl = (imageKey, filename) => {
@@ -1502,8 +1512,8 @@ const MessageEditorDialog = ({
   );
 
   return createPortal(
-    <div className="dialog-overlay overlay-animated open">
-      <div className="dialog-panel dialog-animated open">
+    <div className={`dialog-overlay overlay-animated ${isClosing ? 'closing' : 'open'}`} onClick={handleClose}>
+      <div className={`dialog-panel dialog-animated ${isClosing ? 'closing' : 'open'}`} onClick={(e) => e.stopPropagation()}>
         <div className={`dialog-layout ${isWide ? 'wide-layout' : ''}`}>
           {/* LEFT SIDEBAR */}
           <div className="dialog-sidebar">
@@ -1605,7 +1615,7 @@ const MessageEditorDialog = ({
                 onClick={() => {
                   if (window.confirm('Are you sure you want to delete this message?')) {
                     deleteMessage(editingMessage.id);
-                    setEditingMessage(null);
+                    handleClose();
                   }
                 }}
                 className="link-button"
@@ -1615,7 +1625,7 @@ const MessageEditorDialog = ({
               </button>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  onClick={() => setEditingMessage(null)}
+                  onClick={handleClose}
                   className="btn btn-secondary btn-lg"
                   style={{ flex: 1 }}
                 >
@@ -1714,7 +1724,7 @@ const MessageEditorDialog = ({
                     css: editingMessage.css
                   };
                   updateMessageWithSync(editingMessage.id, allFields);
-                  setEditingMessage(null);
+                  handleClose();
                 }}
                 className="btn btn-primary btn-lg"
               >

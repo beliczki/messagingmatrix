@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Info, ExternalLink } from 'lucide-react';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -209,9 +210,9 @@ const CreativePreview = ({
     );
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-90 z-50 flex"
+      className="fixed inset-0 bg-black bg-opacity-90 z-[2100] flex"
       onClick={onClose}
     >
       {/* Info Panel - Full Height, Left Side, Dark Theme */}
@@ -377,7 +378,8 @@ const CreativePreview = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

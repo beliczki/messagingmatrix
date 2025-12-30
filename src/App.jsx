@@ -115,7 +115,23 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
 
       {/* Menu Panel */}
       <div className={`menu-panel ${menuOpen ? 'open' : ''}`}>
-        <div className="menu-content" ref={menuContentRef}>
+        <div
+          className="menu-content"
+          ref={menuContentRef}
+          onMouseLeave={() => {
+            // Return to active only when leaving the entire menu
+            if (selectorRef.current && menuContentRef.current) {
+              const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+              if (allItems[activeIndex]) {
+                const menuRect = menuContentRef.current.getBoundingClientRect();
+                const itemRect = allItems[activeIndex].getBoundingClientRect();
+                const newY = itemRect.top - menuRect.top;
+                console.log(`[menu-selector] LEAVE menu → active ${activeIndex}: translateY(${newY}px)`);
+                selectorRef.current.style.transform = `translateY(${newY}px)`;
+              }
+            }
+          }}
+        >
           {/* Logo */}
           <svg className="menu-logo" viewBox="0 0 800 800" fill="white">
             <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766 297.22773 561.72334"/>
@@ -149,18 +165,9 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
                       if (allItems[index]) {
                         const menuRect = menuContentRef.current.getBoundingClientRect();
                         const itemRect = allItems[index].getBoundingClientRect();
-                        selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
-                      }
-                    }
-                  }}
-                  onMouseLeave={() => {
-                    // Return to active item
-                    if (selectorRef.current && menuContentRef.current) {
-                      const allItems = menuContentRef.current.querySelectorAll('.nav-item');
-                      if (allItems[activeIndex]) {
-                        const menuRect = menuContentRef.current.getBoundingClientRect();
-                        const itemRect = allItems[activeIndex].getBoundingClientRect();
-                        selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                        const newY = itemRect.top - menuRect.top;
+                        console.log(`[menu-selector] ENTER item ${index} (${module.name}): translateY(${newY}px)`);
+                        selectorRef.current.style.transform = `translateY(${newY}px)`;
                       }
                     }
                   }}
@@ -181,22 +188,13 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
             onMouseEnter={() => {
               if (selectorRef.current && menuContentRef.current) {
                 selectorRef.current.classList.add('visible');
-                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
                 const profileItem = menuContentRef.current.querySelector('.nav-item.profile-item');
                 if (profileItem) {
                   const menuRect = menuContentRef.current.getBoundingClientRect();
                   const itemRect = profileItem.getBoundingClientRect();
-                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
-                }
-              }
-            }}
-            onMouseLeave={() => {
-              if (selectorRef.current && menuContentRef.current) {
-                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
-                if (allItems[activeIndex]) {
-                  const menuRect = menuContentRef.current.getBoundingClientRect();
-                  const itemRect = allItems[activeIndex].getBoundingClientRect();
-                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                  const newY = itemRect.top - menuRect.top;
+                  console.log(`[menu-selector] ENTER profile: translateY(${newY}px)`);
+                  selectorRef.current.style.transform = `translateY(${newY}px)`;
                 }
               }
             }}
@@ -216,17 +214,9 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
                 if (logoutItem) {
                   const menuRect = menuContentRef.current.getBoundingClientRect();
                   const itemRect = logoutItem.getBoundingClientRect();
-                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
-                }
-              }
-            }}
-            onMouseLeave={() => {
-              if (selectorRef.current && menuContentRef.current) {
-                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
-                if (allItems[activeIndex]) {
-                  const menuRect = menuContentRef.current.getBoundingClientRect();
-                  const itemRect = allItems[activeIndex].getBoundingClientRect();
-                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                  const newY = itemRect.top - menuRect.top;
+                  console.log(`[menu-selector] ENTER logout: translateY(${newY}px)`);
+                  selectorRef.current.style.transform = `translateY(${newY}px)`;
                 }
               }
             }}
@@ -337,6 +327,17 @@ const App = () => {
     };
     loadLookAndFeel();
   }, []);
+
+  // Update CSS variables when lookAndFeel colors change
+  useEffect(() => {
+    if (lookAndFeel?.headerColor) {
+      document.documentElement.style.setProperty('--color-primary', lookAndFeel.headerColor);
+      document.documentElement.style.setProperty('--main-ui-color', lookAndFeel.headerColor);
+    }
+    if (lookAndFeel?.secondaryColor1) {
+      document.documentElement.style.setProperty('--toolbar-color', lookAndFeel.secondaryColor1);
+    }
+  }, [lookAndFeel?.headerColor, lookAndFeel?.secondaryColor1]);
 
   // Show loading state while checking authentication
   if (loading) {

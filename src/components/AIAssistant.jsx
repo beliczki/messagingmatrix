@@ -15,6 +15,7 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   const [isAttachingFiltered, setIsAttachingFiltered] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
+  const [isClosing, setIsClosing] = useState(false);
   const [pendingSuggestions, setPendingSuggestions] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [customPrompts, setCustomPrompts] = useState({});
@@ -29,6 +30,24 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   const messagesEndRef = useRef(null);
   const resizeStartY = useRef(0);
   const resizeStartHeight = useRef(0);
+
+  // Handle close with animation
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsCollapsed(true);
+      setIsClosing(false);
+    }, 200); // Match animation duration
+  };
+
+  // Handle toggle (for bottom panel click)
+  const handleToggle = () => {
+    if (!isCollapsed) {
+      handleClose();
+    } else {
+      setIsCollapsed(false);
+    }
+  };
 
   // Load API key from .env or localStorage on mount
   useEffect(() => {
@@ -1119,7 +1138,7 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
       {/* Bottom Panel Button - Always visible */}
       <div
         className="bottom-panel"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={handleToggle}
       >
         <Bot size={20} className="bottom-panel-icon" />
         <span className="bottom-panel-title">AI Assistant</span>
@@ -1132,13 +1151,13 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
       </div>
 
       {/* Dialog - rendered via portal when expanded */}
-      {!isCollapsed && createPortal(
+      {(!isCollapsed || isClosing) && createPortal(
         <div
-          className="dialog-overlay overlay-animated open"
-          onClick={() => setIsCollapsed(true)}
+          className={`dialog-overlay overlay-animated ${isClosing ? 'closing' : 'open'}`}
+          onClick={handleClose}
         >
           {/* Dialog */}
-          <div className="dialog dialog-animated open" onClick={(e) => e.stopPropagation()}>
+          <div className={`dialog dialog-animated ${isClosing ? 'closing' : 'open'}`} onClick={(e) => e.stopPropagation()}>
         <div className="dialog-layout" style={{ flexDirection: 'column', height: '100%' }}>
           {/* Header */}
           <div style={{
@@ -1209,7 +1228,7 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
                 <RefreshCw size={16} />
               </button>
               <button
-                onClick={() => setIsCollapsed(true)}
+                onClick={handleClose}
                 style={{
                   width: '32px',
                   height: '32px',

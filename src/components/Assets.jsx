@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Filter, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
-import PageHeader, { getButtonStyle } from './PageHeader';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Info, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import CreativePreview from './CreativePreview';
 import AssetsMasonryView from './AssetsMasonryView';
 import MediaLibraryBase from './MediaLibraryBase';
+import MediaToolbar from './MediaToolbar';
 import { loadDriveAssets, parseDriveAssetData, isDriveEnabled } from '../utils/driveAssets';
 import { clearAndReloadApp } from '../utils/clearAndReload';
+import settings from '../services/settings';
 
 const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   // Get assets from matrixData (loaded from spreadsheet)
@@ -18,6 +19,31 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
+  const [assetsFolderId, setAssetsFolderId] = useState(null);
+
+  // Selection mode state
+  const [selectorMode, setSelectorMode] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
+
+  // Filter states (persisted to localStorage)
+  const [productFilter, setProductFilter] = useState(() => {
+    const saved = localStorage.getItem('assets_productFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [typeFilter, setTypeFilter] = useState(() => {
+    const saved = localStorage.getItem('assets_typeFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [formatFilter, setFormatFilter] = useState(() => {
+    const saved = localStorage.getItem('assets_formatFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Background color state
+  const [bgColor, setBgColor] = useState(() => {
+    const saved = localStorage.getItem('assets_bgColor');
+    return saved || lookAndFeel?.headerColor || '#2870ed';
+  });
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -156,10 +182,36 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
     }
   };
 
-  // Check Drive on mount
+  // Check Drive on mount and load folder ID
   useEffect(() => {
-    isDriveEnabled().then(enabled => setDriveEnabled(enabled));
+    const loadDriveConfig = async () => {
+      const enabled = await isDriveEnabled();
+      setDriveEnabled(enabled);
+
+      // Load folder ID from settings
+      await settings.ensureInitialized();
+      const driveConfig = settings.get('googleDrive') || {};
+      setAssetsFolderId(driveConfig.assetsFolderId || null);
+    };
+    loadDriveConfig();
   }, []);
+
+  // Save filters to localStorage
+  useEffect(() => {
+    localStorage.setItem('assets_productFilter', JSON.stringify(productFilter));
+  }, [productFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('assets_typeFilter', JSON.stringify(typeFilter));
+  }, [typeFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('assets_formatFilter', JSON.stringify(formatFilter));
+  }, [formatFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('assets_bgColor', bgColor);
+  }, [bgColor]);
 
   // Update assets when spreadsheetAssets changes
   useEffect(() => {
@@ -171,6 +223,83 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   useEffect(() => {
     console.log('📦 Assets - local assets state:', assets?.length || 0, 'items');
   }, [assets]);
+
+  // Get unique products from assets
+  const availableProducts = useMemo(() => {
+    const products = new Set();
+    assets.forEach(asset => {
+      if (asset.Product && asset.Product.trim()) {
+        products.add(asset.Product);
+      }
+    });
+    return Array.from(products).sort();
+  }, [assets]);
+
+  // Get unique types from assets
+  const availableTypes = useMemo(() => {
+    const types = new Set();
+    assets.forEach(asset => {
+      if (asset.Type && asset.Type.trim()) {
+        types.add(asset.Type);
+      }
+    });
+    return Array.from(types).sort();
+  }, [assets]);
+
+  // Get unique formats from assets
+  const availableFormats = useMemo(() => {
+    const formats = new Set();
+    assets.forEach(asset => {
+      if (asset.File_format && asset.File_format.trim()) {
+        formats.add(asset.File_format.toLowerCase());
+      }
+    });
+    return Array.from(formats).sort();
+  }, [assets]);
+
+  // Filter assets based on filters
+  const filteredByFilters = useMemo(() => {
+    return assets.filter(asset => {
+      // Product filter
+      if (productFilter.length > 0) {
+        if (!asset.Product || !productFilter.includes(asset.Product)) {
+          return false;
+        }
+      }
+
+      // Type filter
+      if (typeFilter.length > 0) {
+        if (!asset.Type || !typeFilter.includes(asset.Type)) {
+          return false;
+        }
+      }
+
+      // Format filter
+      if (formatFilter.length > 0) {
+        const assetFormat = (asset.File_format || '').toLowerCase();
+        if (!formatFilter.includes(assetFormat)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [assets, productFilter, typeFilter, formatFilter]);
+
+  // Selection handlers
+  const toggleAssetSelection = (assetId, enableSelectorMode = false) => {
+    if (enableSelectorMode && !selectorMode) {
+      setSelectorMode(true);
+    }
+
+    const newSelection = new Set(selectedAssetIds);
+    if (newSelection.has(assetId)) {
+      newSelection.delete(assetId);
+    } else {
+      newSelection.add(assetId);
+    }
+    setSelectedAssetIds(newSelection);
+  };
 
   // Checkerboard pattern for transparency
   const checkerboardStyle = {
@@ -225,9 +354,9 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
-      <div className="matrix-view-container">
+      <div className="matrix-view-container" style={{ backgroundColor: 'transparent' }}>
         <MediaLibraryBase
-        items={assets}
+        items={filteredByFilters}
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Assets'}
         onMenuToggle={onMenuToggle}
@@ -237,47 +366,57 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         getItemUrl={(asset) => {
           // Prefer proxy URL (works better than direct Google Drive links)
           if (asset.File_driveID) {
-            const proxyUrl = `/api/drive/proxy/${asset.File_driveID}`;
-            console.log(`📎 Asset ${asset.File_name}: using proxy URL ${proxyUrl}`);
-            return proxyUrl;
+            return `/api/drive/proxy/${asset.File_driveID}`;
           }
-          console.log(`⚠️ Asset ${asset.File_name}: no File_driveID, using fallback URL`);
           return asset.File_DirectLink || asset.File_thumbnail;
         }}
         getItemFilename={(asset) => asset.File_name}
 
-        // Custom header with Drive sync
+        // No header - just toolbar
         renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => (
-          <PageHeader
-            onMenuToggle={onMenuToggle}
-            title={currentModuleName || 'Assets'}
-            lookAndFeel={lookAndFeel}
+          <MediaToolbar
+            filterText={filterText}
+            setFilterText={setFilterText}
+            productFilter={productFilter}
+            setProductFilter={setProductFilter}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            sizeFilter={formatFilter}
+            setSizeFilter={setFormatFilter}
+            availableProducts={availableProducts}
+            typeOptions={availableTypes}
+            availableSizes={availableFormats}
+            filteredCount={filteredCount}
+            totalCount={totalItems}
             viewMode={viewMode}
             setViewMode={setViewMode}
-            viewModes={viewModes}
-            titleFilters={
-              <div className="flex items-center gap-2">
-                <Filter size={18} className="text-white" />
-                <input
-                  type="text"
-                  value={filterText}
-                  onChange={(e) => setFilterText(e.target.value)}
-                  placeholder="Filter assets (use AND/OR operators)..."
-                  className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
-                />
-              </div>
-            }
-          >
-            <button
-              onClick={syncWithDrive}
-              className="p-2 text-white rounded hover:opacity-90 transition-opacity"
-              style={getButtonStyle(lookAndFeel)}
-              title="Sync with Google Drive"
-              disabled={loadingDrive}
-            >
-              <RefreshCw size={20} className={loadingDrive ? 'animate-spin' : ''} />
-            </button>
-          </PageHeader>
+            // Selection props
+            selectorMode={selectorMode}
+            selectedCount={selectedAssetIds.size}
+            onSelectAll={() => {
+              if (!selectorMode) {
+                setSelectorMode(true);
+              } else {
+                // Select all filtered assets
+                const allIds = new Set(filteredAssets.map(a => a.ID));
+                setSelectedAssetIds(allIds);
+              }
+            }}
+            onDeselectAll={() => setSelectedAssetIds(new Set())}
+            onExitSelection={() => {
+              setSelectorMode(false);
+              setSelectedAssetIds(new Set());
+            }}
+            // Color picker props
+            bgColor={bgColor}
+            setBgColor={setBgColor}
+            colorPresets={[
+              lookAndFeel?.headerColor || '#2870ed',
+              lookAndFeel?.secondaryColor1 || '#eb4c79',
+              lookAndFeel?.secondaryColor2 || '#02a3a4',
+              lookAndFeel?.secondaryColor3 || '#711c7a'
+            ]}
+          />
         )}
 
         // Custom masonry view using AssetsMasonryView
@@ -521,6 +660,10 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
           downloadFeedCSV={() => {}}
           changeTracking={matrixData?.changeTracking}
           originalState={matrixData?.originalState}
+          // Drive sync props
+          assetsFolderId={assetsFolderId}
+          onSyncAssets={syncWithDrive}
+          syncingAssets={loadingDrive}
         />
         <AIAssistant
           moduleContext={{ module: 'assets' }}

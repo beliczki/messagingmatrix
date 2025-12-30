@@ -34,11 +34,13 @@
   top: calc(var(--space-6) + 46px + 8px);
   right: calc(var(--space-6) + 46px);
   width: 280px;
-  background: var(--toolbar-color);
+  background: color-mix(in srgb, var(--toolbar-color) 90%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   border-radius: var(--radius-3xl);
   box-shadow: var(--ui-shadow);
   z-index: 100;
-  overflow: hidden;
+  overflow: visible; /* Allow dropdowns to overflow */
 
   /* Animation - same as menu */
   transform-origin: top right;
@@ -334,11 +336,34 @@
   top: calc(100% + 4px);
   left: 0;
   min-width: 180px;
+  max-height: 300px;
+  overflow-y: auto;
   background: var(--toolbar-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--ui-shadow);
   padding: var(--space-2);
   z-index: 200;
+
+  /* Custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.filter-dropdown-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filter-dropdown-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-dropdown-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.filter-dropdown-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .filter-dropdown-item {

@@ -252,6 +252,16 @@ class SheetsService {
 
   // Save all data
   async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null, creativesData = null) {
+    // SAFETY GUARD: Prevent saving empty matrix data (could wipe spreadsheet)
+    const hasData = (audiences && audiences.length > 0) ||
+                    (topics && topics.length > 0) ||
+                    (messages && messages.length > 0);
+    if (!hasData) {
+      console.error('🛑 [sheets.saveAll] BLOCKED: Attempted to save empty matrix data. This would wipe the spreadsheet!');
+      throw new Error('Cannot save empty matrix data. At least one of audiences, topics, or messages must have data.');
+    }
+    console.log(`💾 [sheets.saveAll] Saving: ${audiences?.length || 0} audiences, ${topics?.length || 0} topics, ${messages?.length || 0} messages`);
+
     // Get audience structure from settings (comma-separated column names)
     const audienceStructure = settings.getAudienceStructure();
 

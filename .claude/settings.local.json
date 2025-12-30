@@ -65,7 +65,8 @@
       "Bash(if exist dbcache.db del dbcache.db)",
       "Bash(grep:*)",
       "Bash(npm run pm2:start:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(if not exist \"C:\\\\Users\\\\belic\\\\Claude\\\\Messaging matrix\\\\messagingmatrix\\\\.orchestrator\\\\reports\\\\claude-code\" mkdir \"C:\\\\Users\\\\belic\\\\Claude\\\\Messaging matrix\\\\messagingmatrix\\\\.orchestrator\\\\reports\\\\claude-code\")"
     ],
     "deny": [],
     "ask": []

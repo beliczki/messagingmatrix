@@ -692,85 +692,11 @@ Guidelines for creating instructions:
               Look and Feel
             </h2>
 
-            {/* Live Header Preview */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Header Preview
-              </label>
-              <div className="border border-gray-300 rounded-lg overflow-hidden">
-                <div style={{ backgroundColor: config.lookAndFeel.headerColor }} className="shadow-sm border-b">
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <button className="p-2 hover:bg-white hover:bg-opacity-10 rounded transition-colors">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                          <line x1="3" y1="12" x2="21" y2="12"></line>
-                          <line x1="3" y1="6" x2="21" y2="6"></line>
-                          <line x1="3" y1="18" x2="21" y2="18"></line>
-                        </svg>
-                      </button>
-                      {config.lookAndFeel.logo && (
-                        <img
-                          src={config.lookAndFeel.logo}
-                          alt="Logo"
-                          style={parseStyle(config.lookAndFeel.logoStyle)}
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      )}
-                      <h1 className="text-xl font-bold text-white">Settings Preview</h1>
-                    </div>
-                    <button
-                      className="px-4 py-2 rounded text-white transition-colors font-medium text-sm"
-                      style={{
-                        backgroundColor: config.lookAndFeel.buttonColor,
-                        ...(config.lookAndFeel.buttonStyle ? parseStyle(config.lookAndFeel.buttonStyle) : {})
-                      }}
-                    >
-                      Action Button
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Live preview updates in real-time as you change colors and styles below
-              </p>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Logo URL */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Logo URL
-                </label>
-                <input
-                  type="text"
-                  value={config.lookAndFeel.logo}
-                  onChange={(e) => handleInputChange('lookAndFeel.logo', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="https://example.com/logo.svg"
-                />
-              </div>
-
-              {/* Logo Style */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Logo Style (CSS)
-                </label>
-                <input
-                  type="text"
-                  value={config.lookAndFeel.logoStyle}
-                  onChange={(e) => handleInputChange('lookAndFeel.logoStyle', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  placeholder="height: 25px; margin-top: -6px;"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  CSS properties for logo styling
-                </p>
-              </div>
-
-              {/* Header Color */}
+              {/* Main Color */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Header Color
+                  Main Color
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -787,42 +713,6 @@ Guidelines for creating instructions:
                     placeholder="#2870ed"
                   />
                 </div>
-              </div>
-
-              {/* Button Color */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Button Color
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="color"
-                    value={config.lookAndFeel.buttonColor}
-                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
-                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.lookAndFeel.buttonColor}
-                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                    placeholder="#ff6130"
-                  />
-                </div>
-              </div>
-
-              {/* Button Style */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Button Style (CSS)
-                </label>
-                <input
-                  type="text"
-                  value={config.lookAndFeel.buttonStyle}
-                  onChange={(e) => handleInputChange('lookAndFeel.buttonStyle', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  placeholder="border: 1px solid white;"
-                />
               </div>
 
               {/* Secondary Color 1 */}
@@ -870,7 +760,7 @@ Guidelines for creating instructions:
               </div>
 
               {/* Secondary Color 3 */}
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Secondary Color 3
                 </label>
@@ -887,6 +777,28 @@ Guidelines for creating instructions:
                     onChange={(e) => handleInputChange('lookAndFeel.secondaryColor3', e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                     placeholder="#711c7a"
+                  />
+                </div>
+              </div>
+
+              {/* Secondary Color 4 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Color 4
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={config.lookAndFeel.buttonColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
+                    className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.lookAndFeel.buttonColor}
+                    onChange={(e) => handleInputChange('lookAndFeel.buttonColor', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    placeholder="#ff6130"
                   />
                 </div>
               </div>
@@ -1905,38 +1817,18 @@ Guidelines for creating instructions:
 
         </div>
         </div>
-
-        {/* Sticky Save Bar */}
-        <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              {message.text && (
-                <span className={message.type === 'success' ? 'text-green-600' : 'text-red-600'}>
-                  {message.text}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={saveConfig}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: 'var(--color-button, #ff6130)' }}
-            >
-              {saving ? (
-                <>
-                  <RefreshCw size={18} className="animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  Save Settings
-                </>
-              )}
-            </button>
-          </div>
-        </div>
       </div>
+
+      {/* Save Button - Toolbar style in top-right corner */}
+      <button
+        className="toolbar-toggle"
+        onClick={saveConfig}
+        disabled={saving}
+        title={saving ? 'Saving...' : 'Save Settings'}
+        style={{ opacity: saving ? 0.7 : 1 }}
+      >
+        {saving ? <RefreshCw size={24} className="animate-spin" /> : <Save size={24} />}
+      </button>
 
       {/* Bottom Bar */}
       <div className="bottom-bar">

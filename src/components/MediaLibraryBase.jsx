@@ -10,7 +10,7 @@ import { filterAssets, calculatePlaceholderHeight } from '../utils/assetUtils';
  * - Virtual scrolling with masonry/grid/list layouts
  * - Sequential image loading for proper masonry positioning
  * - Filter functionality with AND/OR operators
- * - View mode switching (grid3/grid4/list)
+ * - View mode switching (compact/normal/wide/list)
  * - Reusable scrolling and loading logic
  *
  * Usage:
@@ -49,11 +49,11 @@ const MediaLibraryBase = ({
   renderFloatingActions = null, // ({ showDebugInfo, setShowDebugInfo, debugInfo }) => ReactNode
 
   // Configuration
-  initialViewMode = 'grid4',
+  initialViewMode = 'grid',
   loadChunkSize = 16,
+  columnWidthPx = 300, // Fixed column width for grid view
   viewModes = [
-    { value: 'grid3', label: '3 Columns' },
-    { value: 'grid4', label: '4 Columns' },
+    { value: 'grid', label: 'Grid View' },
     { value: 'list', label: 'List View' }
   ]
 }) => {
@@ -62,9 +62,13 @@ const MediaLibraryBase = ({
   const [filterText, setFilterText] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(1200);
 
-  // Virtual scrolling configuration
-  const columnCount = viewMode === 'grid3' ? 3 : viewMode === 'grid4' ? 4 : 4;
+  // Fixed column width for grid view (300px)
+  const columnWidth = columnWidthPx;
+
+  // Calculate column count based on container width and column width (with 16px gap)
+  const columnCount = Math.max(1, Math.floor((containerWidth + 16) / (columnWidth + 16)));
 
   // Virtual scrolling state
   const [totalVisible, setTotalVisible] = useState(loadChunkSize);
@@ -95,8 +99,8 @@ const MediaLibraryBase = ({
   }, []);
 
   // Build masonry layout with placeholders using known dimensions from spreadsheet
-  const buildMasonryWithPlaceholders = useCallback((filteredItems, colCount) => {
-    if (!gridRef.current || filteredItems.length === 0) {
+  const buildMasonryWithPlaceholders = useCallback((filteredItems, colCount, colWidth) => {
+    if (filteredItems.length === 0) {
       return {
         columns: initializeColumns(colCount),
         heights: initializeHeights(colCount),
@@ -107,12 +111,12 @@ const MediaLibraryBase = ({
     const columns = initializeColumns(colCount);
     const heights = initializeHeights(colCount);
     const chunks = new Map();
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / colCount - 16;
+    const effectiveColumnWidth = colWidth || 300;
 
     // Distribute items to columns based on calculated placeholder heights
     filteredItems.forEach((item, index) => {
       // Calculate placeholder height from dimensions
-      const placeholderHeight = calculatePlaceholderHeight(item, columnWidth);
+      const placeholderHeight = calculatePlaceholderHeight(item, effectiveColumnWidth);
 
       // Find shortest column
       const heightsArray = Object.values(heights);
@@ -147,22 +151,22 @@ const MediaLibraryBase = ({
   }, [gridRef, loadChunkSize, initializeColumns, initializeHeights]);
 
   // Append new chunk placeholders to existing masonry
-  const appendChunkToMasonry = useCallback((newItems, startIndex, existingColumns, existingHeights, existingChunks) => {
-    if (!gridRef.current || newItems.length === 0) {
+  const appendChunkToMasonry = useCallback((newItems, startIndex, existingColumns, existingHeights, existingChunks, colWidth) => {
+    if (newItems.length === 0) {
       return { columns: existingColumns, heights: existingHeights, chunks: existingChunks };
     }
 
     const columns = { ...existingColumns };
     const heights = { ...existingHeights };
     const chunks = new Map(existingChunks);
-    const columnWidth = (gridRef.current?.offsetWidth || 1000) / columnCount - 16;
+    const effectiveColumnWidth = colWidth || 300;
 
     // Distribute new items to columns based on calculated placeholder heights
     newItems.forEach((item, offset) => {
       const index = startIndex + offset;
 
       // Calculate placeholder height from dimensions
-      const placeholderHeight = calculatePlaceholderHeight(item, columnWidth);
+      const placeholderHeight = calculatePlaceholderHeight(item, effectiveColumnWidth);
 
       // Find shortest column
       const heightsArray = Object.values(heights);
@@ -280,8 +284,6 @@ const MediaLibraryBase = ({
     const mediaWidth = isVideo ? media.videoWidth : media.naturalWidth;
 
     if (mediaHeight && mediaWidth) {
-      const currentColumnCount = Object.keys(columnHeightsRef.current).length;
-      const columnWidth = (gridRef.current?.offsetWidth || 1000) / currentColumnCount - 16;
       const renderedHeight = (mediaHeight / mediaWidth) * columnWidth;
 
       itemPositions.current.set(itemId, {
@@ -291,7 +293,7 @@ const MediaLibraryBase = ({
 
     // console.log(`✅ Item #${itemIndex} loaded (range: 0-${itemIndex + 1}), moving to next`);
     setNextItemIndex(itemIndex + 1);
-  }, [loadChunkSize, viewMode, getItemId, getItemFilename, getItemExtension]);
+  }, [loadChunkSize, viewMode, getItemId, getItemFilename, getItemExtension, columnWidth]);
 
   // Scroll-based virtual scrolling
   const handleScroll = useCallback(() => {
@@ -384,7 +386,8 @@ const MediaLibraryBase = ({
           newItemsStart,
           columnItemsRef.current,
           columnHeightsRef.current,
-          chunkBoundaries.current
+          chunkBoundaries.current,
+          columnWidth
         );
 
         setColumnItems(columns);
@@ -408,7 +411,7 @@ const MediaLibraryBase = ({
         isUpdatingWindow.current = false;
       });
     }
-  }, [items, filterText, loadedStart, loadedEnd, saveItemPositions, loadChunkSize, columnHeights, appendChunkToMasonry]);
+  }, [items, filterText, loadedStart, loadedEnd, saveItemPositions, loadChunkSize, columnHeights, appendChunkToMasonry, columnWidth]);
 
   // Setup scroll listener
   useEffect(() => {
@@ -421,6 +424,45 @@ const MediaLibraryBase = ({
     };
   }, [handleScroll]);
 
+  // Track container width for responsive columns
+  useEffect(() => {
+    const updateContainerWidth = () => {
+      if (scrollContainerRef.current) {
+        // Get the actual content width by measuring the inner padding box
+        const style = getComputedStyle(scrollContainerRef.current);
+        const paddingLeft = parseFloat(style.paddingLeft) || 0;
+        const paddingRight = parseFloat(style.paddingRight) || 0;
+        const rawWidth = scrollContainerRef.current.clientWidth;
+        const width = rawWidth - paddingLeft - paddingRight;
+        setContainerWidth(width);
+      }
+    };
+
+    // Initial measurement immediately
+    updateContainerWidth();
+
+    // Also measure after a delay to catch late layout
+    const timer = setTimeout(updateContainerWidth, 200);
+
+    // Listen for resize
+    window.addEventListener('resize', updateContainerWidth);
+
+    // Also observe the scroll container for size changes
+    const resizeObserver = new ResizeObserver(() => {
+      // Small delay to let layout settle
+      requestAnimationFrame(updateContainerWidth);
+    });
+    if (scrollContainerRef.current) {
+      resizeObserver.observe(scrollContainerRef.current);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateContainerWidth);
+      resizeObserver.disconnect();
+    };
+  }, [columnWidth]);
+
   // Removed: Old sequential loading reset effects
   // Now handled by placeholder-based masonry building below
 
@@ -428,7 +470,7 @@ const MediaLibraryBase = ({
 
   // When loaded range changes, only reload the newly visible items
   useEffect(() => {
-    if (viewMode === 'grid3' || viewMode === 'grid4') {
+    if (viewMode !== 'list') {
       const currentLoadedIndices = new Set();
       Object.values(columnItems).flat().forEach(item => {
         currentLoadedIndices.add(item.originalIndex);
@@ -465,7 +507,7 @@ const MediaLibraryBase = ({
 
   // Build masonry with placeholders for visible chunks only
   useEffect(() => {
-    if (viewMode !== 'grid3' && viewMode !== 'grid4') return;
+    if (viewMode === 'list') return;
 
     const filtered = filterAssets(items, filterText);
 
@@ -474,7 +516,7 @@ const MediaLibraryBase = ({
     const visibleItems = filtered.slice(0, initialLoadSize);
 
     // Build masonry layout with only the visible chunk items
-    const { columns, heights, chunks } = buildMasonryWithPlaceholders(visibleItems, columnCount);
+    const { columns, heights, chunks } = buildMasonryWithPlaceholders(visibleItems, columnCount, columnWidth);
 
     setColumnItems(columns);
     setColumnHeights(heights);
@@ -487,7 +529,7 @@ const MediaLibraryBase = ({
     setLoadedEnd(initialLoadSize);
     setTotalVisible(initialLoadSize); // Only show what we've created placeholders for
     setNextItemIndex(0); // Start loading the first chunks
-  }, [filterText, items, viewMode, columnCount, buildMasonryWithPlaceholders, loadChunkSize]);
+  }, [filterText, items, viewMode, columnCount, columnWidth, buildMasonryWithPlaceholders, loadChunkSize]);
 
   const totalItems = allFilteredItems.length;
   const visibleItems = allFilteredItems.slice(0, totalVisible);
@@ -550,7 +592,7 @@ const MediaLibraryBase = ({
   }, [onItemClick]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen w-full" style={{ background: 'transparent' }}>
       {/* Header */}
       {renderHeader ? renderHeader({
         filterText,
@@ -577,8 +619,8 @@ const MediaLibraryBase = ({
       {/* Content */}
       <div
         ref={scrollContainerRef}
-        className="p-8 overflow-y-auto relative"
-        style={{ height: 'calc(100vh - 100px)' }}
+        className="w-full p-6 overflow-y-auto relative custom-scrollbar"
+        style={{ height: '100vh', background: 'transparent' }}
       >
         {/* Floating Actions */}
         {renderFloatingActions ? renderFloatingActions({
@@ -611,13 +653,14 @@ const MediaLibraryBase = ({
           </div>
         )}
 
-        <div className="max-w-7xl mx-auto">
+        <div>
           {/* Grid/Masonry View */}
-          {(viewMode === 'grid3' || viewMode === 'grid4') && renderMasonryView ? (
+          {viewMode !== 'list' && renderMasonryView ? (
             renderMasonryView({
               gridRef,
               columnItems,
               columnCount,
+              columnWidth,
               containerHeight,
               loadedStart,
               loadedEnd,
@@ -631,7 +674,7 @@ const MediaLibraryBase = ({
               getItemExtension,
               getItemUrl
             })
-          ) : (viewMode === 'grid3' || viewMode === 'grid4') ? (
+          ) : viewMode !== 'list' ? (
             <div className="text-center py-12 text-gray-500">
               <p>Grid view requires renderMasonryView prop</p>
             </div>
@@ -639,7 +682,7 @@ const MediaLibraryBase = ({
 
           {/* List View */}
           {viewMode === 'list' && renderListItem && (
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden mx-auto" style={{ width: 'calc(100vw - 24rem)' }}>
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="border-b border-gray-200">

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiPost, authenticatedFetch } from '../utils/api';
-import { ImageIcon, Filter, CheckSquare, Square, Share2, Upload, Info, RefreshCw, Loader, CheckCircle, AlertCircle, X, ChevronDown, Check, FileText } from 'lucide-react';
+import { ImageIcon, CheckSquare, Square, Share2, Upload, Info, Loader, CheckCircle, AlertCircle, X } from 'lucide-react';
 import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
@@ -10,6 +10,7 @@ import CreativeLibraryMasonryView from './CreativeLibraryMasonryView';
 import CreativeLibraryListView from './CreativeLibraryListView';
 import CreativeLibraryUploadDialogs from './CreativeLibraryUploadDialogs';
 import MediaLibraryBase from './MediaLibraryBase';
+import MediaToolbar from './MediaToolbar';
 import { processAssets } from '../utils/assetUtils';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
@@ -38,11 +39,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [generatedShareUrl, setGeneratedShareUrl] = useState(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
+  const [bgColor, setBgColor] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_bgColor');
+    return saved || lookAndFeel?.headerColor || '#2870ed';
+  });
   const [templateHtml, setTemplateHtml] = useState('');
   const [templateConfig, setTemplateConfig] = useState(null);
   const [templateCss, setTemplateCss] = useState(null);
   const [driveEnabled, setDriveEnabled] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
+  const [creativesFolderId, setCreativesFolderId] = useState(null);
+  const [assetsFolderId, setAssetsFolderId] = useState(null);
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
   const [hasAutoSynced, setHasAutoSynced] = useState(false);
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
@@ -53,12 +60,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     return saved ? JSON.parse(saved) : [];
   });
   const [typeFilter, setTypeFilter] = useState(['Dynamic HTML', 'Adobe generated']); // Both selected by default
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
-
-  // Refs for dropdown click-outside detection
-  const productDropdownRef = useRef(null);
-  const typeDropdownRef = useRef(null);
+  const [sizeFilter, setSizeFilter] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_sizeFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // MC Template supported banner sizes (from src/templates/html/*.css)
   const bannerSizes = [
@@ -99,11 +104,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     loadTemplate();
   }, []);
 
-  // Check Drive on mount
+  // Check Drive on mount and load folder IDs
   useEffect(() => {
-    isDriveEnabled().then(enabled => {
+    const loadDriveConfig = async () => {
+      const enabled = await isDriveEnabled();
       setDriveEnabled(enabled);
-    });
+
+      // Load folder IDs from settings
+      await settings.ensureInitialized();
+      const driveConfig = settings.get('googleDrive') || {};
+      setCreativesFolderId(driveConfig.creativesFolderId || null);
+      setAssetsFolderId(driveConfig.assetsFolderId || null);
+    };
+    loadDriveConfig();
   }, []);
 
   // Auto-sync with Drive on mount if enabled (only once)
@@ -114,23 +127,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driveEnabled, matrixData, hasAutoSynced]);
-
-  // Handle click outside to close dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
-        setShowProductDropdown(false);
-      }
-      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
-        setShowTypeDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -803,6 +799,32 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     localStorage.setItem('creativeLibrary_productFilter', JSON.stringify(productFilter));
   }, [productFilter]);
 
+  // Get unique sizes from creatives
+  const availableSizes = React.useMemo(() => {
+    const sizes = new Set();
+    creatives.forEach(creative => {
+      if (creative.size && creative.size.trim()) {
+        sizes.add(creative.size);
+      }
+    });
+    return Array.from(sizes).sort((a, b) => {
+      // Sort by width (first number in WxH format)
+      const aWidth = parseInt(a.split('x')[0]) || 0;
+      const bWidth = parseInt(b.split('x')[0]) || 0;
+      return aWidth - bWidth;
+    });
+  }, [creatives]);
+
+  // Save size filter to localStorage
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_sizeFilter', JSON.stringify(sizeFilter));
+  }, [sizeFilter]);
+
+  // Save bgColor to localStorage
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_bgColor', bgColor);
+  }, [bgColor]);
+
   // Type filter options (Adobe generated = Drive synced/static creatives)
   const typeOptions = ['Dynamic HTML', 'Adobe generated'];
 
@@ -835,13 +857,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         }
       }
 
-      return matchesProduct && matchesType;
+      // Size filter
+      let matchesSize = sizeFilter.length === 0; // No filter = show all
+      if (!matchesSize && creative.size) {
+        matchesSize = sizeFilter.includes(creative.size);
+      }
+
+      return matchesProduct && matchesType && matchesSize;
     });
-  }, [creatives, productFilter, typeFilter]);
+  }, [creatives, productFilter, typeFilter, sizeFilter]);
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
-      <div className="matrix-view-container">
+      <div className="matrix-view-container" style={{ backgroundColor: 'transparent' }}>
         <MediaLibraryBase
         items={filteredByFilters}
         lookAndFeel={lookAndFeel}
@@ -853,190 +881,53 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         getItemUrl={(creative) => creative.url}
         getItemFilename={(creative) => creative.filename}
 
-        // Custom header with selector mode, share, and upload
-        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => {
-          const allFilteredCreatives = creatives; // Will be filtered by MediaLibraryBase
-
-          return (
-            <PageHeader
-              onMenuToggle={onMenuToggle}
-              title={currentModuleName || 'Creative Library'}
-              lookAndFeel={lookAndFeel}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              viewModes={viewModes}
-              titleFilters={
-                <>
-                  {/* Product Filter Dropdown */}
-                  <div className="relative" ref={productDropdownRef}>
-                    <button
-                      onClick={() => setShowProductDropdown(!showProductDropdown)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                    >
-                      <span>
-                        {productFilter.length === 0
-                          ? `Products(${availableProducts.length})`
-                          : `Products(${productFilter.length})`}
-                      </span>
-                      <ChevronDown size={16} />
-                    </button>
-                    {showProductDropdown && (
-                      <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
-                        {availableProducts.map((product) => (
-                          <button
-                            key={product}
-                            onClick={() => {
-                              if (productFilter.includes(product)) {
-                                setProductFilter(productFilter.filter(p => p !== product));
-                              } else {
-                                setProductFilter([...productFilter, product]);
-                              }
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
-                          >
-                            <Check size={16} className={productFilter.includes(product) ? 'text-blue-600' : 'text-transparent'} />
-                            <span className="text-gray-900">{product}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Type Filter Dropdown */}
-                  <div className="relative" ref={typeDropdownRef}>
-                    <button
-                      onClick={() => setShowTypeDropdown(!showTypeDropdown)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                    >
-                      <span>
-                        {typeFilter.length === typeOptions.length
-                          ? `Type(${typeFilter.length})`
-                          : `Type(${typeFilter.length})`}
-                      </span>
-                      <ChevronDown size={16} />
-                    </button>
-                    {showTypeDropdown && (
-                      <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[180px] z-50">
-                        {typeOptions.map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => {
-                              if (typeFilter.includes(type)) {
-                                setTypeFilter(typeFilter.filter(t => t !== type));
-                              } else {
-                                setTypeFilter([...typeFilter, type]);
-                              }
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
-                          >
-                            <Check size={16} className={typeFilter.includes(type) ? 'text-blue-600' : 'text-transparent'} />
-                            <span className="text-gray-900">{type}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Filter Input */}
-                  <div className="flex items-center gap-2">
-                    <Filter size={18} className="text-white" />
-                    <input
-                      type="text"
-                      value={filterText}
-                      onChange={(e) => setFilterText(e.target.value)}
-                      placeholder="Filter creatives..."
-                      className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
-                    />
-                  </div>
-
-                  {/* Select Button */}
-                  <button
-                    onClick={toggleSelectorMode}
-                    className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-                      selectorMode
-                        ? 'bg-white text-gray-900 hover:bg-white/90'
-                        : 'bg-white/10 text-white hover:bg-white/20'
-                    }`}
-                  >
-                    {selectorMode ? <CheckSquare size={16} /> : <Square size={16} />}
-                    {selectorMode ? 'Selecting' : 'Select'}
-                  </button>
-
-                  {/* Select All / Deselect All */}
-                  {selectorMode && (
-                    <>
-                      <button
-                        onClick={() => {
-                          // Select only the filtered creatives, not all creatives
-                          const allIds = new Set(filteredCreatives.map(c => c.id));
-                          setSelectedCreativeIds(allIds);
-                        }}
-                        className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
-                      >
-                        All ({filteredCount})
-                      </button>
-                      <button
-                        onClick={() => setSelectedCreativeIds(new Set())}
-                        className="px-4 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
-                      >
-                        None
-                      </button>
-                    </>
-                  )}
-                </>
+        // No header - just toolbar
+        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => (
+          <MediaToolbar
+            filterText={filterText}
+            setFilterText={setFilterText}
+            productFilter={productFilter}
+            setProductFilter={setProductFilter}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            sizeFilter={sizeFilter}
+            setSizeFilter={setSizeFilter}
+            availableProducts={availableProducts}
+            typeOptions={typeOptions}
+            availableSizes={availableSizes}
+            filteredCount={filteredCount}
+            totalCount={totalItems}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            // Selection props
+            selectorMode={selectorMode}
+            selectedCount={selectedCreativeIds.size}
+            onSelectAll={() => {
+              if (!selectorMode) {
+                setSelectorMode(true);
+              } else {
+                // Select all filtered creatives
+                const allIds = new Set(filteredCreatives.map(c => c.id));
+                setSelectedCreativeIds(allIds);
               }
-            >
-              {/* Share Button */}
-              {selectorMode && selectedCreativeIds.size > 0 && (
-                <button
-                  onClick={() => {
-                    const colors = [
-                      lookAndFeel?.headerColor || '#2870ed',
-                      lookAndFeel?.secondaryColor1 || '#eb4c79',
-                      lookAndFeel?.secondaryColor2 || '#02a3a4',
-                      lookAndFeel?.secondaryColor3 || '#711c7a'
-                    ];
-                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-                    setSelectedBaseColor(randomColor);
-                    setShowShareDialog(true);
-                  }}
-                  className="relative p-2 text-white rounded hover:opacity-90 transition-opacity"
-                  style={getButtonStyle(lookAndFeel)}
-                  title={`Share ${selectedCreativeIds.size} creative${selectedCreativeIds.size > 1 ? 's' : ''}`}
-                >
-                  <Share2 size={20} />
-                  {selectedCreativeIds.size > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                      {selectedCreativeIds.size}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              {/* Re-parse All Button */}
-              <button
-                onClick={reparseAllCreatives}
-                className="p-2 text-white rounded hover:opacity-90 transition-opacity"
-                style={getButtonStyle(lookAndFeel)}
-                title="Re-parse all filenames with current rules"
-                disabled={loadingDrive}
-              >
-                <FileText size={20} />
-              </button>
-
-              {/* Sync with Drive Button */}
-              <button
-                onClick={syncWithDrive}
-                className="p-2 text-white rounded hover:opacity-90 transition-opacity"
-                style={getButtonStyle(lookAndFeel)}
-                title="Sync with Google Drive"
-                disabled={loadingDrive}
-              >
-                <RefreshCw size={20} className={loadingDrive ? 'animate-spin' : ''} />
-              </button>
-            </PageHeader>
-          );
-        }}
+            }}
+            onDeselectAll={() => setSelectedCreativeIds(new Set())}
+            onExitSelection={() => {
+              setSelectorMode(false);
+              setSelectedCreativeIds(new Set());
+            }}
+            onShare={() => setShowShareDialog(true)}
+            // Color picker props
+            bgColor={bgColor}
+            setBgColor={setBgColor}
+            colorPresets={[
+              lookAndFeel?.headerColor || '#2870ed',
+              lookAndFeel?.secondaryColor1 || '#eb4c79',
+              lookAndFeel?.secondaryColor2 || '#02a3a4',
+              lookAndFeel?.secondaryColor3 || '#711c7a'
+            ]}
+          />
+        )}
 
         // Custom masonry view using CreativeLibraryMasonryView
         renderMasonryView={({
@@ -1329,6 +1220,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           downloadFeedCSV={() => {}}
           changeTracking={matrixData?.changeTracking}
           originalState={matrixData?.originalState}
+          // Drive sync props
+          creativesFolderId={creativesFolderId}
+          assetsFolderId={assetsFolderId}
+          onSyncCreatives={syncWithDrive}
+          syncingCreatives={loadingDrive}
         />
         <AIAssistant
           moduleContext={{ module: 'creative-library' }}

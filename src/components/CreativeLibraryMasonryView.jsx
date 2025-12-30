@@ -5,6 +5,7 @@ const CreativeLibraryMasonryView = ({
   gridRef,
   columnItems,
   columnCount,
+  columnWidth = 300,
   containerHeight,
   loadedStart,
   loadedEnd,
@@ -34,10 +35,10 @@ const CreativeLibraryMasonryView = ({
         style={{ height: `${containerHeight}px` }}
       />
 
-      {/* Masonry grid */}
-      <div ref={gridRef} className="flex gap-4 relative z-10">
+      {/* Masonry grid - centered with fixed width columns */}
+      <div ref={gridRef} className="flex justify-center gap-4 relative z-10">
         {Array.from({ length: columnCount }, (_, i) => i).map((columnIndex) => (
-          <div key={columnIndex} className="flex-1 flex flex-col gap-4">
+          <div key={columnIndex} className="flex flex-col gap-4 flex-shrink-0" style={{ width: `${columnWidth}px` }}>
             {/* Render already-loaded items in this column */}
             {(columnItems[columnIndex] || []).map(creative => {
               const isOutsideRange = creative.originalIndex < loadedStart || creative.originalIndex >= loadedEnd;

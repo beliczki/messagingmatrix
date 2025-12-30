@@ -175,7 +175,7 @@ const CreativeLibraryItem = ({
       onTouchEnd={handleMouseUp}
       onClick={handleClick}
     >
-      <div className={`relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
+      <div className={`relative rounded-lg overflow-hidden ${isSelected ? 'ring-4 ring-blue-500' : ''}`}>
         {/* Selection Checkbox */}
         {selectorMode && (
           <div className="absolute top-2 right-2 z-[5]">
@@ -233,7 +233,7 @@ const CreativeLibraryItem = ({
           const populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
 
           return (
-            <div className="w-full bg-white border border-gray-300 overflow-hidden">
+            <div className="w-full overflow-hidden">
               {/* Outer wrapper - takes full column width and maintains aspect ratio */}
               <div
                 style={{

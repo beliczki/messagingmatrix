@@ -35,7 +35,9 @@
   left: calc(var(--space-6) + var(--hamburger-size) - 6px);
   width: var(--menu-width);
   height: calc(100vh - var(--space-6) - var(--hamburger-size) + 6px - 8px - var(--space-6) - var(--bottom-bar-height) - 8px);
-  background: var(--main-ui-color);
+  background: color-mix(in srgb, var(--main-ui-color) 90%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   border-radius: var(--radius-3xl);
   box-shadow: var(--ui-shadow);
   z-index: var(--z-menu-panel);

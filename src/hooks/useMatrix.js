@@ -190,6 +190,15 @@ export const useMatrix = (currentUser = null) => {
 
   // Save data to sheets
   const save = useCallback(async (feedData = null, feedFields = null, assetsData = null, creativesData = null) => {
+    // SAFETY GUARD: Prevent saving if no matrix data is loaded
+    // This prevents accidentally wiping the spreadsheet when save is called before data loads
+    const hasMatrixData = audiences.length > 0 || topics.length > 0 || messages.length > 0;
+    if (!hasMatrixData) {
+      const errorMsg = 'Cannot save: No matrix data loaded. Please wait for data to load before saving.';
+      console.error('🛑 [useMatrix.save] BLOCKED:', errorMsg);
+      throw new Error(errorMsg);
+    }
+
     setIsSaving(true);
     setError(null);
 

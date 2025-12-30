@@ -424,8 +424,8 @@ const MatrixGridView = ({
                 const strategyLower = (aud.strategy || '').toLowerCase();
                 const secondaryColor1 = lookAndFeel?.secondaryColor1 || '#eb4c79';
                 const secondaryColor2 = lookAndFeel?.secondaryColor2 || '#02a3a4';
-                const productBorderColor = strategyLower.startsWith('pro') ? secondaryColor2 :
-                                          strategyLower.startsWith('rem') ? secondaryColor1 : secondaryColor1;
+                const productBorderColor = strategyLower.startsWith('pro') ? secondaryColor1 :
+                                          strategyLower.startsWith('rem') ? secondaryColor2 : secondaryColor1;
                 return (
                   <th
                     key={aud.key}

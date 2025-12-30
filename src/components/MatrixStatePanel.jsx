@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Loader, ExternalLink, Download, X, RefreshCw, Users, MessageSquare, Image, Palette, List, Type, Package, Check } from 'lucide-react';
+import { Save, Loader, ExternalLink, Download, X, RefreshCw, Users, Image, List, Type, Package, Check, Tag, Key, FlaskConical } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 import SaveProgressDialog from './SaveProgressDialog';
@@ -15,6 +15,16 @@ const GoogleSheetsIcon = ({ size = 16 }) => (
     <rect x="16" y="32" width="16" height="2" fill="white"/>
     <rect x="19" y="18" width="2" height="18" fill="white"/>
     <rect x="27" y="18" width="2" height="18" fill="white"/>
+  </svg>
+);
+
+// Google Drive icon component
+const GoogleDriveIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.1 42L6 25.5L16.1 9H31.9L22 25.5L16.1 42Z" fill="#4285F4"/>
+    <path d="M31.9 9L42 25.5L31.9 42H16.1L26 25.5L31.9 9Z" fill="#FBBC05"/>
+    <path d="M16.1 42L26 25.5L31.9 42H16.1Z" fill="#34A853"/>
+    <path d="M6 25.5L16.1 9H31.9L22 25.5H6Z" fill="#EA4335"/>
   </svg>
 );
 
@@ -35,11 +45,37 @@ const MatrixStatePanel = ({
   onRegenerateTopicKeys,
   downloadFeedCSV,
   changeTracking,
-  originalState
+  originalState,
+  // Drive sync props
+  creativesFolderId,
+  assetsFolderId,
+  onSyncCreatives,
+  onSyncAssets,
+  syncingCreatives = false,
+  syncingAssets = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState('audiences');
   const [changesOnly, setChangesOnly] = useState(false);
+
+  // Handle close with animation
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 200); // Match animation duration
+  };
+
+  // Handle toggle (for bottom panel click)
+  const handleToggle = () => {
+    if (isOpen) {
+      handleClose();
+    } else {
+      setIsOpen(true);
+    }
+  };
 
   // Format last sync time
   const formatSync = (time) => {
@@ -88,12 +124,12 @@ const MatrixStatePanel = ({
 
   const tabs = [
     { id: 'audiences', label: 'Audiences', icon: Users, count: audiences?.length || 0, changes: getTabChangeCount('audiences') },
-    { id: 'topics', label: 'Topics', icon: List, count: topics?.length || 0, changes: getTabChangeCount('topics') },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, count: completeMessages.length, changes: getTabChangeCount('messages') },
-    { id: 'assets', label: 'Assets', icon: Image, count: assets?.length || 0, changes: getTabChangeCount('assets') },
-    { id: 'creatives', label: 'Creatives', icon: Palette, count: creatives?.length || 0, changes: getTabChangeCount('creatives') },
-    { id: 'feed', label: 'Feed', icon: Package, count: feedData?.length || 0, changes: 0 },
-    { id: 'keywords', label: 'Keywords', icon: Type, count: keywordsCount, changes: 0 },
+    { id: 'topics', label: 'Topics', icon: Tag, count: topics?.length || 0, changes: getTabChangeCount('topics') },
+    { id: 'messages', label: 'Messages', icon: FlaskConical, count: completeMessages.length, changes: getTabChangeCount('messages') },
+    { id: 'assets', label: 'Assets', icon: Package, count: assets?.length || 0, changes: getTabChangeCount('assets') },
+    { id: 'creatives', label: 'Creatives', icon: Image, count: creatives?.length || 0, changes: getTabChangeCount('creatives') },
+    { id: 'feed', label: 'Feed', icon: List, count: feedData?.length || 0, changes: 0 },
+    { id: 'keywords', label: 'Keywords', icon: Key, count: keywordsCount, changes: 0 },
     { id: 'textFormatting', label: 'Formatting', icon: Type, count: textFormatting?.length || 0, changes: getTabChangeCount('textFormatting') }
   ];
 
@@ -196,7 +232,7 @@ const MatrixStatePanel = ({
   return (
     <>
       {/* Bottom Panel - Just the pill content */}
-      <div className="bottom-panel" onClick={() => setIsOpen(true)}>
+      <div className="bottom-panel" onClick={handleToggle}>
         <Save size={20} className="bottom-panel-icon" />
         <span className="bottom-panel-title">Matrix State</span>
         <button
@@ -240,19 +276,67 @@ const MatrixStatePanel = ({
       </div>
 
       {/* Dialog - rendered via portal to escape z-index stacking context */}
-      {isOpen && createPortal(
-        <div className="dialog-overlay overlay-animated open" onClick={() => setIsOpen(false)}>
-          <div className="dialog dialog-animated open" onClick={(e) => e.stopPropagation()}>
+      {(isOpen || isClosing) && createPortal(
+        <div className={`dialog-overlay overlay-animated ${isClosing ? 'closing' : 'open'}`} onClick={handleClose}>
+          <div className={`dialog dialog-animated ${isClosing ? 'closing' : 'open'}`} onClick={(e) => e.stopPropagation()}>
             <div className="dialog-layout">
               {/* LEFT SIDEBAR */}
               <div className="dialog-sidebar custom-scrollbar">
                 <h2 className="dialog-title">Matrix State</h2>
-                {/* Sync status with link to sheets */}
+                {/* Matrix data link to sheets */}
                 {(() => {
                   const spreadsheetId = settings.getSpreadsheetId();
                   return spreadsheetId ? (
+                    <div style={{ marginTop: '-8px', marginBottom: '8px' }}>
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: 'rgba(255,255,255,0.6)',
+                          fontSize: '12px',
+                          textDecoration: 'none'
+                        }}
+                        title="Open in Google Sheets"
+                      >
+                        <GoogleSheetsIcon size={18} />
+                        <span style={{ textDecoration: 'underline' }}>Matrix data</span>
+                        <ExternalLink size={12} />
+                      </a>
+                      <div style={{
+                        color: 'rgba(255,255,255,0.5)',
+                        fontSize: '11px',
+                        marginLeft: '24px',
+                        marginTop: '2px'
+                      }}>
+                        Synced: {formatSync(lastSync)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      color: 'rgba(255,255,255,0.6)',
+                      fontSize: '12px',
+                      marginTop: '-8px',
+                      marginBottom: '8px'
+                    }}>
+                      Synced: {formatSync(lastSync)}
+                    </div>
+                  );
+                })()}
+
+                {/* Drive Folder Links */}
+                {creativesFolderId && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginBottom: '8px'
+                  }}>
                     <a
-                      href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
+                      href={`https://drive.google.com/drive/folders/${creativesFolderId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -261,27 +345,85 @@ const MatrixStatePanel = ({
                         gap: '6px',
                         color: 'rgba(255,255,255,0.6)',
                         fontSize: '12px',
-                        marginTop: '-8px',
-                        marginBottom: '16px',
-                        textDecoration: 'none'
+                        textDecoration: 'none',
+                        flex: 1
                       }}
-                      title="Open in Google Sheets"
+                      title="Open Creatives folder in Drive"
                     >
-                      <GoogleSheetsIcon size={20} />
-                      <span style={{ textDecoration: 'underline' }}>Synced: {formatSync(lastSync)}</span>
+                      <GoogleDriveIcon size={18} />
+                      <span style={{ textDecoration: 'underline' }}>Creatives</span>
                       <ExternalLink size={12} />
                     </a>
-                  ) : (
-                    <div style={{
-                      color: 'rgba(255,255,255,0.6)',
-                      fontSize: '12px',
-                      marginTop: '-8px',
-                      marginBottom: '16px'
-                    }}>
-                      Synced: {formatSync(lastSync)}
-                    </div>
-                  );
-                })()}
+                    {onSyncCreatives && (
+                      <button
+                        onClick={onSyncCreatives}
+                        disabled={syncingCreatives}
+                        style={{
+                          background: 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '6px',
+                          cursor: syncingCreatives ? 'wait' : 'pointer',
+                          color: 'rgba(255,255,255,0.7)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Sync creatives from Drive"
+                      >
+                        <RefreshCw size={14} className={syncingCreatives ? 'animate-spin' : ''} />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {assetsFolderId && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginBottom: '16px'
+                  }}>
+                    <a
+                      href={`https://drive.google.com/drive/folders/${assetsFolderId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: '12px',
+                        textDecoration: 'none',
+                        flex: 1
+                      }}
+                      title="Open Assets folder in Drive"
+                    >
+                      <GoogleDriveIcon size={18} />
+                      <span style={{ textDecoration: 'underline' }}>Assets</span>
+                      <ExternalLink size={12} />
+                    </a>
+                    <button
+                      onClick={onSyncAssets}
+                      disabled={syncingAssets || !onSyncAssets}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        cursor: syncingAssets || !onSyncAssets ? 'not-allowed' : 'pointer',
+                        color: 'rgba(255,255,255,0.7)',
+                        opacity: onSyncAssets ? 1 : 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Sync assets from Drive"
+                    >
+                      <RefreshCw size={14} className={syncingAssets ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                )}
 
                 {/* Vertical Tabs */}
                 <div className="dialog-tabs">
@@ -329,7 +471,7 @@ const MatrixStatePanel = ({
 
                   <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                     <button
-                      onClick={() => setIsOpen(false)}
+                      onClick={handleClose}
                       className="btn btn-secondary btn-lg"
                       style={{ flex: 1 }}
                     >
