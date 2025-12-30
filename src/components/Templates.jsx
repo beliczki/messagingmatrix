@@ -5,7 +5,6 @@ import { apiGet, apiPost } from '../utils/api';
 import TemplatePreview from './TemplatePreview';
 import CodeEditor from './CodeEditor';
 import TemplateClaudeChat from './TemplateClaudeChat';
-import PageHeader from './PageHeader';
 import MatrixStatePanel from './MatrixStatePanel';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 
@@ -102,13 +101,11 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Templates'} lookAndFeel={lookAndFeel} />
-
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
-      <div className="p-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="matrix-view-container">
+        <div className="p-8">
+          <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-lg shadow-sm p-8">
             <div className="flex items-center gap-3 mb-6">
               <FileCode size={32} className="text-purple-600" />
@@ -191,6 +188,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
             )}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Template Editor Dialog */}
@@ -204,24 +202,28 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
         />
       )}
 
-      {/* Matrix State Panel */}
-      <MatrixStatePanel
-        audiences={matrixData?.audiences || []}
-        topics={matrixData?.topics || []}
-        messages={matrixData?.messages || []}
-        keywords={matrixData?.keywords || {}}
-        assets={matrixData?.assets || []}
-        creatives={matrixData?.creatives || []}
-        textFormatting={matrixData?.textFormatting || []}
-        feedData={[]}
-        lastSync={matrixData?.lastSync}
-        isSaving={matrixData?.isSaving}
-        saveProgress={saveProgress}
-        onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
-        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
-        downloadFeedCSV={() => {}}
-      />
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <MatrixStatePanel
+          audiences={matrixData?.audiences || []}
+          topics={matrixData?.topics || []}
+          messages={matrixData?.messages || []}
+          keywords={matrixData?.keywords || {}}
+          assets={matrixData?.assets || []}
+          creatives={matrixData?.creatives || []}
+          textFormatting={matrixData?.textFormatting || []}
+          feedData={[]}
+          lastSync={matrixData?.lastSync}
+          isSaving={matrixData?.isSaving}
+          saveProgress={saveProgress}
+          onSave={handleSaveWithProgress}
+          onClearReload={clearAndReloadApp}
+          onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+          downloadFeedCSV={() => {}}
+          changeTracking={matrixData?.changeTracking}
+          originalState={matrixData?.originalState}
+        />
+      </div>
     </div>
   );
 };

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messaging Matrix - Menu Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style-guide.css">
+</head>
+<body>
+  <!-- Hamburger Button -->
+  <button class="hamburger-btn" id="hamburgerBtn">
+    <i data-lucide="menu"></i>
+  </button>
+
+  <!-- Menu Overlay -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+
+  <!-- Menu Panel (Blue) -->
+  <div class="menu-panel" id="menuPanel">
+    <div class="menu-content">
+      <!-- Logo -->
+      <svg class="menu-logo" viewBox="0 0 800 800">
+        <g fill="#ffffff">
+          <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766"/>
+          <polygon points="372.33197 238.27666 288.79499 238.27661 355.46653 561.72334 439.00351 561.72339"/>
+          <polygon points="514.8137 238.27666 431.27672 238.27661 497.94825 561.72334 581.48524 561.72339"/>
+          <polygon points="530.95895 238.27666 447.42197 238.27661 514.0935 561.72334 597.63048 561.72339"/>
+          <rect x="88.60344" y="87.13551" width="27.34135" height="610.59038"/>
+          <rect x="124.98303" y="50.75592" width="30.27721" height="103.03638" transform="translate(242.39574 -37.84752) rotate(90)"/>
+          <rect x="124.98303" y="646.20769" width="30.27721" height="103.03638" transform="translate(837.84752 557.60426) rotate(90)"/>
+          <rect x="684.05521" y="87.13551" width="27.34135" height="610.59038" transform="translate(1395.45177 784.8614) rotate(-180)"/>
+          <rect x="644.73977" y="50.75592" width="30.27721" height="103.03638" transform="translate(762.15248 -557.60426) rotate(90)"/>
+          <rect x="644.73977" y="646.20769" width="30.27721" height="103.03638" transform="translate(1357.60426 37.84752) rotate(90)"/>
+        </g>
+        <g fill="none" stroke="rgba(255, 255, 255, 0.25)" stroke-width="1">
+          <rect x="87.13551" y="87.13551" width="625.72898" height="625.72898"/>
+          <line x1="87.13551" y1="608.57633" x2="712.86449" y2="608.57633"/>
+          <line x1="87.13551" y1="504.28816" x2="712.86449" y2="504.28816"/>
+          <line x1="87.13551" y1="400" x2="712.86449" y2="400"/>
+          <line x1="87.13551" y1="295.71184" x2="712.86449" y2="295.71184"/>
+          <line x1="87.13551" y1="191.42367" x2="712.86449" y2="191.42367"/>
+          <line x1="608.57633" y1="87.13551" x2="608.57633" y2="712.86449"/>
+          <line x1="504.28816" y1="87.13551" x2="504.28816" y2="712.86449"/>
+          <line x1="400" y1="87.13551" x2="400" y2="712.86449"/>
+          <line x1="295.71184" y1="87.13551" x2="295.71184" y2="712.86449"/>
+          <line x1="191.42367" y1="87.13551" x2="191.42367" y2="712.86449"/>
+        </g>
+      </svg>
+
+      <!-- Animated selector layer -->
+      <div class="menu-selector" id="menuSelector"></div>
+
+      <!-- Navigation -->
+      <nav class="nav-menu" id="navMenu">
+        <button class="nav-item" data-index="0">
+          <i data-lucide="table"></i>
+          <span>Messaging Matrix</span>
+        </button>
+        <button class="nav-item active" data-index="1">
+          <i data-lucide="image"></i>
+          <span>Creative Library</span>
+        </button>
+        <button class="nav-item" data-index="2">
+          <i data-lucide="package"></i>
+          <span>Assets</span>
+        </button>
+        <button class="nav-item" data-index="3">
+          <i data-lucide="bar-chart-3"></i>
+          <span>Monitoring</span>
+        </button>
+        <button class="nav-item" data-index="4">
+          <i data-lucide="file-code"></i>
+          <span>Templates</span>
+        </button>
+        <button class="nav-item" data-index="5">
+          <i data-lucide="check-square"></i>
+          <span>Tasks</span>
+        </button>
+        <button class="nav-item" data-index="6">
+          <i data-lucide="users"></i>
+          <span>Users</span>
+        </button>
+        <button class="nav-item" data-index="7">
+          <i data-lucide="settings"></i>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <!-- Spacer to push profile/logout to bottom -->
+      <div class="menu-spacer"></div>
+
+      <!-- Profile -->
+      <button class="nav-item profile-item" data-index="8">
+        <div class="profile-avatar">BR</div>
+        <span>Profile</span>
+      </button>
+
+      <!-- Logout -->
+      <button class="nav-item logout" data-index="9">
+        <i data-lucide="log-out"></i>
+        <span>Logout</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================
+       CONTENT AREA DEMO
+       ======================================== -->
+
+  <!-- Toolbar Toggle (Closed State) -->
+  <button class="toolbar-toggle" id="toolbarToggle">
+    <i data-lucide="pocket-knife"></i>
+  </button>
+
+  <!-- Toolbar (Open State) -->
+  <div class="toolbar" id="toolbar">
+    <div class="toolbar-drag-row">
+      <i data-lucide="grip-horizontal"></i>
+    </div>
+    <div class="toolbar-content">
+      <!-- View Modes -->
+      <div class="view-modes">
+        <button class="view-mode-btn display-toggle active" data-display="informative" title="Informative View">
+          <i data-lucide="grid-2x2"></i>
+        </button>
+        <button class="view-mode-btn display-toggle" data-display="minimal" title="Minimal View" style="display: none;">
+          <i data-lucide="grid-3x3"></i>
+        </button>
+        <button class="view-mode-btn tree-toggle" data-tree="vertical" title="Vertical Tree View">
+          <i data-lucide="network"></i>
+        </button>
+        <button class="view-mode-btn tree-toggle" data-tree="horizontal" title="Horizontal Tree View" style="display: none;">
+          <i data-lucide="network" class="rotate-90"></i>
+        </button>
+        <button class="view-mode-btn sankey-toggle" data-sankey="sankey" title="Sankey View">
+          <i data-lucide="layout-panel-top"></i>
+        </button>
+        <button class="view-mode-btn sankey-toggle" data-sankey="circular" title="Circular Sankey" style="display: none;">
+          <i data-lucide="diameter"></i>
+        </button>
+        <button class="view-mode-btn" data-view="feed" title="Feed View"><i data-lucide="list"></i></button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-group">
+        <div class="filter-pill">
+          <i data-lucide="filter" class="filter-pill-icon"></i>
+          <input type="text" class="filter-input" placeholder="Product filter...">
+          <span class="filter-pill-badge" data-count="3">3</span>
+        </div>
+        <div class="filter-pill">
+          <i data-lucide="filter" class="filter-pill-icon"></i>
+          <input type="text" class="filter-input" placeholder="Audience filter...">
+          <span class="filter-pill-badge" data-count="12">12</span>
+        </div>
+        <div class="filter-pill">
+          <i data-lucide="filter" class="filter-pill-icon"></i>
+          <input type="text" class="filter-input" placeholder="Topic filter...">
+          <span class="filter-pill-badge" data-count="5">5</span>
+        </div>
+        <div class="filter-pill">
+          <i data-lucide="filter" class="filter-pill-icon"></i>
+          <input type="text" class="filter-input" placeholder="Message filter...">
+          <span class="filter-pill-badge zero" data-count="0">0</span>
+        </div>
+      </div>
+
+      <!-- Sliders (only visible in tree/sankey views) -->
+      <div class="slider-group" id="sliderGroup" style="display: none;">
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label">Node size</span>
+            <span class="slider-value">1.3x</span>
+          </div>
+          <input type="range" class="slider-input" min="0.5" max="2" step="0.1" value="1.3">
+        </div>
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label">Layer height</span>
+            <span class="slider-value">300</span>
+          </div>
+          <input type="range" class="slider-input" min="100" max="500" step="10" value="300">
+        </div>
+        <div class="slider-item">
+          <div class="slider-header">
+            <span class="slider-label">Scale base</span>
+            <span class="slider-value">26</span>
+          </div>
+          <input type="range" class="slider-input" min="10" max="50" step="1" value="26">
+        </div>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div class="zoom-controls">
+        <div class="zoom-row">
+          <button class="zoom-btn"><i data-lucide="minus"></i></button>
+          <span class="zoom-value"><span>78%</span> <span class="zoom-fit">fit</span></span>
+          <button class="zoom-btn"><i data-lucide="plus"></i></button>
+        </div>
+        <div class="nav-pad">
+          <div></div>
+          <button class="nav-pad-btn"><i data-lucide="arrow-up"></i></button>
+          <div></div>
+          <button class="nav-pad-btn"><i data-lucide="arrow-left"></i></button>
+          <button class="nav-pad-btn center"><i data-lucide="square"></i></button>
+          <button class="nav-pad-btn"><i data-lucide="arrow-right"></i></button>
+          <div></div>
+          <button class="nav-pad-btn"><i data-lucide="arrow-down"></i></button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content - Matrix Grid -->
+  <div class="page-main">
+    <div class="matrix-grid">
+      <!-- Row 1: Corner + Audience Headers -->
+      <div class="matrix-corner"></div>
+
+      <div class="matrix-audience-header">
+        <span class="audience-tag product">SZK</span>
+        <div class="audience-name">Fiatalok 25-35</div>
+        <div class="audience-tags">
+          <span class="audience-tag">PRO</span>
+          <span class="audience-tag">12345678</span>
+          <span class="audience-tag">aud_01</span>
+        </div>
+      </div>
+
+      <div class="matrix-audience-header">
+        <span class="audience-tag product">SZK</span>
+        <div class="audience-name">Családosok 35-50</div>
+        <div class="audience-tags">
+          <span class="audience-tag">REM</span>
+          <span class="audience-tag">87654321</span>
+          <span class="audience-tag">aud_02</span>
+        </div>
+      </div>
+
+      <!-- Row 2: Topic 1 + Messages -->
+      <div class="matrix-topic-header">
+        <span class="topic-tag product">SZK</span>
+        <div class="topic-name">Erste Max Hitelkártya</div>
+        <div class="topic-tags">
+          <span class="topic-tag">top_01</span>
+        </div>
+      </div>
+
+      <div class="matrix-cell-content">
+        <div class="message-card planned">
+          <span class="mc-number">1</span>
+          <span class="mc-variant">a</span>
+        </div>
+        <div class="message-card active">
+          <span class="mc-number">1</span>
+          <span class="mc-variant">b</span>
+        </div>
+        <div class="message-card inprogress">
+          <span class="mc-number">1</span>
+          <span class="mc-variant">c</span>
+        </div>
+        <div class="message-card inactive">
+          <span class="mc-number">1</span>
+          <span class="mc-variant">d</span>
+        </div>
+      </div>
+
+      <div class="matrix-cell-content">
+        <div class="message-card active">
+          <span class="mc-number">2</span>
+          <span class="mc-variant">a</span>
+        </div>
+        <div class="message-card active">
+          <span class="mc-number">2</span>
+          <span class="mc-variant">b</span>
+        </div>
+      </div>
+
+      <!-- Row 3: Topic 2 + Messages -->
+      <div class="matrix-topic-header">
+        <span class="topic-tag product">SZK</span>
+        <div class="topic-name">Lakáshitel</div>
+        <div class="topic-tags">
+          <span class="topic-tag">top_02</span>
+        </div>
+      </div>
+
+      <div class="matrix-cell-content">
+        <div class="message-card active">
+          <span class="mc-number">3</span>
+          <span class="mc-variant">a</span>
+        </div>
+      </div>
+
+      <div class="matrix-cell-content">
+        <div class="message-card planned">
+          <span class="mc-number">4</span>
+          <span class="mc-variant">a</span>
+        </div>
+        <div class="message-card planned">
+          <span class="mc-number">4</span>
+          <span class="mc-variant">b</span>
+        </div>
+        <div class="message-card error">
+          <span class="mc-number">4</span>
+          <span class="mc-variant">c</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <div class="bottom-panel">
+      <i data-lucide="save" class="bottom-panel-icon"></i>
+      <span class="bottom-panel-title">Matrix State</span>
+      <button class="bottom-panel-btn">Reload</button>
+      <button class="bottom-panel-btn">Save</button>
+    </div>
+    <div class="bottom-panel">
+      <i data-lucide="bot" class="bottom-panel-icon"></i>
+      <span class="bottom-panel-title">AI Assistant</span>
+    </div>
+  </div>
+
+
+  <!-- Dialog Overlay -->
+  <div id="dialogOverlay" class="overlay-animated" style="
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.2);
+    z-index: 899;
+  "></div>
+
+  <!-- ========================================
+       DIALOG - Edit Dialog (3-panel layout)
+       ======================================== -->
+  <div id="dialog" class="dialog-panel dialog-animated" style="
+    position: fixed;
+    top: 100px;
+    left: 7rem;
+    width: calc(100vw - 14rem);
+    height: calc(100vh - 100px - var(--space-6) - 46px - 8px - 49px - 2rem);
+    background: var(--main-ui-color);
+    border-radius: var(--radius-3xl);
+    box-shadow: var(--ui-shadow);
+    z-index: 900;
+    overflow: hidden;
+  ">
+    <div class="dialog-layout">
+      <!-- LEFT SIDEBAR -->
+      <div class="dialog-sidebar">
+        <h2 class="dialog-title">Edit</h2>
+
+        <!-- Navigation -->
+        <div class="dialog-nav">
+          <button class="dialog-nav-btn"><i data-lucide="chevron-left" style="width: 18px; height: 18px;"></i></button>
+          <span class="dialog-nav-label">43 a</span>
+          <button class="dialog-nav-btn"><i data-lucide="chevron-right" style="width: 18px; height: 18px;"></i></button>
+        </div>
+
+        <!-- Auto-Save Toggle -->
+        <button class="dialog-toggle checked">
+          <div class="checkbox-box"><i data-lucide="check" style="width: 14px; height: 14px;"></i></div>
+          <span>Auto-Save</span>
+        </button>
+
+        <!-- Vertical Tabs -->
+        <div class="dialog-tabs">
+          <button class="dialog-tab">
+            <h2>Naming</h2>
+            <i data-lucide="tag" style="width: 18px; height: 18px;"></i>
+          </button>
+          <button class="dialog-tab active">
+            <h2>Content</h2>
+            <i data-lucide="cooking-pot" style="width: 18px; height: 18px;"></i>
+          </button>
+          <button class="dialog-tab">
+            <h2>Generate</h2>
+            <i data-lucide="sparkles" style="width: 18px; height: 18px;"></i>
+          </button>
+          <button class="dialog-tab">
+            <h2>Styles</h2>
+            <i data-lucide="pencil-ruler" style="width: 18px; height: 18px;"></i>
+          </button>
+          <button class="dialog-tab">
+            <h2>Trafficking</h2>
+            <i data-lucide="rocket" style="width: 18px; height: 18px;"></i>
+          </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="dialog-actions">
+          <button class="link-button"><i data-lucide="trash-2" style="width: 16px; height: 16px;"></i> Delete</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-lg">Cancel</button>
+            <button class="btn btn-secondary btn-lg">Save</button>
+          </div>
+          <button class="btn btn-primary btn-lg">Save & close</button>
+        </div>
+      </div>
+
+      <!-- CONTENT AREA (main + preview) -->
+      <div class="dialog-content-area">
+      <!-- MIDDLE CONTENT -->
+      <div class="dialog-main custom-scrollbar">
+        <!-- Status Badges -->
+        <div style="margin-bottom: 32px;">
+          <h3 style="color: white; opacity: 0.7; font-size: 0.875rem; margin-bottom: 12px; text-transform: uppercase;">Status Badges</h3>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <span class="status-badge planned">Planned</span>
+            <span class="status-badge active">Active</span>
+            <span class="status-badge inprogress">In Progress</span>
+            <span class="status-badge inactive">Inactive</span>
+            <span class="status-badge error">Error</span>
+          </div>
+        </div>
+
+        <!-- Form Elements Section -->
+        <h3 style="color: white; opacity: 0.7; font-size: 0.875rem; margin-bottom: 12px; text-transform: uppercase;">Form Elements</h3>
+
+        <!-- Template Variant Classes -->
+        <div class="form-group">
+          <label class="form-label">Template Variant Classes</label>
+          <div class="tags-input" id="variantClassesInput">
+            <span class="tag">fullSurfaceColor</span>
+            <span class="tag active">animated</span>
+          </div>
+          <div class="tags-input-value" style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">Value: <span id="variantClassesValue">animated</span></div>
+        </div>
+
+        <!-- Form Fields -->
+        <div style="margin-bottom: 32px;">
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label class="form-label" style="margin-bottom: 0;">Headline</label>
+              <button class="link-button"><i data-lucide="type" style="width: 14px; height: 14px;"></i> add text formatting</button>
+            </div>
+            <input type="text" class="form-input" value="Erste Max Hitelkártya">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label class="form-label" style="margin-bottom: 0;">Copy 1</label>
+              <button class="link-button"><i data-lucide="type" style="width: 14px; height: 14px;"></i> add text formatting</button>
+            </div>
+            <input type="text" class="form-input" value="Ne várj tovább! Igényelj most Erste Max instant hitelkártyát!">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="text" class="form-input" value="Ne várj tovább! Igényelj most<br>Erste Max instant hitelkártyát!" style="flex: 1;">
+              <div class="dropdown">
+                <button class="dropdown-trigger">
+                  <span>300x600</span>
+                  <i data-lucide="chevron-down" style="width: 16px; height: 16px;"></i>
+                </button>
+                <div class="dropdown-menu">
+                  <div class="dropdown-item selected" data-value="all">All sizes</div>
+                  <div class="dropdown-item" data-value="300x600">300x600</div>
+                  <div class="dropdown-item" data-value="970x250">970x250</div>
+                  <div class="dropdown-item" data-value="300x250">300x250</div>
+                </div>
+              </div>
+              <button class="global-local-toggle dropdown-trigger" data-state="global">
+                <span>Global</span>
+              </button>
+              <button class="row-delete-btn" title="Remove line"><i data-lucide="trash-2" style="width: 16px; height: 16px;"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Color Swatches -->
+        <div style="margin-bottom: 32px;">
+          <h3 style="color: white; opacity: 0.7; font-size: 0.875rem; margin-bottom: 12px; text-transform: uppercase;">Color Picker</h3>
+          <div class="color-swatches">
+            <div class="color-swatch selected" style="background: #2870ed;"></div>
+            <div class="color-swatch" style="background: #eb4c79;"></div>
+            <div class="color-swatch" style="background: #02a3a4;"></div>
+            <div class="color-swatch" style="background: #ff6130;"></div>
+            <div class="color-swatch" style="background: #711c7a;"></div>
+            <div class="color-swatch" style="background: #22c55e;"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT PREVIEW PANEL -->
+      <div class="dialog-preview">
+        <div class="preview-header">
+          <button class="skip-animation-btn">
+            <div class="checkbox-box"><i data-lucide="check" style="width: 14px; height: 14px;"></i></div>
+            <span>Skip animation</span>
+          </button>
+          <div class="dropdown" id="sizeDropdown">
+            <button class="dropdown-trigger" id="sizeDropdownTrigger">
+              <span>300x600</span>
+              <i data-lucide="chevron-down" style="width: 16px; height: 16px;"></i>
+            </button>
+            <div class="dropdown-menu">
+              <div class="dropdown-item selected" data-value="300x600" data-image="ERSTE_SZK_MC174_e_calculator_mockup_szabad_n1_300x600.png" data-wide="false">300x600</div>
+              <div class="dropdown-item" data-value="970x250" data-image="ERSTE_SZK_MC174_e_calculator_mockup_szabad_n1_970x250.png" data-wide="true">970x250</div>
+              <div class="dropdown-item" data-value="300x250" data-image="ERSTE_SZK_MC174_e_calculator_mockup_szabad_n1_300x250.png" data-wide="false">300x250</div>
+            </div>
+          </div>
+        </div>
+        <div class="preview-frame">
+          <img src="ERSTE_SZK_MC174_e_calculator_mockup_szabad_n1_300x600.png" alt="Preview">
+        </div>
+      </div>
+      </div><!-- end dialog-content-area -->
+    </div>
+  </div>
+
+  <!-- ========================================
+       BLUE DIALOG - Empty dialog for Matrix State / AI Assistant
+       ======================================== -->
+  <div id="blueDialog" class="dialog-animated" style="
+    position: fixed;
+    top: calc(100px + 4rem);
+    left: 5rem;
+    width: calc(100vw - 10rem);
+    height: calc(100vh - 100px - var(--space-6) - 46px - 8px - 49px - 2rem - 4rem);
+    background: var(--color-primary);
+    border-radius: var(--radius-3xl);
+    box-shadow: var(--ui-shadow);
+    z-index: 900;
+    overflow: hidden;
+  ">
+  </div>
+
+  <script src="style-guide.js"></script>
+</body>
+</html>

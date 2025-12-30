@@ -716,6 +716,82 @@ app.post('/api/textformatting/batch', async (req, res) => {
   }
 });
 
+// Delete text formatting rule by ID
+app.post('/api/textformatting/delete', async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'id is required' });
+    }
+
+    // Get spreadsheet ID from config
+    const configPath = path.join(__dirname, 'config.json');
+    const configData = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(configData);
+    const spreadsheetId = config.spreadsheetId;
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'Spreadsheet ID not configured' });
+    }
+
+    // Initialize Google Sheets client
+    const auth = await getAuthClient();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Read current textformats sheet
+    const getResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'textformats!A:E'
+    });
+
+    const currentData = getResponse.data.values || [];
+
+    if (currentData.length <= 1) {
+      return res.status(404).json({ error: 'No data to delete' });
+    }
+
+    // Find the row index with the matching ID (accounting for header row)
+    const rowIndex = currentData.findIndex((row, index) => index > 0 && row[0] === String(id));
+
+    if (rowIndex === -1) {
+      return res.status(404).json({ error: 'Text formatting rule not found' });
+    }
+
+    // Get the sheet ID for the textformats sheet
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const textformatsSheet = spreadsheet.data.sheets.find(s => s.properties.title === 'textformats');
+
+    if (!textformatsSheet) {
+      return res.status(404).json({ error: 'textformats sheet not found' });
+    }
+
+    const sheetId = textformatsSheet.properties.sheetId;
+
+    // Delete the row using batchUpdate
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1
+            }
+          }
+        }]
+      }
+    });
+
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Error deleting text formatting:', error);
+    res.status(500).json({ error: 'Failed to delete text formatting', details: error.message });
+  }
+});
+
 app.post('/api/claude', verifyToken, async (req, res) => {
   try {
     const { messages, model = 'claude-3-5-sonnet-20241022', max_tokens = 4096 } = req.body;

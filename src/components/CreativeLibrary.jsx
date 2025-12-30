@@ -840,8 +840,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   }, [creatives, productFilter, typeFilter]);
 
   return (
-    <>
-      <MediaLibraryBase
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
+      <div className="matrix-view-container">
+        <MediaLibraryBase
         items={filteredByFilters}
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Creative Library'}
@@ -1305,41 +1306,44 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         templateCss={templateCss}
         templateName="html"
         textFormatting={matrixData?.textFormatting || []}
-      />
+        />
+      </div>
 
-      {/* AI Assistant */}
-      <AIAssistant
-        moduleContext={{ module: 'creative-library' }}
-        matrixData={matrixData}
-        filteredItems={filteredCreatives}
-        getItemUrl={(creative) => {
-          // Use proxy URL if driveId is available to avoid CORS issues
-          if (creative.driveId) {
-            return `/api/drive/proxy/${creative.driveId}`;
-          }
-          return creative.url;
-        }}
-      />
-
-      {/* Matrix State Panel */}
-      <MatrixStatePanel
-        audiences={matrixData?.audiences || []}
-        topics={matrixData?.topics || []}
-        messages={matrixData?.messages || []}
-        keywords={matrixData?.keywords || {}}
-        assets={matrixData?.assets || []}
-        creatives={matrixData?.creatives || []}
-        textFormatting={matrixData?.textFormatting || []}
-        feedData={[]}
-        lastSync={matrixData?.lastSync}
-        isSaving={matrixData?.isSaving}
-        saveProgress={saveProgress}
-        onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
-        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
-        downloadFeedCSV={() => {}}
-      />
-    </>
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <MatrixStatePanel
+          audiences={matrixData?.audiences || []}
+          topics={matrixData?.topics || []}
+          messages={matrixData?.messages || []}
+          keywords={matrixData?.keywords || {}}
+          assets={matrixData?.assets || []}
+          creatives={matrixData?.creatives || []}
+          textFormatting={matrixData?.textFormatting || []}
+          feedData={[]}
+          lastSync={matrixData?.lastSync}
+          isSaving={matrixData?.isSaving}
+          saveProgress={saveProgress}
+          onSave={handleSaveWithProgress}
+          onClearReload={clearAndReloadApp}
+          onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+          downloadFeedCSV={() => {}}
+          changeTracking={matrixData?.changeTracking}
+          originalState={matrixData?.originalState}
+        />
+        <AIAssistant
+          moduleContext={{ module: 'creative-library' }}
+          matrixData={matrixData}
+          filteredItems={filteredCreatives}
+          getItemUrl={(creative) => {
+            // Use proxy URL if driveId is available to avoid CORS issues
+            if (creative.driveId) {
+              return `/api/drive/proxy/${creative.driveId}`;
+            }
+            return creative.url;
+          }}
+        />
+      </div>
+    </div>
   );
 };
 

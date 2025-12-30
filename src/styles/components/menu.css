@@ -1,0 +1,236 @@
+/* ========================================
+   MENU COMPONENT STYLES
+   Hamburger Button + Slide-out Menu Panel
+   ======================================== */
+
+/* --- Hamburger Button --- */
+.hamburger-btn {
+  position: fixed;
+  top: var(--space-6);
+  left: var(--space-6);
+  width: var(--hamburger-size);
+  height: var(--hamburger-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--main-ui-color);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-shadow);
+  cursor: pointer;
+  z-index: var(--z-hamburger);
+  transition: all var(--transition-base);
+}
+
+.hamburger-btn svg {
+  color: var(--color-white);
+  width: 24px;
+  height: 24px;
+}
+
+/* --- Menu Panel --- */
+.menu-panel {
+  position: fixed;
+  top: calc(var(--space-6) + var(--hamburger-size) - 6px + 8px);
+  left: calc(var(--space-6) + var(--hamburger-size) - 6px);
+  width: var(--menu-width);
+  height: calc(100vh - var(--space-6) - var(--hamburger-size) + 6px - 8px - var(--space-6) - var(--bottom-bar-height) - 8px);
+  background: var(--main-ui-color);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--ui-shadow);
+  z-index: var(--z-menu-panel);
+  overflow: hidden;
+  transform-origin: top left;
+  transform: scale(0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--transition-bounce),
+    opacity var(--transition-base);
+}
+
+.menu-panel.open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-content {
+  padding: var(--space-6);
+  padding-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.menu-spacer {
+  flex: 1;
+  min-height: var(--space-6);
+}
+
+/* --- Menu Logo --- */
+.menu-logo {
+  width: 77px;
+  height: 77px;
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-6);
+  margin-left: calc(var(--space-4) + 11px + var(--space-3));
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: all var(--transition-slow);
+  transition-delay: 50ms;
+}
+
+.menu-panel.open .menu-logo {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* --- Navigation Menu --- */
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px var(--space-4);
+  color: var(--color-white);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.nav-item:hover {
+  background: transparent;
+}
+
+.nav-item svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+/* Staggered animation for nav items in nav-menu */
+.menu-panel.open .nav-menu .nav-item {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
+}
+
+.menu-panel.open .nav-menu .nav-item:nth-child(1) { transition-delay: 50ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(2) { transition-delay: 80ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(3) { transition-delay: 110ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(4) { transition-delay: 140ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(5) { transition-delay: 170ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(6) { transition-delay: 200ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(7) { transition-delay: 230ms; }
+.menu-panel.open .nav-menu .nav-item:nth-child(8) { transition-delay: 260ms; }
+
+/* --- Menu Selector (animated highlight) --- */
+.menu-selector {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 44px;
+  background: var(--main-ui-color);
+  box-shadow: var(--ui-shadow);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease;
+  z-index: 0;
+  opacity: 0;
+}
+
+.menu-selector.visible {
+  opacity: 1;
+}
+
+/* --- Profile Avatar --- */
+.profile-avatar {
+  width: 24px;
+  height: 24px;
+  background: #ef4444;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-white);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  flex-shrink: 0;
+}
+
+/* --- Profile Item --- */
+.nav-item.profile-item {
+  margin-top: var(--space-4);
+  opacity: 0;
+  transform: translateX(-20px);
+  transition-delay: 300ms;
+}
+
+.menu-panel.open .nav-item.profile-item {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
+}
+
+/* --- Logout --- */
+.nav-item.logout {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition-delay: 330ms;
+}
+
+.menu-panel.open .nav-item.logout {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    background var(--transition-fast),
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
+}
+
+/* --- Menu Overlay --- */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: calc(var(--z-menu-panel) - 1);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.menu-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 960px) {
+  .menu-selector {
+    height: 40px;
+  }
+}

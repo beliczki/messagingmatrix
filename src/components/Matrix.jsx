@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon, Check, ChevronDown } from 'lucide-react';
+import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -18,7 +19,6 @@ import OrphanedMessagesDialog from './OrphanedMessagesDialog';
 import MatrixControlPanel from './MatrixControlPanel';
 import FeedTableView from './FeedTableView';
 import MatrixGridView from './MatrixGridView';
-import PageHeader, { getButtonStyle } from './PageHeader';
 
 // Module-level persistent refs to survive component re-renders/remounts
 const EMPTY_ARRAY = [];
@@ -58,23 +58,14 @@ const Matrix = ({
   const isEditMode = pathParts[2] === 'edit';
   const urlMessageId = isEditMode ? decodeURIComponent(pathParts[3] || '') : null;
 
-  // Detect mount/unmount
-  useEffect(() => {
-    console.log('🟢🟢🟢 Matrix MOUNTED');
-    return () => console.log('🔴🔴🔴 Matrix UNMOUNTED');
-  }, []);
-
   // Update module-level refs when data changes
   if (matrixData?.audiences && persistentMatrixRefs.audiences !== matrixData.audiences) {
-    console.log('🟡 Matrix: Updating module-level audiences ref');
     persistentMatrixRefs.audiences = matrixData.audiences;
   }
   if (matrixData?.topics && persistentMatrixRefs.topics !== matrixData.topics) {
-    console.log('🟡 Matrix: Updating module-level topics ref');
     persistentMatrixRefs.topics = matrixData.topics;
   }
   if (matrixData?.messages && persistentMatrixRefs.messages !== matrixData.messages) {
-    console.log('🟡 Matrix: Updating module-level messages ref');
     persistentMatrixRefs.messages = matrixData.messages;
   }
 
@@ -83,17 +74,12 @@ const Matrix = ({
   const topics = persistentMatrixRefs.topics;
   const messages = persistentMatrixRefs.messages;
 
-  console.log('🔵 Matrix component render', {
-    audiencesLen: audiences?.length,
-    topicsLen: topics?.length,
-    messagesLen: messages?.length
-  });
-
   // Destructure other values
   const {
     keywords = {},
     assets = [],
     textFormatting = [],
+    setTextFormatting,
     isLoading = false,
     isSaving = false,
     error = null,
@@ -125,10 +111,14 @@ const Matrix = ({
   const [editingAudience, setEditingAudience] = useState(null);
   const [editingTopic, setEditingTopic] = useState(null);
   const [showKeywordEditor, setShowKeywordEditor] = useState(false);
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [activeTab, setActiveTab] = useState('naming'); // 'naming' or 'content'
-  const [previewSize, setPreviewSize] = useState('300x250');
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem('messageEditor_activeTab');
+    return saved || 'naming';
+  });
+  const [previewSize, setPreviewSize] = useState(() => {
+    const saved = localStorage.getItem('messageEditor_previewSize');
+    return saved || '300x250';
+  });
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
@@ -139,17 +129,86 @@ const Matrix = ({
   // Multi-select mode state
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState(new Set());
+  const [selectModeCell, setSelectModeCell] = useState(null); // { topic, audience } - cell where selection started
+  const [shakingMessageId, setShakingMessageId] = useState(null); // Message currently showing shake animation
   const [longPressTimer, setLongPressTimer] = useState(null);
   const [dragHoverCell, setDragHoverCell] = useState(null); // { topic, audience }
   const [isDraggingSelected, setIsDraggingSelected] = useState(false); // Track if we're dragging selected messages (for UI updates)
   const [isCopyModeUI, setIsCopyModeUI] = useState(false); // For UI feedback only (updated in onDragOver)
   const [dragOriginCellUI, setDragOriginCellUI] = useState(null); // For UI feedback only (updated after drag starts)
+
+  // Action history for undo (Ctrl+Z) - infinite history
+  // Using ref to avoid stale closure issues in event handlers
+  const actionHistoryRef = useRef([]);
+
+  // Log an action for undo
+  const logAction = (action) => {
+    const newAction = { ...action, timestamp: Date.now() };
+    actionHistoryRef.current = [...actionHistoryRef.current, newAction];
+    console.log(`📝 Action logged: ${action.type}`, action);
+  };
+
+  // Undo the last action
+  const undoLastAction = () => {
+    if (actionHistoryRef.current.length === 0) {
+      console.log('⚠️ Nothing to undo');
+      return;
+    }
+
+    const lastAction = actionHistoryRef.current[actionHistoryRef.current.length - 1];
+    console.log(`↩️ Undoing: ${lastAction.type}`, lastAction);
+
+    switch (lastAction.type) {
+      case 'add':
+        // Undo add: delete the message
+        if (lastAction.messageId) {
+          deleteMessage(lastAction.messageId);
+          console.log(`🗑️ Undo add: deleted message ${lastAction.messageId}`);
+        }
+        break;
+
+      case 'copy':
+        // Undo copy: delete the copied messages
+        if (lastAction.newMessageIds && lastAction.newMessageIds.length > 0) {
+          lastAction.newMessageIds.forEach(id => deleteMessage(id));
+          console.log(`🗑️ Undo copy: deleted ${lastAction.newMessageIds.length} copied messages`);
+        }
+        break;
+
+      case 'move':
+        // Undo move: move messages back to original audience
+        if (lastAction.movedMessages && lastAction.movedMessages.length > 0) {
+          lastAction.movedMessages.forEach(({ id, originalAudience }) => {
+            moveMessage(id, originalAudience);
+          });
+          console.log(`↩️ Undo move: moved ${lastAction.movedMessages.length} messages back`);
+        }
+        break;
+
+      default:
+        console.log(`⚠️ Unknown action type: ${lastAction.type}`);
+        return;
+    }
+
+    // Remove the action from history
+    actionHistoryRef.current = actionHistoryRef.current.slice(0, -1);
+  };
   const justEnteredSelectMode = useRef(false); // Track if we just entered select mode
   const isDraggingSelectedRef = useRef(false); // Track if we're dragging selected messages (needs to be ref for immediate access in onDrop)
   const dragPreviewRef = useRef(null); // Store drag preview element for cleanup
   const dragOriginCellRef = useRef(null); // Use ref to avoid re-render during drag start
   const isCopyModeRef = useRef(false); // Use ref to avoid re-render during drag start
   const draggedMsgRef = useRef(null); // Use ref to avoid re-render during drag start
+
+  // Persist activeTab to localStorage
+  useEffect(() => {
+    localStorage.setItem('messageEditor_activeTab', activeTab);
+  }, [activeTab]);
+
+  // Persist previewSize to localStorage
+  useEffect(() => {
+    localStorage.setItem('messageEditor_previewSize', previewSize);
+  }, [previewSize]);
 
   // Track if editor was ever opened (to distinguish initial mount from intentional close)
   const editorWasOpenedRef = useRef(false);
@@ -171,7 +230,6 @@ const Matrix = ({
         if (message) {
           editorWasOpenedRef.current = true;
           setEditingMessage(message);
-          setActiveTab('naming');
         }
       }
     }
@@ -191,7 +249,6 @@ const Matrix = ({
     navigate(`/matrix/edit/${messageId}`);
     editorWasOpenedRef.current = true;
     setEditingMessage(msg);
-    setActiveTab('naming');
   };
 
   // Wrapper for setEditingMessage that handles URL updates
@@ -217,6 +274,8 @@ const Matrix = ({
   // Use matrixViewState for persisted values - memoize arrays with stable references
   const viewMode = matrixViewState?.viewMode || 'matrix';
   const displayMode = matrixViewState?.displayMode || 'informative';
+  const treeOrientation = matrixViewState?.treeOrientation || 'vertical';
+  const sankeyVariant = matrixViewState?.sankeyVariant || 'sankey';
   const topicFilter = matrixViewState?.topicFilter || '';
   const audienceFilter = matrixViewState?.audienceFilter || '';
   const mcFilter = matrixViewState?.mcFilter || '';
@@ -250,6 +309,8 @@ const Matrix = ({
   // Setter functions that update matrixViewState
   const setViewMode = (value) => setMatrixViewState({ ...matrixViewState, viewMode: value });
   const setDisplayMode = (value) => setMatrixViewState({ ...matrixViewState, displayMode: value });
+  const setTreeOrientation = (value) => setMatrixViewState({ ...matrixViewState, treeOrientation: value });
+  const setSankeyVariant = (value) => setMatrixViewState({ ...matrixViewState, sankeyVariant: value });
   const setTopicFilter = (value) => setMatrixViewState({ ...matrixViewState, topicFilter: value });
   const setAudienceFilter = (value) => setMatrixViewState({ ...matrixViewState, audienceFilter: value });
   const setMcFilter = (value) => setMatrixViewState({ ...matrixViewState, mcFilter: value });
@@ -322,11 +383,8 @@ const Matrix = ({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [spacePressed, setSpacePressed] = useState(false);
   const matrixContainerRef = useRef(null);
-  const productDropdownRef = useRef(null);
-  const statusDropdownRef = useRef(null);
 
-  // Handle keyboard events for spacebar and ESC
-  // Note: CTRL key detection during drag is handled in onDragOver
+  // Handle keyboard events for spacebar, ESC, and CTRL
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Allow space in input fields, textareas, and contenteditable elements
@@ -345,7 +403,25 @@ const Matrix = ({
         e.preventDefault();
         setIsSelectMode(false);
         setSelectedMessages(new Set());
+        setSelectModeCell(null);
         console.log('🚪 Exited select mode (ESC key)');
+      }
+
+      // Track CTRL key for copy mode in selection mode
+      if ((e.key === 'Control' || e.key === 'Meta') && isSelectMode) {
+        setIsCopyModeUI(true);
+      }
+
+      // Ctrl+Z or Cmd+Z to undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !isInputField) {
+        e.preventDefault();
+        undoLastAction();
+      }
+
+      // Ctrl+A or Cmd+A to select all in cell (when in selection mode)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && isSelectMode && selectModeCell && !isInputField) {
+        e.preventDefault();
+        handleSelectAllInCell(selectModeCell.topic, selectModeCell.audience);
       }
     };
 
@@ -361,6 +437,11 @@ const Matrix = ({
         setSpacePressed(false);
         setIsPanning(false);
       }
+
+      // Track CTRL key release for copy mode
+      if (e.key === 'Control' || e.key === 'Meta') {
+        setIsCopyModeUI(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -372,22 +453,15 @@ const Matrix = ({
     };
   }, [spacePressed, viewMode, isSelectMode]);
 
-  // Handle click outside to close dropdowns
+  // Exit selection mode when no messages are selected
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
-        setShowProductDropdown(false);
-      }
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
-        setShowStatusDropdown(false);
-      }
-    };
+    if (isSelectMode && selectedMessages.size === 0) {
+      setIsSelectMode(false);
+      setSelectModeCell(null);
+      console.log('🚪 Exited select mode (no messages selected)');
+    }
+  }, [isSelectMode, selectedMessages]);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   // Detect orphaned messages (messages with invalid topic or audience keys)
   useEffect(() => {
@@ -920,6 +994,50 @@ const Matrix = ({
   }
   const filteredTopics = persistentMatrixRefs.cachedFilteredTopics;
 
+  // Filter messages based on mcFilter AND product filter (cascading filters)
+  // Messages are filtered by checking if their audience/topic is in the filtered lists
+  const filteredMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+
+    // Create sets for fast lookup of filtered audience/topic keys
+    const filteredAudienceKeys = new Set(filteredAudiences.map(a => a.key));
+    const filteredTopicKeys = new Set(filteredTopics.map(t => t.key));
+
+    return messages.filter(m => {
+      if (m.status === 'deleted') return false;
+
+      // Check if message's audience and topic are in the filtered lists (product filter)
+      const audienceInFilter = !m.audience || filteredAudienceKeys.has(m.audience);
+      const topicInFilter = !m.topic || filteredTopicKeys.has(m.topic);
+      if (!audienceInFilter || !topicInFilter) return false;
+
+      // Check status filter
+      if (statusFilters.length > 0) {
+        const msgStatus = (m.status || 'PLANNED').toUpperCase();
+        if (!statusFilters.includes(msgStatus)) return false;
+      }
+
+      // Check MC text filter
+      if (mcFilter.trim()) {
+        const lowerFilter = mcFilter.toLowerCase();
+        const searchableFields = [
+          String(m.number || ''),
+          m.variant || '',
+          m.name || '',
+          m.headline || '',
+          m.copy1 || '',
+          m.copy2 || '',
+          m.image1 || '',
+          m.image2 || '',
+          m.image3 || ''
+        ].join(' ').toLowerCase();
+        if (!searchableFields.includes(lowerFilter)) return false;
+      }
+
+      return true;
+    });
+  }, [messages, mcFilter, filteredAudiences, filteredTopics, statusFilters]);
+
   // Track filtered array changes using module-level refs
   const filteredAudiencesChanged = persistentMatrixRefs.prevFilteredAudiences !== filteredAudiences;
   const filteredTopicsChanged = persistentMatrixRefs.prevFilteredTopics !== filteredTopics;
@@ -1044,8 +1162,21 @@ const Matrix = ({
     if (!statusFilters.includes('PLANNED')) {
       setStatusFilters([...statusFilters, 'PLANNED']);
     }
+
+    // Calculate the expected new ID (same logic as useMatrix)
+    const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
+    const newId = maxId + 1;
+
     // Add the message
     addMessage(topicKey, audKey);
+
+    // Log for undo
+    logAction({
+      type: 'add',
+      messageId: newId,
+      topic: topicKey,
+      audience: audKey
+    });
   };
 
   // Handle generate content with Claude
@@ -1189,8 +1320,9 @@ const Matrix = ({
       // Enter select mode and select this message
       setIsSelectMode(true);
       setSelectedMessages(new Set([msg.id]));
+      setSelectModeCell({ topic: msg.topic, audience: msg.audience }); // Track which cell selection started
       justEnteredSelectMode.current = true; // Mark that we just entered select mode
-      console.log('📌 Entered select mode with message:', msg.id);
+      console.log('📌 Entered select mode with message:', msg.id, 'in cell:', msg.topic, msg.audience);
       setLongPressTimer(null);
     }, 500); // 500ms long press
 
@@ -1215,11 +1347,26 @@ const Matrix = ({
       return;
     }
 
-    // If in select mode, toggle selection on click
+    // If in select mode, handle selection
     if (isSelectMode && !e.target.closest('button')) {
       e.preventDefault();
       e.stopPropagation();
 
+      // Check if clicked message is in the same cell as selection started
+      const isSameCell = selectModeCell &&
+        msg.topic === selectModeCell.topic &&
+        msg.audience === selectModeCell.audience;
+
+      if (!isSameCell) {
+        // Different cell - show shake animation (invalid selection)
+        console.log('🔴 Invalid selection - different cell, triggering shake');
+        setShakingMessageId(msg.id);
+        // Remove shake after animation completes (400ms matches CSS)
+        setTimeout(() => setShakingMessageId(null), 400);
+        return;
+      }
+
+      // Same cell - toggle selection
       const newSelected = new Set(selectedMessages);
       if (newSelected.has(msg.id)) {
         newSelected.delete(msg.id);
@@ -1233,8 +1380,114 @@ const Matrix = ({
       // Exit select mode if no messages selected
       if (newSelected.size === 0) {
         setIsSelectMode(false);
+        setSelectModeCell(null);
         console.log('🚪 Exited select mode (no messages selected)');
       }
+    }
+  };
+
+  // Move or copy selected messages to a cell (click action)
+  const handleMoveOrCopyToCell = (topicKey, audienceKey, isCopy) => {
+    if (!isSelectMode || selectedMessages.size === 0) return;
+
+    const msgsToMove = messages.filter(m => selectedMessages.has(m.id));
+    if (msgsToMove.length === 0) return;
+
+    // Check if all messages have the same topic (row constraint)
+    const topics = new Set(msgsToMove.map(m => m.topic));
+    if (topics.size > 1) {
+      alert('Cannot move messages from different rows. All selected messages must be in the same row (topic).');
+      return;
+    }
+
+    const sourceTopic = msgsToMove[0].topic;
+
+    // Check if moving to different topic
+    if (sourceTopic !== topicKey) {
+      alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic.');
+      return;
+    }
+
+    if (isCopy) {
+      // Track max ID before copying to identify new messages later
+      const maxIdBefore = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
+      const copyCount = msgsToMove.length;
+
+      // Batch copy
+      msgsToMove.forEach(msg => {
+        copyMessage(msg.id, audienceKey);
+      });
+
+      // Calculate new IDs for logging
+      const newMessageIds = [];
+      for (let i = 1; i <= copyCount; i++) {
+        newMessageIds.push(maxIdBefore + i);
+      }
+
+      // Log for undo
+      logAction({
+        type: 'copy',
+        newMessageIds,
+        sourceMessages: msgsToMove.map(m => m.id),
+        targetAudience: audienceKey
+      });
+
+      // After copy, select the new copies so user can continue copying forward
+      setTimeout(() => {
+        setSelectedMessages(new Set(newMessageIds));
+        setSelectModeCell({ topic: topicKey, audience: audienceKey });
+      }, 50);
+    } else {
+      // Log for undo before moving (need original audiences)
+      logAction({
+        type: 'move',
+        movedMessages: msgsToMove.map(m => ({
+          id: m.id,
+          originalAudience: m.audience
+        })),
+        targetAudience: audienceKey
+      });
+
+      // Batch move
+      msgsToMove.forEach(msg => {
+        moveMessage(msg.id, audienceKey);
+      });
+
+      // Clear selection and exit select mode after move
+      setSelectedMessages(new Set());
+      setIsSelectMode(false);
+      setSelectModeCell(null);
+    }
+  };
+
+  // Select all messages in a cell
+  const handleSelectAllInCell = (topicKey, audienceKey) => {
+    const cellMessages = messages.filter(m =>
+      m.topic === topicKey &&
+      m.audience === audienceKey &&
+      m.status !== 'deleted'
+    );
+
+    if (cellMessages.length === 0) return;
+
+    // Check if all are already selected
+    const allSelected = cellMessages.every(m => selectedMessages.has(m.id));
+
+    const newSelected = new Set(selectedMessages);
+    if (allSelected) {
+      // Deselect all in cell
+      cellMessages.forEach(m => newSelected.delete(m.id));
+    } else {
+      // Select all in cell
+      cellMessages.forEach(m => newSelected.add(m.id));
+    }
+
+    setSelectedMessages(newSelected);
+
+    // Exit select mode if no messages selected
+    if (newSelected.size === 0) {
+      setIsSelectMode(false);
+      setSelectModeCell(null);
     }
   };
 
@@ -1411,18 +1664,27 @@ const Matrix = ({
         });
         console.log(`📋 Copied ${copyCount} messages to ${audience}`);
 
+        // Calculate new IDs for logging
+        const newMessageIds = [];
+        for (let i = 1; i <= copyCount; i++) {
+          newMessageIds.push(maxIdBefore + i);
+        }
+
+        // Log for undo
+        logAction({
+          type: 'copy',
+          newMessageIds,
+          sourceMessages: msgsToMove.map(m => m.id),
+          targetAudience: audience
+        });
+
         // After copy, select the new copies so user can continue copying forward
-        // New copies will have IDs > maxIdBefore
         setTimeout(() => {
-          const newIds = [];
-          for (let i = 1; i <= copyCount; i++) {
-            newIds.push(maxIdBefore + i);
-          }
-          setSelectedMessages(new Set(newIds));
+          setSelectedMessages(new Set(newMessageIds));
           // Update origin cell to the new location
           dragOriginCellRef.current = { topic, audience };
           setDragOriginCellUI({ topic, audience });
-          console.log(`✅ Auto-selected ${copyCount} copied messages with IDs:`, newIds);
+          console.log(`✅ Auto-selected ${copyCount} copied messages with IDs:`, newMessageIds);
         }, 50);
 
         // Keep select mode active, just clear drag state
@@ -1431,6 +1693,16 @@ const Matrix = ({
         setIsDraggingSelected(false);
         isCopyModeRef.current = false;
       } else {
+        // Log for undo before moving (need original audiences)
+        logAction({
+          type: 'move',
+          movedMessages: msgsToMove.map(m => ({
+            id: m.id,
+            originalAudience: m.audience
+          })),
+          targetAudience: audience
+        });
+
         // Batch move
         msgsToMove.forEach(msg => {
           moveMessage(msg.id, audience);
@@ -1465,10 +1737,32 @@ const Matrix = ({
           return;
         }
 
+        // Calculate new ID for logging
+        const maxIdBefore = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
+        const newMessageId = maxIdBefore + 1;
+
         // Use copyMessage hook function (updates PMMID automatically)
         copyMessage(currentDraggedMsg.id, audience);
         console.log(`📋 Copied message ${currentDraggedMsg.id} to ${audience}`);
+
+        // Log for undo
+        logAction({
+          type: 'copy',
+          newMessageIds: [newMessageId],
+          sourceMessages: [currentDraggedMsg.id],
+          targetAudience: audience
+        });
       } else {
+        // Log for undo before moving
+        logAction({
+          type: 'move',
+          movedMessages: [{
+            id: currentDraggedMsg.id,
+            originalAudience: currentDraggedMsg.audience
+          }],
+          targetAudience: audience
+        });
+
         // Regular drag = move (updates PMMID automatically)
         moveMessage(currentDraggedMsg.id, audience);
         console.log(`📦 Moved message ${currentDraggedMsg.id} to ${audience}`);
@@ -1537,128 +1831,57 @@ const Matrix = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader
-        onMenuToggle={onMenuToggle}
-        title={currentModuleName || 'Messaging Matrix'}
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
+      {/* Floating Toolbar - Fixed position, right side */}
+      <MatrixControlPanel
+        viewMode={viewMode}
+        displayMode={displayMode}
+        matrixZoom={matrixZoom}
+        treeZoom={treeZoom}
+        treeConnectorType={treeConnectorType}
+        treeFlattenMode={treeFlattenMode}
         lookAndFeel={lookAndFeel}
-        titleFilters={
-          (
-            <div className="flex items-center gap-2">
-              {/* Product Filter Dropdown */}
-              <div className="relative" ref={productDropdownRef}>
-                <button
-                  onClick={() => setShowProductDropdown(!showProductDropdown)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                >
-                  <span>
-                    {productFilters.length === 0
-                      ? `Products(${availableProducts.length})`
-                      : `Products(${productFilters.length})`}
-                  </span>
-                  <ChevronDown size={16} />
-                </button>
-                {showProductDropdown && (
-                  <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
-                    {availableProducts.map((product) => (
-                      <button
-                        key={product}
-                        onClick={() => {
-                          if (productFilters.includes(product)) {
-                            setProductFilters(productFilters.filter(p => p !== product));
-                          } else {
-                            setProductFilters([...productFilters, product]);
-                          }
-                        }}
-                        className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
-                      >
-                        <Check size={16} className={productFilters.includes(product) ? 'text-blue-600' : 'text-transparent'} />
-                        <span className="text-gray-900">{product}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+        onViewModeChange={setViewMode}
+        onDisplayModeChange={setDisplayMode}
+        onMatrixZoomChange={setMatrixZoom}
+        onMatrixFit={handleMatrixFit}
+        onTreeZoomChange={setTreeZoom}
+        onTreeConnectorTypeChange={setTreeConnectorType}
+        onTreeFlattenModeChange={setTreeFlattenMode}
+        tree2Ref={tree2Ref}
+        sankeyRef={sankeyRef}
+        tree2Zoom={tree2Zoom}
+        sankeyZoom={sankeyZoom}
+        // Text filter props
+        audienceFilter={audienceFilter}
+        topicFilter={topicFilter}
+        mcFilter={mcFilter}
+        onAudienceFilterChange={setAudienceFilter}
+        onTopicFilterChange={setTopicFilter}
+        onMcFilterChange={setMcFilter}
+        // Product & Status filter props
+        productFilters={productFilters}
+        statusFilters={statusFilters}
+        allProducts={availableProducts}
+        allStatuses={keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED']}
+        onProductFiltersChange={setProductFilters}
+        onStatusFiltersChange={setStatusFilters}
+        statusColors={settings.getStatusColors?.() || {}}
+        filteredCounts={{
+          products: productFilters.length,
+          audiences: filteredAudiences.length,
+          topics: filteredTopics.length,
+          messages: filteredMessages.length
+        }}
+        // View variant props
+        treeOrientation={treeOrientation}
+        onTreeOrientationChange={setTreeOrientation}
+        sankeyVariant={sankeyVariant}
+        onSankeyVariantChange={setSankeyVariant}
+      />
 
-              {/* Status Filter Dropdown */}
-              <div className="relative" ref={statusDropdownRef}>
-                <button
-                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
-                >
-                  <span>
-                    {(() => {
-                      const availableStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED'];
-                      return statusFilters.length === 0
-                        ? `Status(${availableStatuses.length})`
-                        : `Status(${statusFilters.length})`;
-                    })()}
-                  </span>
-                  <ChevronDown size={16} />
-                </button>
-                {showStatusDropdown && (() => {
-                  const availableStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED'];
-                  return (
-                    <div className="absolute top-full mt-1 left-0 bg-white rounded shadow-lg border border-gray-200 min-w-[150px] z-50">
-                      {availableStatuses.map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => {
-                            if (statusFilters.includes(status)) {
-                              setStatusFilters(statusFilters.filter(s => s !== status));
-                            } else {
-                              setStatusFilters([...statusFilters, status]);
-                            }
-                          }}
-                          className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-100 transition-colors text-left text-sm"
-                        >
-                          <Check size={16} className={statusFilters.includes(status) ? 'text-blue-600' : 'text-transparent'} />
-                          <span className="text-gray-900">{status}</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          )
-        }
-      >
-        {/* Matrix/Tree/Feed Controls */}
-        <MatrixControlPanel
-          viewMode={viewMode}
-          displayMode={displayMode}
-          matrixZoom={matrixZoom}
-          treeZoom={treeZoom}
-          treeConnectorType={treeConnectorType}
-          treeFlattenMode={treeFlattenMode}
-          lookAndFeel={lookAndFeel}
-          onViewModeChange={setViewMode}
-          onDisplayModeChange={setDisplayMode}
-          onMatrixZoomChange={setMatrixZoom}
-          onMatrixFit={handleMatrixFit}
-          onTreeZoomChange={setTreeZoom}
-          onTreeConnectorTypeChange={setTreeConnectorType}
-          onTreeFlattenModeChange={setTreeFlattenMode}
-          tree2Ref={tree2Ref}
-          sankeyRef={sankeyRef}
-          tree2Zoom={tree2Zoom}
-          sankeyZoom={sankeyZoom}
-        />
-
-        <button
-          onClick={clearAndReloadApp}
-          className="p-2 text-white rounded hover:opacity-90 transition-opacity"
-          style={getButtonStyle(lookAndFeel)}
-          title="Reload data from spreadsheet"
-        >
-          <RefreshCw size={20} />
-        </button>
-      </PageHeader>
-
-      {/* Matrix / Feed / Tree View */}
-      <div className="p-4">
+      {/* Matrix / Feed / Tree View - Fullscreen */}
+      <div className="matrix-view-container">
         {isLoading && audiences.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <RefreshCw className="animate-spin text-gray-400" size={32} />
@@ -1692,6 +1915,7 @@ const Matrix = ({
             statusFilters={statusFilters}
             treeStructure={treeStructure}
             lookAndFeel={lookAndFeel}
+            orientation={treeOrientation}
             onEditAudience={setEditingAudience}
             onEditTopic={setEditingTopic}
             onEditMessage={openMessageEditor}
@@ -1706,6 +1930,7 @@ const Matrix = ({
             statusFilters={statusFilters}
             sankeyStructure={sankeyStructure}
             lookAndFeel={lookAndFeel}
+            variant={sankeyVariant}
             onEditAudience={setEditingAudience}
             onEditTopic={setEditingTopic}
             onEditMessage={openMessageEditor}
@@ -1732,8 +1957,6 @@ const Matrix = ({
             spacePressed={spacePressed}
             displayMode={displayMode}
             onDisplayModeChange={setDisplayMode}
-            audienceFilter={audienceFilter}
-            topicFilter={topicFilter}
             mcFilter={mcFilter}
             filteredAudiences={filteredAudiences}
             filteredTopics={filteredTopics}
@@ -1746,9 +1969,6 @@ const Matrix = ({
             onPanStart={handleMatrixPanStart}
             onPanMove={handleMatrixPanMove}
             onPanEnd={handleMatrixPanEnd}
-            onAudienceFilterChange={setAudienceFilter}
-            onTopicFilterChange={setTopicFilter}
-            onMcFilterChange={setMcFilter}
             onEditAudience={setEditingAudience}
             onAddAudience={handleAddAudience}
             onEditTopic={setEditingTopic}
@@ -1763,6 +1983,10 @@ const Matrix = ({
             setActiveTab={setActiveTab}
             isSelectMode={isSelectMode}
             selectedMessages={selectedMessages}
+            selectModeCell={selectModeCell}
+            onSelectAllInCell={handleSelectAllInCell}
+            onMoveOrCopyToCell={handleMoveOrCopyToCell}
+            shakingMessageId={shakingMessageId}
             isDraggingSelected={isDraggingSelected}
             isCopyMode={isCopyModeUI}
             dragHoverCell={dragHoverCell}
@@ -1784,6 +2008,7 @@ const Matrix = ({
         deleteMessage={deleteMessage}
         keywords={keywords}
         textFormatting={textFormatting}
+        updateTextFormatting={setTextFormatting}
         previewSize={previewSize}
         setPreviewSize={setPreviewSize}
         activeTab={activeTab}
@@ -1848,35 +2073,40 @@ const Matrix = ({
         onClose={() => setShowOrphanedDialog(false)}
       />
 
-      {/* AI Assistant */}
-      <AIAssistant
-        ref={claudeChatRef}
-        matrixState={matrixData}
-        onAddAudience={addAudience}
-        onAddTopic={addTopic}
-        onAddMessage={addMessage}
-        onDeleteAudience={deleteAudience}
-        onDeleteTopic={deleteTopic}
-      />
-
-      {/* Matrix State Panel */}
-      <MatrixStatePanel
-        audiences={audiences || []}
-        topics={topics || []}
-        messages={messages || []}
-        keywords={keywords || {}}
-        assets={assets || []}
-        creatives={matrixData?.creatives || []}
-        textFormatting={textFormatting || []}
-        feedData={feedData || []}
-        lastSync={lastSync}
-        isSaving={isSaving}
-        saveProgress={saveProgress}
-        onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
-        onRegenerateTopicKeys={regenerateTopicKeys}
-        downloadFeedCSV={downloadFeedCSV}
-      />
+      {/* Bottom Bar - Rendered via portal to ensure it's above dialogs */}
+      {createPortal(
+        <div className="bottom-bar">
+          <MatrixStatePanel
+            audiences={audiences || []}
+            topics={topics || []}
+            messages={messages || []}
+            keywords={keywords || {}}
+            assets={assets || []}
+            creatives={matrixData?.creatives || []}
+            textFormatting={textFormatting || []}
+            feedData={feedData || []}
+            lastSync={lastSync}
+            isSaving={isSaving}
+            saveProgress={saveProgress}
+            onSave={handleSaveWithProgress}
+            onClearReload={clearAndReloadApp}
+            onRegenerateTopicKeys={regenerateTopicKeys}
+            downloadFeedCSV={downloadFeedCSV}
+            changeTracking={matrixData?.changeTracking}
+            originalState={matrixData?.originalState}
+          />
+          <AIAssistant
+            ref={claudeChatRef}
+            matrixState={matrixData}
+            onAddAudience={addAudience}
+            onAddTopic={addTopic}
+            onAddMessage={addMessage}
+            onDeleteAudience={deleteAudience}
+            onDeleteTopic={deleteTopic}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

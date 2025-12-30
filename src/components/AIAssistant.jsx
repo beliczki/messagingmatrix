@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { MessageSquare, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
+// X is already imported
 import { callClaudeAPI } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
 
@@ -56,7 +58,6 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
         if (response.ok) {
           const prompts = await response.json();
           setCustomPrompts(prompts);
-          console.log('🤖 AI Assistant - Loaded custom prompts from backend:', prompts);
         } else {
           console.error('Failed to load prompts, status:', response.status);
         }
@@ -71,7 +72,6 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
         if (response.ok) {
           const { content } = await response.json();
           setDataStructureDoc(content);
-          console.log('🤖 AI Assistant - Loaded data structure documentation from backend');
         } else {
           console.error('Failed to load data structure, status:', response.status);
         }
@@ -438,7 +438,7 @@ Make sure the content is:
             }
           } catch (parseError) {
             console.error('Error parsing JSON:', parseError);
-            console.log('Failed to parse:', jsonMatch[1]);
+            console.error('Failed to parse JSON:', jsonMatch[1].substring(0, 100));
             const errorMessage = {
               role: 'system',
               content: '❌ Failed to parse generated content. Please try again.'
@@ -446,7 +446,6 @@ Make sure the content is:
             setMessages(prev => [...prev, errorMessage]);
           }
         } else {
-          console.log('No JSON found in response:', responseText);
           const errorMessage = {
             role: 'system',
             content: '❌ Response did not contain expected JSON format. Please review the response above and try again.'
@@ -476,19 +475,9 @@ Make sure the content is:
     resizeStartHeight.current = height;
   };
 
-  // Log context when component mounts or module changes
+  // Build initial context when component mounts or module changes
   useEffect(() => {
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🤖 AI ASSISTANT LOADED');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('📍 Module:', moduleContext?.module || 'matrix');
-    console.log('📍 Task Context:', !!taskContext);
-    console.log('');
-    console.log('🔄 Building initial context...');
-    const initialContext = buildContextPrompt();
-    console.log('');
-    console.log('✅ Context built and ready');
-    console.log('═══════════════════════════════════════════════════════');
+    buildContextPrompt();
   }, [moduleContext?.module, taskContext]);
 
   useEffect(() => {
@@ -599,10 +588,6 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
     const clientContext = customPrompts['client-context'] || '';
     const clientContextSection = clientContext ? `${clientContext}\n\n---\n\n` : '';
 
-    console.log('🤖 AI Assistant Context Builder - Custom Prompts:', customPrompts);
-    console.log('🤖 Prompts Loaded:', promptsLoaded);
-    console.log('🏢 Client Context Length:', clientContext.length, 'characters');
-
     // Module-specific contexts (creative-library, assets, monitoring, templates, users, settings)
     if (moduleContext) {
       const module = moduleContext.module;
@@ -611,9 +596,6 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
       if (customPrompts[module] && customPrompts[module].trim() !== '') {
         const context = `${clientContextSection}${customPrompts[module]}
 ${appStateContext}`;
-
-        console.log('🤖 AI Assistant - Final Context Prompt:', context);
-        console.log('📊 Context Length:', context.length, 'characters');
         return context;
       }
 
@@ -645,9 +627,6 @@ ${JSON.stringify(emails, null, 2)}`;
         const context = `${clientContextSection}${taskStateJSON}
 
 ${customPrompts.tasks}`;
-
-        console.log('🤖 AI Assistant - Final Context Prompt:', context);
-        console.log('📊 Context Length:', context.length, 'characters');
         return context;
       }
 
@@ -737,8 +716,6 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
 ⚠️ Error: AI Assistant instructions not configured for matrix. Please check that AIMatrixInstructions.txt exists in the root directory.`;
     }
 
-    console.log('🤖 AI Assistant - Final Context Prompt:', matrixContextFull);
-    console.log('📊 Context Length:', matrixContextFull.length, 'characters');
     return matrixContextFull;
   };
 
@@ -772,17 +749,6 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
       images: attachedImages.length > 0 ? attachedImages : undefined
     };
 
-    console.log('📤 User Message:', {
-      role: userMessage.role,
-      contentType: typeof userMessage.content,
-      isMultiModal: Array.isArray(userMessage.content),
-      hasImages: attachedImages.length > 0,
-      imageCount: attachedImages.length,
-      textPreview: typeof userMessage.content === 'string'
-        ? userMessage.content.substring(0, 100)
-        : userMessage.content[0]?.text?.substring(0, 100)
-    });
-
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setAttachedImages([]);
@@ -807,42 +773,8 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
         cleanMessage(userMessage)
       ];
 
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('🚀 SENDING TO CLAUDE API');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('📋 Request Details:');
-      console.log('  Model:', 'claude-3-5-sonnet-20241022');
-      console.log('  Max Tokens:', 4096);
-      console.log('  Message Count:', apiMessages.length);
-      console.log('  Previous Conversation Messages:', messages.filter(m => m.role !== 'system').length);
-      console.log('');
-      console.log('📝 All Messages Being Sent:');
-      apiMessages.forEach((msg, idx) => {
-        const contentPreview = typeof msg.content === 'string'
-          ? msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '')
-          : `[Multi-modal: ${msg.content.length} parts]`;
-        console.log(`  [${idx}] ${msg.role}:`, contentPreview);
-        if (Array.isArray(msg.content)) {
-          msg.content.forEach((part, partIdx) => {
-            if (part.type === 'text') {
-              console.log(`      [${partIdx}] text:`, part.text.substring(0, 100));
-            } else if (part.type === 'image') {
-              console.log(`      [${partIdx}] image:`, part.source.media_type, `(${part.source.data.length} chars base64)`);
-            }
-          });
-        }
-      });
-      console.log('');
-      console.log('📊 Payload Size Estimate:');
-      const payloadSize = JSON.stringify(apiMessages).length;
-      console.log(`  ${(payloadSize / 1024).toFixed(2)} KB (${payloadSize.toLocaleString()} bytes)`);
-      console.log('═══════════════════════════════════════════════════════');
-
       // Call Claude API directly
       const data = await callClaudeAPI(apiKey, apiMessages, 'claude-3-5-sonnet-20241022', 4096);
-
-      console.log('✅ Claude API Response Received');
-      console.log('  Response Length:', data.content[0].text.length, 'characters');
 
       const responseText = data.content[0].text;
 
@@ -1182,422 +1114,497 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
     return null;
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="fixed bottom-0 right-0 bg-white shadow-lg rounded-tl-lg z-50">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="px-4 py-3 flex items-center gap-2 hover:bg-gray-50 rounded-tl-lg"
-        >
-          <MessageSquare size={20} className="text-purple-600" />
-          <span className="font-semibold text-gray-800">AI Assistant</span>
-          {isGenerating ? (
-            <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded flex items-center gap-1">
-              <Loader size={12} className="animate-spin" />
-              Thinking...
-            </span>
-          ) : isConfigured ? (
-            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Ready</span>
-          ) : null}
-          <ChevronUp size={20} className="text-gray-600" />
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="fixed bottom-0 right-0 bg-white shadow-2xl flex flex-col z-50 rounded-tl-lg"
-      style={{ height: `${height}px`, width: '75%' }}
-    >
-      {/* Resize Handle */}
+    <>
+      {/* Bottom Panel Button - Always visible */}
       <div
-        onMouseDown={handleResizeStart}
-        className={`w-full h-2 flex items-center justify-center cursor-ns-resize hover:bg-gray-200 transition-colors ${isResizing ? 'bg-gray-300' : 'bg-gray-100'}`}
-        title="Drag to resize"
+        className="bottom-panel"
+        onClick={() => setIsCollapsed(!isCollapsed)}
       >
-        <GripHorizontal size={16} className="text-gray-400" />
+        <Bot size={20} className="bottom-panel-icon" />
+        <span className="bottom-panel-title">AI Assistant</span>
+        {isGenerating && (
+          <span className="bottom-panel-btn" style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <Loader size={10} className="animate-spin" />
+            Thinking...
+          </span>
+        )}
       </div>
 
-      {/* Header with Tabs */}
-      <div className="border-b bg-gray-50">
-        <div className="px-4 pt-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={20} className="text-purple-600" />
-              <span className="font-semibold text-gray-800">AI Assistant</span>
-              {isConfigured && <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Ready</span>}
+      {/* Dialog - rendered via portal when expanded */}
+      {!isCollapsed && createPortal(
+        <div
+          className="dialog-overlay overlay-animated open"
+          onClick={() => setIsCollapsed(true)}
+        >
+          {/* Dialog */}
+          <div className="dialog dialog-animated open" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-layout" style={{ flexDirection: 'column', height: '100%' }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: 'var(--space-4)',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bot size={24} style={{ color: 'white' }} />
+                <span style={{ color: 'white', fontSize: '18px', fontWeight: 600 }}>AI Assistant</span>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: '2px' }}>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  style={{
+                    padding: '8px 16px',
+                    background: activeTab === 'chat' ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: activeTab === 'chat' ? 'white' : 'rgba(255,255,255,0.7)',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setActiveTab('context')}
+                  style={{
+                    padding: '8px 16px',
+                    background: activeTab === 'context' ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: activeTab === 'context' ? 'white' : 'rgba(255,255,255,0.7)',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Context
+                </button>
+              </div>
             </div>
 
-            {/* Tabs inline with header */}
-            <div className="flex -mb-[1px]">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
-                onClick={() => setActiveTab('chat')}
-                className={`px-6 py-3 font-medium transition-colors ${
-                  activeTab === 'chat'
-                    ? 'bg-white border-b-2 border-purple-500 text-purple-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                onClick={clearChat}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                title="New chat"
               >
-                Chat
+                <RefreshCw size={16} />
               </button>
               <button
-                onClick={() => setActiveTab('context')}
-                className={`px-6 py-3 font-medium transition-colors ${
-                  activeTab === 'context'
-                    ? 'bg-white border-b-2 border-purple-500 text-purple-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                onClick={() => setIsCollapsed(true)}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                title="Collapse"
               >
-                Context
+                <X size={18} />
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={clearChat}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="New chat"
-            >
-              <RefreshCw size={16} className="text-gray-600" />
-            </button>
-            <button
-              onClick={() => setIsCollapsed(true)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Collapse"
-            >
-              <ChevronDown size={20} className="text-gray-600" />
-            </button>
-          </div>
-        </div>
-      </div>
+          {/* Config Panel */}
+          {showConfig && (
+            <div style={{
+              padding: 'var(--space-3) var(--space-4)',
+              borderBottom: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 500, color: 'white' }}>
+                  AI Assistant API Key
+                </label>
+                {import.meta.env.VITE_ANTHROPIC_API_KEY ? (
+                  <div style={{
+                    padding: '8px 12px',
+                    background: 'rgba(52, 168, 83, 0.2)',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    color: 'rgba(255,255,255,0.9)'
+                  }}>
+                    ✓ API key configured in .env file
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="sk-ant-..."
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '6px',
+                          color: 'white',
+                          fontSize: '13px'
+                        }}
+                      />
+                      <button
+                        onClick={saveApiKey}
+                        className="btn btn-primary"
+                      >
+                        Save
+                      </button>
+                      {isConfigured && (
+                        <button
+                          onClick={removeApiKey}
+                          className="btn btn-danger"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+                      Your API key is stored locally in your browser. Get your key from{' '}
+                      <a
+                        href="https://console.anthropic.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'rgba(255,255,255,0.8)' }}
+                      >
+                        console.anthropic.com
+                      </a>
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
-      {/* Config Panel */}
-      {showConfig && (
-        <div className="border-b px-4 py-3 bg-gray-50">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              AI Assistant API Key
-            </label>
-            {import.meta.env.VITE_ANTHROPIC_API_KEY ? (
-              <div className="px-3 py-2 bg-green-50 border border-green-300 rounded text-sm text-green-700">
-                ✓ API key configured in .env file
+          {/* Chat Tab Content */}
+          {activeTab === 'chat' && (
+            <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {messages.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.6)', marginTop: '32px' }}>
+                  <Bot size={48} style={{ margin: '0 auto 16px', color: 'rgba(255,255,255,0.3)' }} />
+                  {(() => {
+                    const moduleHints = getModuleHints();
+                    if (moduleHints) {
+                      return (
+                        <>
+                          <p style={{ fontSize: '14px', fontWeight: 500, color: 'white' }}>
+                            {moduleHints.title}
+                          </p>
+                          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
+                            {moduleHints.description}
+                          </p>
+                          <div style={{
+                            marginTop: '16px',
+                            padding: '12px',
+                            background: 'rgba(255,255,255,0.1)',
+                            borderRadius: '8px',
+                            textAlign: 'left'
+                          }}>
+                            <p style={{ fontSize: '12px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>Try asking:</p>
+                            <ul style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', listStyle: 'disc', paddingLeft: '20px' }}>
+                              {moduleHints.examples.map((example, idx) => (
+                                <li key={idx} style={{ marginBottom: '4px' }}>{example}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </>
+                      );
+                    } else if (taskContext) {
+                      return (
+                        <>
+                          <p style={{ fontSize: '14px', fontWeight: 500, color: 'white' }}>
+                            Ask AI to help manage and organize your tasks.
+                          </p>
+                          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
+                            AI can see your current tasks and help with workflow management.
+                          </p>
+                        </>
+                      );
+                    } else {
+                      return (
+                        <>
+                          <p style={{ fontSize: '14px', fontWeight: 500, color: 'white' }}>
+                            Ask AI to help improve your messaging matrix content.
+                          </p>
+                          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
+                            AI can see your current audiences, topics, and messages.
+                          </p>
+                        </>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
+
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    justifyContent: msg.role === 'user' ? 'flex-end' : msg.role === 'system' ? 'center' : 'flex-start'
+                  }}
+                >
+                  <div style={{
+                    maxWidth: msg.role === 'system' ? '100%' : '80%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: msg.role === 'user' ? 'rgba(255,255,255,0.2)' : msg.role === 'system' ? 'rgba(52,168,83,0.2)' : 'rgba(0,0,0,0.2)',
+                    color: 'white',
+                    fontSize: '13px'
+                  }}>
+                    {typeof msg.content === 'string' ? (
+                      <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{msg.content}</p>
+                    ) : (
+                      <div>
+                        {msg.content.find(c => c.type === 'text') && (
+                          <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                            {msg.content.find(c => c.type === 'text').text}
+                          </p>
+                        )}
+                        {msg.images && msg.images.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                            {msg.images.map((image, imgIdx) => (
+                              <img
+                                key={imgIdx}
+                                src={`data:${image.mimeType};base64,${image.data}`}
+                                alt={image.name}
+                                style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)' }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {isLoading && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                  <div style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                    <Loader size={16} className="animate-spin" style={{ color: 'white' }} />
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Context Tab Content */}
+          {activeTab === 'context' && (
+            <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-4)' }}>
+              <div style={{
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: '8px',
+                padding: '16px'
+              }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '12px' }}>AI Assistant Context</h3>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
+                  This is the complete context that will be sent with your next message to the AI assistant.
+                </p>
+                <pre style={{
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  background: 'rgba(0,0,0,0.2)',
+                  padding: '16px',
+                  borderRadius: '6px',
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  color: 'rgba(255,255,255,0.9)',
+                  margin: 0
+                }}>
+                  {buildContextPrompt()}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            borderTop: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            {!isConfigured ? (
+              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                Please configure your API key to start chatting
               </div>
             ) : (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                  />
-                  <button
-                    onClick={saveApiKey}
-                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
-                  >
-                    Save
-                  </button>
-                  {isConfigured && (
-                    <button
-                      onClick={removeApiKey}
-                      className="px-4 py-2 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500">
-                  Your API key is stored locally in your browser. Get your key from{' '}
-                  <a
-                    href="https://console.anthropic.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-purple-600 hover:underline"
-                  >
-                    console.anthropic.com
-                  </a>
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Chat Tab Content */}
-      {activeTab === 'chat' && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-8">
-            <MessageSquare size={48} className="mx-auto mb-4 text-gray-300" />
-            {(() => {
-              const moduleHints = getModuleHints();
-              if (moduleHints) {
-                const colorClasses = {
-                  teal: { bg: 'bg-teal-50', border: 'border-teal-200', title: 'text-teal-800', text: 'text-teal-700' },
-                  orange: { bg: 'bg-orange-50', border: 'border-orange-200', title: 'text-orange-800', text: 'text-orange-700' },
-                  green: { bg: 'bg-green-50', border: 'border-green-200', title: 'text-green-800', text: 'text-green-700' },
-                  amber: { bg: 'bg-amber-50', border: 'border-amber-200', title: 'text-amber-800', text: 'text-amber-700' },
-                  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', title: 'text-indigo-800', text: 'text-indigo-700' },
-                  gray: { bg: 'bg-gray-50', border: 'border-gray-200', title: 'text-gray-800', text: 'text-gray-700' }
-                };
-                const colors = colorClasses[moduleHints.color] || colorClasses.gray;
-
-                return (
-                  <>
-                    <p className="text-sm font-medium">
-                      {moduleHints.title}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      {moduleHints.description}
-                    </p>
-                    <div className={`mt-4 p-3 ${colors.bg} border ${colors.border} rounded text-left`}>
-                      <p className={`text-xs font-semibold ${colors.title} mb-2`}>✨ Try asking:</p>
-                      <div className={`text-xs ${colors.text} space-y-1`}>
-                        <ul className="list-disc list-inside">
-                          {moduleHints.examples.map((example, idx) => (
-                            <li key={idx}>{example}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </>
-                );
-              } else if (taskContext) {
-                return (
-                  <>
-                    <p className="text-sm font-medium">
-                      Ask AI to help manage and organize your tasks.
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      AI can see your current tasks and help with workflow management.
-                    </p>
-                    <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded text-left">
-                      <p className="text-xs font-semibold text-purple-800 mb-2">✨ AI can help you:</p>
-                      <div className="text-xs text-purple-700 space-y-1">
-                        <ul className="list-disc list-inside">
-                          <li>"Analyze my tasks and suggest priorities"</li>
-                          <li>"Which tasks should I move to Planning?"</li>
-                          <li>"Help me organize tasks by urgency"</li>
-                          <li>"What should I work on first?"</li>
-                          <li>"Break down this task into steps"</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </>
-                );
-              } else {
-                return (
-                  <>
-                    <p className="text-sm font-medium">
-                      Ask AI to help improve your messaging matrix content.
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      AI can see your current audiences, topics, and messages.
-                    </p>
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-left">
-                      <p className="text-xs font-semibold text-blue-800 mb-2">✨ AI can suggest changes to your matrix!</p>
-                      <div className="text-xs text-blue-700 space-y-1">
-                        <p><strong>1. Ask for suggestions:</strong> "Suggest 3 audiences for tech products"</p>
-                        <p><strong>2. Review suggestions</strong> from AI</p>
-                        <p><strong>3. Apply selectively:</strong></p>
-                        <ul className="list-disc list-inside ml-2">
-                          <li>"add all" - Add everything</li>
-                          <li>"add Young Professionals" - Add specific item</li>
-                          <li>"remove Students" - Remove by name or key</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </>
-                );
-              }
-            })()}
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${
-              msg.role === 'user' ? 'justify-end' :
-              msg.role === 'system' ? 'justify-center' :
-              'justify-start'
-            }`}
-          >
-            <div
-              className={`${
-                msg.role === 'system' ? 'max-w-full' : 'max-w-[80%]'
-              } rounded-lg px-4 py-2 ${
-                msg.role === 'user'
-                  ? 'bg-purple-600 text-white'
-                  : msg.role === 'system'
-                  ? 'bg-green-50 text-green-800 border border-green-200'
-                  : 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {/* Handle text content (string or array) */}
-              {typeof msg.content === 'string' ? (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-              ) : (
-                <div className="space-y-2">
-                  {/* Show text part */}
-                  {msg.content.find(c => c.type === 'text') && (
-                    <p className="text-sm whitespace-pre-wrap">
-                      {msg.content.find(c => c.type === 'text').text}
-                    </p>
-                  )}
-                  {/* Show images if any */}
-                  {msg.images && msg.images.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {msg.images.map((image, imgIdx) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Image Previews */}
+                {attachedImages.length > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    padding: '8px',
+                    background: 'rgba(255,255,255,0.1)',
+                    borderRadius: '6px'
+                  }}>
+                    {attachedImages.map((image, idx) => (
+                      <div key={idx} style={{ position: 'relative' }}>
                         <img
-                          key={imgIdx}
                           src={`data:${image.mimeType};base64,${image.data}`}
                           alt={image.name}
-                          className="max-w-[200px] max-h-[200px] rounded border border-white/20"
+                          style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px' }}
                         />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg px-4 py-2">
-              <Loader size={16} className="animate-spin text-purple-600" />
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-        </div>
-      )}
-
-      {/* Context Tab Content */}
-      {activeTab === 'context' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">AI Assistant Context</h3>
-            <p className="text-xs text-gray-600 mb-4">
-              This is the complete context that will be sent with your next message to the AI assistant.
-            </p>
-            <pre className="text-xs font-mono bg-white p-4 rounded border border-gray-300 overflow-x-auto whitespace-pre-wrap">
-              {buildContextPrompt()}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {/* Input */}
-      <div className="border-t px-4 py-3">
-        {!isConfigured ? (
-          <div className="text-center text-sm text-gray-500">
-            Please configure your API key to start chatting
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {/* Image Previews */}
-            {attachedImages.length > 0 && (
-              <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded border border-gray-200">
-                {attachedImages.map((image, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={`data:${image.mimeType};base64,${image.data}`}
-                      alt={image.name}
-                      className="w-16 h-16 object-cover rounded border border-gray-300"
-                    />
-                    <button
-                      onClick={() => removeImage(idx)}
-                      className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove image"
-                    >
-                      <X size={12} />
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-[10px] px-1 truncate rounded-b">
-                      {image.name}
-                    </div>
+                        <button
+                          onClick={() => removeImage(idx)}
+                          style={{
+                            position: 'absolute',
+                            top: '-4px',
+                            right: '-4px',
+                            width: '16px',
+                            height: '16px',
+                            background: '#ef4444',
+                            border: 'none',
+                            borderRadius: '50%',
+                            color: 'white',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Input Row */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* Image Upload Button */}
+                  <input
+                    type="file"
+                    id="image-upload"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '6px',
+                      color: 'white',
+                      cursor: 'pointer'
+                    }}
+                    title="Attach images"
+                  >
+                    <ImageIcon size={18} />
+                  </label>
+
+                  {/* Attach Filtered Items Button */}
+                  {filteredItems && filteredItems.length > 0 && (
+                    <button
+                      onClick={handleAttachFilteredItems}
+                      disabled={isAttachingFiltered || isLoading}
+                      style={{
+                        padding: '8px 12px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '6px',
+                        color: 'white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '12px',
+                        opacity: isAttachingFiltered || isLoading ? 0.5 : 1
+                      }}
+                      title={`Attach ${Math.min(filteredItems.length, 10)} filtered items`}
+                    >
+                      {isAttachingFiltered ? (
+                        <><Loader size={14} className="animate-spin" /> Attaching...</>
+                      ) : (
+                        <><Paperclip size={14} /> Attach {Math.min(filteredItems.length, 10)}</>
+                      )}
+                    </button>
+                  )}
+
+                  {/* Text Input */}
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    placeholder={taskContext ? "Ask AI for task management help..." : "Ask AI for suggestions..."}
+                    disabled={isLoading}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '14px',
+                      opacity: isLoading ? 0.5 : 1
+                    }}
+                  />
+
+                  {/* Send Button */}
+                  <button
+                    onClick={sendMessage}
+                    disabled={isLoading || (!input.trim() && attachedImages.length === 0)}
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      opacity: isLoading || (!input.trim() && attachedImages.length === 0) ? 0.5 : 1
+                    }}
+                  >
+                    <Send size={16} />
+                    Send
+                  </button>
+                </div>
               </div>
             )}
-
-            {/* Input Row */}
-            <div className="flex gap-2">
-              {/* Image Upload Button */}
-              <input
-                type="file"
-                id="image-upload"
-                accept="image/*"
-                multiple
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <label
-                htmlFor="image-upload"
-                className="p-2 border border-gray-300 rounded hover:bg-gray-50 cursor-pointer transition-colors flex items-center justify-center"
-                title="Attach images"
-              >
-                <ImageIcon size={20} className="text-gray-600" />
-              </label>
-
-              {/* Attach Filtered Items Button (only show in Creative Library and Assets) */}
-              {filteredItems && filteredItems.length > 0 && (
-                <button
-                  onClick={handleAttachFilteredItems}
-                  disabled={isAttachingFiltered || isLoading}
-                  className="px-3 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
-                  title={`Attach ${Math.min(filteredItems.length, 10)} filtered items`}
-                >
-                  {isAttachingFiltered ? (
-                    <>
-                      <Loader size={16} className="animate-spin" />
-                      Attaching...
-                    </>
-                  ) : (
-                    <>
-                      <Paperclip size={16} />
-                      Attach {Math.min(filteredItems.length, 10)} filtered
-                    </>
-                  )}
-                </button>
-              )}
-
-              {/* Text Input */}
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                placeholder={taskContext ? "Ask AI for task management help..." : "Ask AI for suggestions..."}
-                disabled={isLoading}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
-              />
-
-              {/* Send Button */}
-              <button
-                onClick={sendMessage}
-                disabled={isLoading || (!input.trim() && attachedImages.length === 0)}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Send size={16} />
-                Send
-              </button>
-            </div>
           </div>
-        )}
+        </div>
       </div>
-    </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 });
 

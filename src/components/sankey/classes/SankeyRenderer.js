@@ -186,13 +186,10 @@ export class SankeyRenderer {
 
       let opacity;
       if (t === 0) {
-        // No hover - all normal
         opacity = normalOpacity;
       } else if (isHighlighted) {
-        // Highlighted flow - lerp from normal to highlighted
         opacity = normalOpacity + (highlightedOpacity - normalOpacity) * t;
       } else {
-        // Non-highlighted flow - lerp from normal to dimmed
         opacity = normalOpacity + (dimmedOpacity - normalOpacity) * t;
       }
 
@@ -357,33 +354,12 @@ export class SankeyRenderer {
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
     ctx.fillRect(x, y, width, height);
 
-    // Draw selection border if selected
+    // Draw selection border if selected (only border we keep)
     if (isSelected) {
-      ctx.strokeStyle = '#3b82f6'; // Blue selection color
+      ctx.strokeStyle = '#ffffff'; // White selection color
       ctx.lineWidth = 3;
       ctx.strokeRect(x - 1, y - 1, width + 2, height + 2);
     }
-
-    // Interpolate border
-    const normalBorderOpacity = 0.3;
-    const highlightedBorderOpacity = 0.8;
-    const dimmedBorderOpacity = 0.1;
-    const normalLineWidth = 1;
-    const highlightedLineWidth = 2;
-
-    let borderOpacity = normalBorderOpacity;
-    let lineWidth = normalLineWidth;
-
-    if (highlightAmount > 0) {
-      borderOpacity = normalBorderOpacity + (highlightedBorderOpacity - normalBorderOpacity) * highlightAmount;
-      lineWidth = normalLineWidth + (highlightedLineWidth - normalLineWidth) * highlightAmount;
-    } else if (dimAmount > 0) {
-      borderOpacity = normalBorderOpacity + (dimmedBorderOpacity - normalBorderOpacity) * dimAmount;
-    }
-
-    ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
-    ctx.lineWidth = lineWidth;
-    ctx.strokeRect(x, y, width, height);
   }
 
   /**
@@ -420,40 +396,24 @@ export class SankeyRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    // Interpolate shadow intensity
-    const shadowOpacity = 0.9 + 0.1 * highlightAmount; // 0.9 -> 1.0
-    const shadowOffset = 0.5 + 0.5 * highlightAmount;  // 0.5 -> 1.0
+    // Calculate text opacity for dimming
+    let textOpacity = 1.0;
+    if (dimAmount > 0) {
+      textOpacity = 1.0 - 0.7 * dimAmount; // 1.0 -> 0.3
+    }
 
-    ctx.fillStyle = `rgba(255, 255, 255, ${shadowOpacity})`;
-    ctx.fillText(text, labelX + shadowOffset, labelY + shadowOffset);
+    // Draw shadow (dark, offset) for readability on colored backgrounds
+    const shadowOpacity = 0.5 * textOpacity;
+    ctx.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
+    ctx.fillText(text, labelX + 1, labelY + 1);
 
     // Extra shadow passes for highlighted state
     if (highlightAmount > 0.3) {
-      const extraShadowOpacity = (highlightAmount - 0.3) / 0.7; // 0 when < 0.3, 1 when 1.0
-      ctx.fillStyle = `rgba(255, 255, 255, ${extraShadowOpacity})`;
-      ctx.fillText(text, labelX - shadowOffset, labelY - shadowOffset);
-      ctx.fillText(text, labelX + shadowOffset, labelY - shadowOffset);
-      ctx.fillText(text, labelX - shadowOffset, labelY + shadowOffset);
+      ctx.fillText(text, labelX + 1.5, labelY + 1.5);
     }
 
-    // Interpolate text color
-    // Normal: #1f2937 (31, 41, 55)
-    // Highlighted: #000000 (0, 0, 0)
-    // Dimmed: rgba(31, 41, 55, 0.2)
-    let textOpacity = 1.0;
-    let r = 31, g = 41, b = 55;
-
-    if (highlightAmount > 0) {
-      // Interpolate toward black
-      r = Math.round(31 - 31 * highlightAmount);
-      g = Math.round(41 - 41 * highlightAmount);
-      b = Math.round(55 - 55 * highlightAmount);
-    } else if (dimAmount > 0) {
-      // Fade out opacity
-      textOpacity = 1.0 - 0.8 * dimAmount; // 1.0 -> 0.2
-    }
-
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${textOpacity})`;
+    // Main text in white
+    ctx.fillStyle = `rgba(255, 255, 255, ${textOpacity})`;
     ctx.fillText(text, labelX, labelY);
   }
 
@@ -695,18 +655,12 @@ export class SankeyRenderer {
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
     ctx.fill();
 
-    // Selection border
+    // Selection border only (no normal border)
     if (isSelected) {
-      ctx.strokeStyle = '#3b82f6';
+      ctx.strokeStyle = '#ffffff'; // White selection color
       ctx.lineWidth = 3;
       ctx.stroke();
     }
-
-    // Normal border
-    const borderOpacity = highlightAmount > 0 ? 0.8 : (dimAmount > 0 ? 0.1 : 0.4);
-    ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
-    ctx.lineWidth = highlightAmount > 0 ? 2 : 1;
-    ctx.stroke();
   }
 
   /**
@@ -756,12 +710,13 @@ export class SankeyRenderer {
       textOpacity = 1.0 - 0.7 * dimAmount;
     }
 
-    // Shadow
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * textOpacity})`;
+    // Shadow (dark, offset) for readability
+    const shadowOpacity = 0.5 * textOpacity;
+    ctx.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
     ctx.fillText(text, align === 'left' ? 1 : -1, 1);
 
-    // Main text
-    ctx.fillStyle = `rgba(31, 41, 55, ${textOpacity})`;
+    // Main text in white
+    ctx.fillStyle = `rgba(255, 255, 255, ${textOpacity})`;
     ctx.fillText(text, 0, 0);
 
     ctx.restore();

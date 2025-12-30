@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messaging Matrix - Styled Prototype</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styled-prototype.css">
+</head>
+<body>
+  <!-- ========================================
+       APP SHELL - Main container
+       ======================================== -->
+  <div class="app-shell">
+
+    <!-- Content Area -->
+    <div class="content-area">
+      <!-- Main Content - Matrix Grid Module -->
+      <div class="page-main">
+        <div class="matrix-grid">
+          <!-- Row 1: Corner + Audience Headers -->
+          <div class="matrix-corner"></div>
+
+          <div class="matrix-audience-header">
+            <span class="audience-tag product">SZK</span>
+            <div class="audience-name">Fiatalok 25-35</div>
+            <div class="audience-tags">
+              <span class="audience-tag">PRO</span>
+              <span class="audience-tag">12345678</span>
+              <span class="audience-tag">aud_01</span>
+            </div>
+          </div>
+
+          <div class="matrix-audience-header">
+            <span class="audience-tag product">SZK</span>
+            <div class="audience-name">Családosok 35-50</div>
+            <div class="audience-tags">
+              <span class="audience-tag">REM</span>
+              <span class="audience-tag">87654321</span>
+              <span class="audience-tag">aud_02</span>
+            </div>
+          </div>
+
+          <!-- Row 2: Topic 1 + Messages -->
+          <div class="matrix-topic-header">
+            <span class="topic-tag product">SZK</span>
+            <div class="topic-name">Erste Max Hitelkártya</div>
+            <div class="topic-tags">
+              <span class="topic-tag">top_01</span>
+            </div>
+          </div>
+
+          <div class="matrix-cell-content">
+            <div class="message-card planned">
+              <span class="mc-number">1</span>
+              <span class="mc-variant">a</span>
+            </div>
+            <div class="message-card active">
+              <span class="mc-number">1</span>
+              <span class="mc-variant">b</span>
+            </div>
+            <div class="message-card inprogress">
+              <span class="mc-number">1</span>
+              <span class="mc-variant">c</span>
+            </div>
+            <div class="message-card inactive">
+              <span class="mc-number">1</span>
+              <span class="mc-variant">d</span>
+            </div>
+          </div>
+
+          <div class="matrix-cell-content">
+            <div class="message-card active">
+              <span class="mc-number">2</span>
+              <span class="mc-variant">a</span>
+            </div>
+            <div class="message-card active">
+              <span class="mc-number">2</span>
+              <span class="mc-variant">b</span>
+            </div>
+          </div>
+
+          <!-- Row 3: Topic 2 + Messages -->
+          <div class="matrix-topic-header">
+            <span class="topic-tag product">SZK</span>
+            <div class="topic-name">Lakáshitel</div>
+            <div class="topic-tags">
+              <span class="topic-tag">top_02</span>
+            </div>
+          </div>
+
+          <div class="matrix-cell-content">
+            <div class="message-card active">
+              <span class="mc-number">3</span>
+              <span class="mc-variant">a</span>
+            </div>
+          </div>
+
+          <div class="matrix-cell-content">
+            <div class="message-card planned">
+              <span class="mc-number">4</span>
+              <span class="mc-variant">a</span>
+            </div>
+            <div class="message-card planned">
+              <span class="mc-number">4</span>
+              <span class="mc-variant">b</span>
+            </div>
+            <div class="message-card error">
+              <span class="mc-number">4</span>
+              <span class="mc-variant">c</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================
+         NAVIGATION SYSTEM
+         ======================================== -->
+
+    <!-- Hamburger Button -->
+    <button class="hamburger-btn" id="hamburgerBtn">
+      <i data-lucide="menu"></i>
+    </button>
+
+    <!-- Menu Panel -->
+    <div class="menu-panel" id="menuPanel">
+      <div class="menu-content">
+        <!-- Logo (inline SVG matching style-guide) -->
+        <svg class="menu-logo" viewBox="0 0 800 800">
+          <g fill="#ffffff">
+            <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766"/>
+            <polygon points="372.33197 238.27666 288.79499 238.27661 355.46653 561.72334 439.00351 561.72339"/>
+            <polygon points="514.8137 238.27666 431.27672 238.27661 497.94825 561.72334 581.48524 561.72339"/>
+            <polygon points="530.95895 238.27666 447.42197 238.27661 514.0935 561.72334 597.63048 561.72339"/>
+            <rect x="88.60344" y="87.13551" width="27.34135" height="610.59038"/>
+            <rect x="124.98303" y="50.75592" width="30.27721" height="103.03638" transform="translate(242.39574 -37.84752) rotate(90)"/>
+            <rect x="124.98303" y="646.20769" width="30.27721" height="103.03638" transform="translate(837.84752 557.60426) rotate(90)"/>
+            <rect x="684.05521" y="87.13551" width="27.34135" height="610.59038" transform="translate(1395.45177 784.8614) rotate(-180)"/>
+            <rect x="644.73977" y="50.75592" width="30.27721" height="103.03638" transform="translate(762.15248 -557.60426) rotate(90)"/>
+            <rect x="644.73977" y="646.20769" width="30.27721" height="103.03638" transform="translate(1357.60426 37.84752) rotate(90)"/>
+          </g>
+          <g fill="none" stroke="rgba(255, 255, 255, 0.25)" stroke-width="1">
+            <rect x="87.13551" y="87.13551" width="625.72898" height="625.72898"/>
+            <line x1="87.13551" y1="608.57633" x2="712.86449" y2="608.57633"/>
+            <line x1="87.13551" y1="504.28816" x2="712.86449" y2="504.28816"/>
+            <line x1="87.13551" y1="400" x2="712.86449" y2="400"/>
+            <line x1="87.13551" y1="295.71184" x2="712.86449" y2="295.71184"/>
+            <line x1="87.13551" y1="191.42367" x2="712.86449" y2="191.42367"/>
+            <line x1="608.57633" y1="87.13551" x2="608.57633" y2="712.86449"/>
+            <line x1="504.28816" y1="87.13551" x2="504.28816" y2="712.86449"/>
+            <line x1="400" y1="87.13551" x2="400" y2="712.86449"/>
+            <line x1="295.71184" y1="87.13551" x2="295.71184" y2="712.86449"/>
+            <line x1="191.42367" y1="87.13551" x2="191.42367" y2="712.86449"/>
+          </g>
+        </svg>
+
+        <!-- Animated selector layer -->
+        <div class="menu-selector" id="menuSelector"></div>
+
+        <!-- Navigation Menu -->
+        <nav class="nav-menu" id="navMenu">
+          <button class="nav-item" data-index="0">
+            <i data-lucide="table"></i>
+            <span>Messaging Matrix</span>
+          </button>
+          <button class="nav-item active" data-index="1">
+            <i data-lucide="image"></i>
+            <span>Creative Library</span>
+          </button>
+          <button class="nav-item" data-index="2">
+            <i data-lucide="package"></i>
+            <span>Assets</span>
+          </button>
+          <button class="nav-item" data-index="3">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Monitoring</span>
+          </button>
+          <button class="nav-item" data-index="4">
+            <i data-lucide="file-code"></i>
+            <span>Templates</span>
+          </button>
+          <button class="nav-item" data-index="5">
+            <i data-lucide="check-square"></i>
+            <span>Tasks</span>
+          </button>
+          <button class="nav-item" data-index="6">
+            <i data-lucide="users"></i>
+            <span>Users</span>
+          </button>
+          <button class="nav-item" data-index="7">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
+          </button>
+        </nav>
+
+        <div class="menu-spacer"></div>
+
+        <!-- Profile -->
+        <button class="nav-item profile-item" data-index="8">
+          <div class="profile-avatar">BR</div>
+          <span>Profile</span>
+        </button>
+
+        <!-- Logout -->
+        <button class="nav-item logout" data-index="9">
+          <i data-lucide="log-out"></i>
+          <span>Logout</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Menu Overlay -->
+    <div class="menu-overlay" id="menuOverlay"></div>
+
+
+    <!-- ========================================
+         TOOLBAR
+         ======================================== -->
+
+    <!-- Toolbar Toggle Button -->
+    <button class="toolbar-toggle" id="toolbarToggle" onclick="toggleToolbar()">
+      <i data-lucide="pocket-knife"></i>
+    </button>
+
+    <!-- Toolbar Panel -->
+    <div class="toolbar" id="toolbar">
+      <!-- Drag Handle -->
+      <div class="toolbar-drag-row">
+        <i data-lucide="grip-horizontal"></i>
+      </div>
+
+      <div class="toolbar-content">
+        <!-- View Mode Switcher (with toggling pairs like style-guide) -->
+        <div class="view-modes" id="viewModes">
+          <!-- Matrix/Grid toggle (informative/minimal) -->
+          <button class="view-mode-btn display-toggle active" data-display="informative" title="Informative View">
+            <i data-lucide="grid-2x2"></i>
+          </button>
+          <button class="view-mode-btn display-toggle" data-display="minimal" title="Minimal View" style="display: none;">
+            <i data-lucide="grid-3x3"></i>
+          </button>
+          <!-- Tree toggle (vertical/horizontal) -->
+          <button class="view-mode-btn tree-toggle" data-tree="vertical" title="Vertical Tree View">
+            <i data-lucide="network"></i>
+          </button>
+          <button class="view-mode-btn tree-toggle" data-tree="horizontal" title="Horizontal Tree View" style="display: none;">
+            <i data-lucide="network" class="rotate-90"></i>
+          </button>
+          <!-- Sankey toggle (sankey/circular) -->
+          <button class="view-mode-btn sankey-toggle" data-sankey="sankey" title="Sankey View">
+            <i data-lucide="layout-panel-top"></i>
+          </button>
+          <button class="view-mode-btn sankey-toggle" data-sankey="circular" title="Circular Sankey" style="display: none;">
+            <i data-lucide="diameter"></i>
+          </button>
+          <!-- Feed view (single) -->
+          <button class="view-mode-btn" data-view="feed" title="Feed View">
+            <i data-lucide="list"></i>
+          </button>
+        </div>
+
+        <!-- Filter Pills -->
+        <div class="filter-group">
+          <!-- Product Filter (Dropdown) -->
+          <div class="filter-dropdown">
+            <button class="filter-pill" onclick="toggleDropdown('productDropdown')">
+              <i data-lucide="filter" class="filter-pill-icon" style="width:16px;height:16px"></i>
+              <span class="filter-pill-text">Products</span>
+              <i data-lucide="chevron-down" class="filter-pill-chevron" style="width:16px;height:16px"></i>
+              <span class="filter-pill-badge">2</span>
+            </button>
+            <div class="filter-dropdown-menu" id="productDropdown" style="display:none">
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span>Product A</span>
+              </button>
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span>Product B</span>
+              </button>
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" class="hidden" style="width:16px;height:16px"></i>
+                <span>Product C</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Status Filter (Dropdown) -->
+          <div class="filter-dropdown">
+            <button class="filter-pill" onclick="toggleDropdown('statusDropdown')">
+              <i data-lucide="filter" class="filter-pill-icon" style="width:16px;height:16px"></i>
+              <span class="filter-pill-text">Status</span>
+              <i data-lucide="chevron-down" class="filter-pill-chevron" style="width:16px;height:16px"></i>
+              <span class="filter-pill-badge">4</span>
+            </button>
+            <div class="filter-dropdown-menu" id="statusDropdown" style="display:none">
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span class="badge badge-planned">PLANNED</span>
+              </button>
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span class="badge badge-active">ACTIVE</span>
+              </button>
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span class="badge badge-inprogress">IN PROGRESS</span>
+              </button>
+              <button class="filter-dropdown-item">
+                <i data-lucide="check" style="width:16px;height:16px"></i>
+                <span class="badge badge-inactive">INACTIVE</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Filters -->
+        <div class="filter-group">
+          <div class="filter-pill">
+            <i data-lucide="filter" class="filter-pill-icon" style="width:16px;height:16px"></i>
+            <input type="text" class="filter-input" placeholder="Audience filter...">
+            <span class="filter-pill-badge">19</span>
+          </div>
+          <div class="filter-pill">
+            <i data-lucide="filter" class="filter-pill-icon" style="width:16px;height:16px"></i>
+            <input type="text" class="filter-input" placeholder="Topic filter...">
+            <span class="filter-pill-badge">21</span>
+          </div>
+          <div class="filter-pill">
+            <i data-lucide="filter" class="filter-pill-icon" style="width:16px;height:16px"></i>
+            <input type="text" class="filter-input" placeholder="MC, name, images...">
+            <span class="filter-pill-badge">778</span>
+          </div>
+        </div>
+
+        <!-- Sliders (for Tree/Sankey views) -->
+        <div class="slider-group">
+          <div class="slider-item">
+            <div class="slider-header">
+              <span class="slider-label">Node size</span>
+              <span class="slider-value">1.0x</span>
+            </div>
+            <input type="range" class="slider-input" min="0.5" max="2" step="0.1" value="1">
+          </div>
+          <div class="slider-item">
+            <div class="slider-header">
+              <span class="slider-label">Layer height</span>
+              <span class="slider-value">0.5x</span>
+            </div>
+            <input type="range" class="slider-input" min="0.2" max="1" step="0.1" value="0.5">
+          </div>
+        </div>
+
+        <!-- Zoom Controls -->
+        <div class="zoom-controls">
+          <div class="zoom-row">
+            <button class="zoom-btn"><i data-lucide="minus" style="width:16px;height:16px"></i></button>
+            <span class="zoom-display">71% fit</span>
+            <button class="zoom-btn"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+          </div>
+
+          <!-- Navigation Pad -->
+          <div class="nav-pad">
+            <div></div>
+            <button class="nav-btn"><i data-lucide="arrow-up" style="width:16px;height:16px"></i></button>
+            <div></div>
+            <button class="nav-btn"><i data-lucide="arrow-left" style="width:16px;height:16px"></i></button>
+            <button class="nav-btn center"><i data-lucide="square" style="width:14px;height:14px"></i></button>
+            <button class="nav-btn"><i data-lucide="arrow-right" style="width:16px;height:16px"></i></button>
+            <div></div>
+            <button class="nav-btn"><i data-lucide="arrow-down" style="width:16px;height:16px"></i></button>
+            <div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ========================================
+         BOTTOM BAR
+         ======================================== -->
+    <div class="bottom-bar">
+      <!-- Matrix State Panel -->
+      <div class="bottom-panel">
+        <i data-lucide="save" class="bottom-panel-icon" style="width:18px;height:18px"></i>
+        <span class="bottom-panel-title">Matrix State</span>
+        <button class="bottom-panel-btn">
+          <i data-lucide="refresh-cw" style="width:14px;height:14px"></i>
+          Reload
+        </button>
+        <button class="bottom-panel-btn">
+          <i data-lucide="save" style="width:14px;height:14px"></i>
+          Save
+        </button>
+      </div>
+
+      <!-- AI Assistant Panel -->
+      <div class="bottom-panel">
+        <i data-lucide="bot" class="bottom-panel-icon" style="width:18px;height:18px"></i>
+        <span class="bottom-panel-title">AI Assistant</span>
+        <span class="tag">Ready</span>
+      </div>
+    </div>
+
+
+    <!-- ========================================
+         DIALOG EXAMPLE
+         ======================================== -->
+    <div class="dialog-overlay" id="dialogOverlay" onclick="closeDialog()">
+      <div class="dialog" onclick="event.stopPropagation()">
+        <div class="dialog-layout">
+          <!-- Sidebar with Tabs -->
+          <div class="dialog-sidebar">
+            <div class="dialog-tabs">
+              <button class="dialog-tab active">
+                <i data-lucide="tag" style="width:16px;height:16px"></i>
+                Naming
+              </button>
+              <button class="dialog-tab">
+                <i data-lucide="file-text" style="width:16px;height:16px"></i>
+                Content
+              </button>
+              <button class="dialog-tab">
+                <i data-lucide="sparkles" style="width:16px;height:16px"></i>
+                Generate
+              </button>
+              <button class="dialog-tab">
+                <i data-lucide="palette" style="width:16px;height:16px"></i>
+                Styles
+              </button>
+              <button class="dialog-tab">
+                <i data-lucide="send" style="width:16px;height:16px"></i>
+                Trafficking
+              </button>
+            </div>
+
+            <div class="menu-spacer"></div>
+
+            <!-- Auto-save Toggle -->
+            <div class="toggle">
+              <div class="toggle-track active">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span class="toggle-label">Auto-Save</span>
+            </div>
+          </div>
+
+          <!-- Main Content Area -->
+          <div class="dialog-main">
+            <div class="dialog-header">
+              <div class="flex items-center gap-3">
+                <button class="btn btn-ghost btn-icon">
+                  <i data-lucide="chevron-left" style="width:18px;height:18px"></i>
+                </button>
+                <h2 class="dialog-title">43 a</h2>
+                <button class="btn btn-ghost btn-icon">
+                  <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+                </button>
+              </div>
+              <button class="dialog-close" onclick="closeDialog()">
+                <i data-lucide="x" style="width:18px;height:18px"></i>
+              </button>
+            </div>
+
+            <!-- Form Content -->
+            <div class="flex flex-col gap-4">
+              <div>
+                <label class="text-sm font-medium opacity-70 mb-2" style="display:block">Message Number</label>
+                <input type="text" class="input" value="43">
+              </div>
+              <div>
+                <label class="text-sm font-medium opacity-70 mb-2" style="display:block">Variant</label>
+                <input type="text" class="input" value="a">
+              </div>
+              <div>
+                <label class="text-sm font-medium opacity-70 mb-2" style="display:block">Name</label>
+                <input type="text" class="input" value="Summer Campaign - Hero Banner">
+              </div>
+              <div>
+                <label class="text-sm font-medium opacity-70 mb-2" style="display:block">Status</label>
+                <select class="select">
+                  <option>PLANNED</option>
+                  <option selected>ACTIVE</option>
+                  <option>IN PROGRESS</option>
+                  <option>INACTIVE</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dialog-footer">
+              <button class="btn btn-ghost" style="color: #ef4444">
+                <i data-lucide="trash-2" style="width:16px;height:16px"></i>
+                Delete
+              </button>
+              <div class="flex gap-2" style="margin-left:auto">
+                <button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>
+                <button class="btn btn-secondary">Save</button>
+                <button class="btn btn-primary">Save & close</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview Panel -->
+          <div class="dialog-preview">
+            <div class="flex items-center justify-between mb-4">
+              <span class="font-semibold">Preview</span>
+              <select class="select" style="width:auto;padding-right:2rem">
+                <option>300x250</option>
+                <option>300x600</option>
+                <option>970x250</option>
+              </select>
+            </div>
+
+            <!-- Preview placeholder -->
+            <div style="background:var(--white-10);border-radius:var(--radius-lg);aspect-ratio:300/250;display:flex;align-items:center;justify-content:center;color:var(--white-50)">
+              Preview Area
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JavaScript -->
+  <script src="styled-prototype.js"></script>
+</body>
+</html>

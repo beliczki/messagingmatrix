@@ -24,6 +24,7 @@ export class TreeRenderer {
     this._hoverScale = 1.0;           // Current animated scale
     this._targetHoverScale = 1.0;     // Target scale (1.0 or 2.0)
     this._lastHoveredNode = null;     // Track for animation
+    this._lastHoveredSubtree = new Set(); // Remember subtree for fade-out animation
     this._hoverAnimationSpeed = 0.15; // Animation speed (0-1, higher = faster)
   }
 
@@ -60,22 +61,29 @@ export class TreeRenderer {
     this._selectedNode = selectedNode; // Store for drawNode to access
     const ctx = this.ctx;
 
-    // Update hover animation state
+    // Update hover animation state (for fade transition only, no zoom)
     if (hoveredNode !== this._lastHoveredNode) {
       this._lastHoveredNode = hoveredNode;
       this._targetHoverScale = hoveredNode ? 1.3 : 1.0;
-      // If switching to a new node, reset scale for fresh animation
-      if (hoveredNode && this._hoverScale === 1.0) {
-        this._hoverScale = 1.0;
+
+      // When starting to hover a new node, build and store the subtree
+      if (hoveredNode) {
+        this._lastHoveredSubtree = new Set();
+        this.collectSubtreeNodes(hoveredNode, this._lastHoveredSubtree);
       }
+      // When mouse leaves, keep the old subtree for fade-out animation (don't clear it)
     }
 
-    // Animate hover scale toward target
+    // Animate hover scale toward target (controls fade transition speed)
     const scaleDiff = this._targetHoverScale - this._hoverScale;
     if (Math.abs(scaleDiff) > 0.01) {
       this._hoverScale += scaleDiff * this._hoverAnimationSpeed;
     } else {
       this._hoverScale = this._targetHoverScale;
+      // Clear the stored subtree when animation completes and we're fully faded out
+      if (this._hoverScale === 1.0) {
+        this._lastHoveredSubtree = new Set();
+      }
     }
 
     const needsMoreFrames = Math.abs(this._targetHoverScale - this._hoverScale) > 0.01;
@@ -89,16 +97,8 @@ export class TreeRenderer {
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
 
-    // Build set of nodes in hovered subtree for fast lookup (excluding the hovered node itself for connectors)
-    const hoveredSubtree = new Set();
-    const hoveredChildren = new Set(); // Only children, not the hovered node
-    if (hoveredNode) {
-      this.collectSubtreeNodes(hoveredNode, hoveredSubtree);
-      // Collect only children (for connector scaling - exclude incoming connector)
-      hoveredNode.children.forEach(child => {
-        this.collectSubtreeNodes(child, hoveredChildren);
-      });
-    }
+    // Use stored subtree (works for both hover-in and hover-out animations)
+    const hoveredSubtree = this._lastHoveredSubtree;
 
     // Collect visible elements
     const visibleNodes = [];
@@ -111,47 +111,46 @@ export class TreeRenderer {
 
     // Separate nodes and connectors into normal and hovered groups
     const normalNodes = [];
-    const scaledNodes = [];
+    const hoveredNodes = [];
     const normalConnectors = [];
-    const scaledConnectors = [];
+    const hoveredConnectors = [];
 
     visibleNodes.forEach(node => {
       if (hoveredSubtree.has(node)) {
-        scaledNodes.push(node);
+        hoveredNodes.push(node);
       } else {
         normalNodes.push(node);
       }
     });
 
-    // For connectors: only scale connectors where BOTH parent and child are in subtree
-    // This excludes the incoming connector to the hovered node
+    // Separate connectors
     connectors.forEach(conn => {
       const parentInSubtree = hoveredSubtree.has(conn.parent);
       const childInSubtree = hoveredSubtree.has(conn.child);
 
       if (parentInSubtree && childInSubtree) {
-        // Both in subtree - scale this connector
-        scaledConnectors.push(conn);
+        hoveredConnectors.push(conn);
       } else {
-        // Incoming connector or unrelated - draw normally
         normalConnectors.push(conn);
       }
     });
 
-    // Calculate fade amount for non-hovered elements (0 = full opacity, 1 = faded)
-    // Animate opacity along with scale
-    const fadeAmount = (this._hoverScale - 1.0) / (1.3 - 1.0); // 0 to 1 as scale goes 1.0 to 1.3
-    const normalOpacity = hoveredNode ? Math.max(0.25, 1.0 - fadeAmount * 0.75) : 1.0;
+    // Calculate fade amount for non-hovered elements (0 = normal, 1 = fully faded)
+    // Use _hoverScale to determine fade, not hoveredNode, so animation works on mouse out too
+    const fadeAmount = (this._hoverScale - 1.0) / (1.3 - 1.0); // 0 to 1
+    const normalOpacity = fadeAmount > 0.01 ? Math.max(0.2, 1.0 - fadeAmount * 0.8) : 1.0;
 
-    // Draw normal connectors first (behind nodes) - with fade if hovering
+    // Draw normal (non-hovered) elements with fade
     if (normalOpacity < 1.0) {
       ctx.globalAlpha = normalOpacity;
     }
+
+    // Draw normal connectors first (behind nodes)
     normalConnectors.forEach(({ parent, child }) => {
       this.drawConnector(parent, child);
     });
 
-    // Draw normal nodes - with fade if hovering
+    // Draw normal nodes
     normalNodes.forEach(node => {
       this.drawNode(node);
     });
@@ -159,27 +158,17 @@ export class TreeRenderer {
     // Reset opacity
     ctx.globalAlpha = 1.0;
 
-    // Draw scaled elements (hovered subtree) on top with animated scale
-    if (hoveredNode && scaledNodes.length > 0 && this._hoverScale > 1.01) {
-      // Save current transform
-      ctx.save();
-
-      // Apply animated scale centered on hovered node
-      ctx.translate(hoveredNode.x, hoveredNode.y);
-      ctx.scale(this._hoverScale, this._hoverScale);
-      ctx.translate(-hoveredNode.x, -hoveredNode.y);
-
-      // Draw scaled connectors (only internal ones, not incoming)
-      scaledConnectors.forEach(({ parent, child }) => {
+    // Draw hovered subtree on top (full opacity) - also during fade-out animation
+    if (hoveredNodes.length > 0 && fadeAmount > 0.01) {
+      // Draw hovered connectors
+      hoveredConnectors.forEach(({ parent, child }) => {
         this.drawConnector(parent, child);
       });
 
-      // Draw scaled nodes
-      scaledNodes.forEach(node => {
+      // Draw hovered nodes
+      hoveredNodes.forEach(node => {
         this.drawNode(node);
       });
-
-      ctx.restore();
     }
 
     ctx.restore();
@@ -272,8 +261,8 @@ export class TreeRenderer {
     ctx.fillStyle = fillColor;
     ctx.fill();
 
-    // Draw border - blue if selected, subtle grey otherwise
-    ctx.strokeStyle = isSelected ? '#3b82f6' : 'rgba(0, 0, 0, 0.1)';
+    // Draw border - white if selected, subtle grey otherwise
+    ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(0, 0, 0, 0.1)';
     ctx.lineWidth = Math.max(1, levelScale);
     ctx.stroke();
 
@@ -523,7 +512,6 @@ export class TreeRenderer {
 
   /**
    * Get node at screen position (for hit testing)
-   * Accounts for hover scale transform with hysteresis to prevent vibration
    * Returns null if no node found
    */
   findNodeAtPosition(nodes, screenX, screenY, zoom, pan) {
@@ -531,70 +519,15 @@ export class TreeRenderer {
     const treeX = (screenX - pan.x) / zoom;
     const treeY = (screenY - pan.y) / zoom;
 
-    // Get current hover state
+    // Hysteresis: If we have a currently hovered node, check if mouse is still within bounds
     const hoveredNode = this._lastHoveredNode;
-    const hoverScale = this._hoverScale;
-
-    // Hysteresis: If we have a currently hovered node, check if mouse is still
-    // within its ORIGINAL (unscaled) bounds - this prevents vibration
     if (hoveredNode && hoveredNode.containsPoint(treeX, treeY)) {
       return hoveredNode;
     }
 
-    // Build set of scaled nodes if hovering
-    const scaledNodes = new Set();
-    if (hoveredNode && hoverScale > 1.01) {
-      this.collectSubtreeNodes(hoveredNode, scaledNodes);
-    }
-
-    // Check if point is inside a node, accounting for scale transform
-    const isPointInNode = (node, px, py) => {
-      if (scaledNodes.has(node) && hoveredNode) {
-        // Transform point to account for scale centered on hoveredNode
-        // The inverse of: translate(hx,hy) -> scale(s) -> translate(-hx,-hy)
-        // is: translate(hx,hy) -> scale(1/s) -> translate(-hx,-hy)
-        const unscaledX = hoveredNode.x + (px - hoveredNode.x) / hoverScale;
-        const unscaledY = hoveredNode.y + (py - hoveredNode.y) / hoverScale;
-        return node.containsPoint(unscaledX, unscaledY);
-      }
-      return node.containsPoint(px, py);
-    };
-
-    // Search scaled nodes first (they're drawn on top)
-    if (scaledNodes.size > 0) {
-      const findInScaledSubtree = (nodeList) => {
-        for (const node of nodeList) {
-          if (!scaledNodes.has(node)) continue;
-          // Skip the hovered node itself (already checked above)
-          if (node === hoveredNode) continue;
-
-          // Check children first (they're on top visually)
-          const foundInChildren = findInScaledSubtree(node.children);
-          if (foundInChildren) return foundInChildren;
-
-          // Check this node
-          if (isPointInNode(node, treeX, treeY)) {
-            return node;
-          }
-        }
-        return null;
-      };
-
-      const foundInScaled = findInScaledSubtree(nodes);
-      if (foundInScaled) return foundInScaled;
-    }
-
-    // Search all nodes (depth-first)
+    // Search all nodes (depth-first, children first since they're on top)
     const findInSubtree = (nodeList) => {
       for (const node of nodeList) {
-        // Skip scaled nodes (already checked)
-        if (scaledNodes.has(node)) {
-          // But still check children that might not be scaled
-          const foundInChildren = findInSubtree(node.children);
-          if (foundInChildren) return foundInChildren;
-          continue;
-        }
-
         // Check children first (they're on top visually)
         const foundInChildren = findInSubtree(node.children);
         if (foundInChildren) return foundInChildren;

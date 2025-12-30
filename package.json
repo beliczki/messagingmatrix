@@ -43,7 +43,7 @@
     "imapflow": "^1.0.199",
     "jose": "^6.1.0",
     "jszip": "^3.10.1",
-    "lucide-react": "^0.263.1",
+    "lucide-react": "^0.562.0",
     "mailparser": "^3.9.0",
     "multer": "^2.0.2",
     "react": "^18.2.0",

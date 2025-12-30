@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, GripHorizontal, RefreshCw, Save, Loader, ExternalLink, Download, Sparkles } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Save, Loader, ExternalLink, Download, X, RefreshCw, Users, MessageSquare, Image, Palette, List, Type, Package, Check } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 import SaveProgressDialog from './SaveProgressDialog';
@@ -32,54 +33,13 @@ const MatrixStatePanel = ({
   onSave,
   onClearReload,
   onRegenerateTopicKeys,
-  downloadFeedCSV
+  downloadFeedCSV,
+  changeTracking,
+  originalState
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
+  const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('audiences');
-  const [height, setHeight] = useState(() => {
-    const saved = localStorage.getItem('matrix_state_panel_height');
-    return saved ? parseInt(saved) : window.innerHeight * 0.6; // Default 60% of viewport height
-  });
-  const [isResizing, setIsResizing] = useState(false);
-  const resizeStartY = useRef(0);
-  const resizeStartHeight = useRef(0);
-
-  // Save height to localStorage when it changes
-  useEffect(() => {
-    if (!isResizing) {
-      localStorage.setItem('matrix_state_panel_height', height.toString());
-    }
-  }, [height, isResizing]);
-
-  // Resize handlers
-  const handleResizeStart = (e) => {
-    setIsResizing(true);
-    resizeStartY.current = e.clientY;
-    resizeStartHeight.current = height;
-    e.preventDefault();
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (!isResizing) return;
-      const deltaY = resizeStartY.current - e.clientY;
-      const newHeight = Math.max(200, Math.min(window.innerHeight * 0.9, resizeStartHeight.current + deltaY));
-      setHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
+  const [changesOnly, setChangesOnly] = useState(false);
 
   // Format last sync time
   const formatSync = (time) => {
@@ -97,29 +57,18 @@ const MatrixStatePanel = ({
       .filter(m => m.status !== 'deleted')
       .map(msg => {
         try {
-          // Get patterns from settings
           const pmmidPattern = settings.getPattern('pmmid');
           const traffickingPatterns = settings.getPattern('trafficking');
-
-          // Generate PMMID
           const pmmid = generatePMMID(msg, audiences, pmmidPattern);
-
-          // Generate trafficking fields
           const trafficking = generateTraffickingFields(
             { ...msg, pmmid },
             audiences,
             traffickingPatterns
           );
-
-          // Return message with all computed fields
-          return {
-            ...msg,
-            pmmid,
-            ...trafficking
-          };
+          return { ...msg, pmmid, ...trafficking };
         } catch (error) {
           console.error('Error generating fields for message:', msg.id, error);
-          return msg; // Return original if there's an error
+          return msg;
         }
       });
   }, [messages, audiences]);
@@ -129,18 +78,25 @@ const MatrixStatePanel = ({
     return count + Object.keys((keywords || {})[form] || {}).length;
   }, 0);
 
+  // Get change count for a specific tab
+  const getTabChangeCount = (tabId) => {
+    if (!changeTracking) return 0;
+    const tabChanges = changeTracking[tabId];
+    if (!tabChanges) return 0;
+    return (tabChanges.added?.length || 0) + (tabChanges.modified?.length || 0);
+  };
+
   const tabs = [
-    { id: 'audiences', label: 'Audiences', count: audiences?.length || 0 },
-    { id: 'topics', label: 'Topics', count: topics?.length || 0 },
-    { id: 'messages', label: 'Messages', count: completeMessages.length },
-    { id: 'assets', label: 'Assets', count: assets?.length || 0 },
-    { id: 'creatives', label: 'Creatives', count: creatives?.length || 0 },
-    { id: 'feed', label: 'Feed', count: feedData?.length || 0 },
-    { id: 'keywords', label: 'Keywords', count: keywordsCount },
-    { id: 'textFormatting', label: 'Text Formatting', count: textFormatting?.length || 0 }
+    { id: 'audiences', label: 'Audiences', icon: Users, count: audiences?.length || 0, changes: getTabChangeCount('audiences') },
+    { id: 'topics', label: 'Topics', icon: List, count: topics?.length || 0, changes: getTabChangeCount('topics') },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, count: completeMessages.length, changes: getTabChangeCount('messages') },
+    { id: 'assets', label: 'Assets', icon: Image, count: assets?.length || 0, changes: getTabChangeCount('assets') },
+    { id: 'creatives', label: 'Creatives', icon: Palette, count: creatives?.length || 0, changes: getTabChangeCount('creatives') },
+    { id: 'feed', label: 'Feed', icon: Package, count: feedData?.length || 0, changes: 0 },
+    { id: 'keywords', label: 'Keywords', icon: Type, count: keywordsCount, changes: 0 },
+    { id: 'textFormatting', label: 'Formatting', icon: Type, count: textFormatting?.length || 0, changes: getTabChangeCount('textFormatting') }
   ];
 
-  // Get data for active tab
   const getActiveTabData = () => {
     switch (activeTab) {
       case 'audiences': return audiences || [];
@@ -155,201 +111,330 @@ const MatrixStatePanel = ({
     }
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="fixed bottom-0 right-[250px] bg-white shadow-lg rounded-tl-lg z-50 flex items-center gap-2 px-2 py-2">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="px-4 py-2 flex items-center gap-2 hover:bg-gray-50 rounded"
-        >
-          <AlertCircle size={20} className="text-orange-600" />
-          <span className="text-sm font-medium text-gray-800">Matrix State</span>
-          <ChevronUp size={16} className="text-gray-600" />
-        </button>
+  // Get change info for current tab
+  const getActiveTabChanges = () => {
+    if (!changeTracking) return null;
+    switch (activeTab) {
+      case 'audiences': return changeTracking.audiences;
+      case 'topics': return changeTracking.topics;
+      case 'messages': return changeTracking.messages;
+      case 'assets': return changeTracking.assets;
+      case 'creatives': return changeTracking.creatives;
+      case 'textFormatting': return changeTracking.textFormatting;
+      default: return null;
+    }
+  };
 
-        <button
-          onClick={onClearReload}
-          className="flex items-center gap-2 px-3 py-2 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
-        >
-          <RefreshCw size={14} />
-          Reload
-        </button>
+  // Filter data to only changed items if changesOnly is true
+  const getFilteredData = () => {
+    const data = getActiveTabData();
+    const changes = getActiveTabChanges();
 
-        {/* Regenerate Topic Keys button - commented out for now */}
-        {/* {onRegenerateTopicKeys && (
-          <button
-            onClick={onRegenerateTopicKeys}
-            className="flex items-center gap-2 px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-            title="Regenerate all topic keys based on the current pattern in Settings"
-          >
-            <Sparkles size={14} />
-            Regen Keys
-          </button>
-        )} */}
+    if (!changesOnly || !changes || !Array.isArray(data)) {
+      return data;
+    }
 
-        <button
-          onClick={onSave}
-          disabled={isSaving || saveProgress !== null}
-          className="flex items-center gap-2 px-3 py-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
-        >
-          {saveProgress ? (
-            <>
-              <Loader size={14} className="animate-spin" />
-              {saveProgress.message}
-            </>
-          ) : isSaving ? (
-            <>
-              <Loader size={14} className="animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save size={14} />
-              Save
-            </>
-          )}
-        </button>
-      </div>
-    );
-  }
+    const { added, modified } = changes;
+    const changedIds = new Set([...added, ...modified]);
+
+    return data.filter(item => changedIds.has(String(item.id)));
+  };
+
+  // Render JSON with highlighted changes
+  const renderHighlightedJson = (data, changes) => {
+    if (!Array.isArray(data)) {
+      return JSON.stringify(data, null, 2);
+    }
+
+    if (!changes) {
+      return data.map(item => JSON.stringify(item, null, 2)).join(',\n');
+    }
+
+    const { added, modified, changedFields } = changes;
+
+    return data.map((item) => {
+      const id = String(item.id);
+      const isAdded = added.includes(id);
+      const isModified = modified.includes(id);
+      const itemChangedFields = changedFields[id] || [];
+
+      if (!isAdded && !isModified) {
+        return JSON.stringify(item, null, 2);
+      }
+
+      const lines = JSON.stringify(item, null, 2).split('\n');
+      return lines.map((line) => {
+        let shouldHighlight = isAdded;
+
+        if (isModified && !isAdded) {
+          for (const field of itemChangedFields) {
+            if (line.includes(`"${field}":`)) {
+              shouldHighlight = true;
+              break;
+            }
+          }
+        }
+
+        if (shouldHighlight) {
+          return `<span class="json-changed">${escapeHtml(line)}</span>`;
+        }
+        return escapeHtml(line);
+      }).join('\n');
+    }).join(',\n');
+  };
+
+  const escapeHtml = (str) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  };
+
+  const changeCount = changeTracking?.totalChanges || 0;
 
   return (
-    <div
-      className="fixed bottom-0 right-0 bg-white shadow-2xl flex flex-col z-50 rounded-tl-lg"
-      style={{ height: `${height}px`, width: '90%' }}
-    >
-      {/* Resize Handle */}
-      <div
-        className={`w-full h-2 flex items-center justify-center cursor-ns-resize hover:bg-gray-200 transition-colors ${
-          isResizing ? 'bg-gray-300' : 'bg-gray-100'
-        }`}
-        onMouseDown={handleResizeStart}
-        title="Drag to resize"
-      >
-        <GripHorizontal size={16} className="text-gray-400" />
-      </div>
-
-      {/* Header with Tabs */}
-      <div className="border-b bg-gray-50">
-        <div className="px-4 pt-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={20} className="text-orange-600" />
-                <span className="font-semibold text-gray-800">Matrix State</span>
-              </div>
-              <span className="text-xs text-gray-500 ml-7">
-                Last sync: {formatSync(lastSync)}
-              </span>
-            </div>
-
-            {/* Tabs inline with header */}
-            <div className="flex -mb-[1px] mt-[30px]">
-              {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-3 text-sm transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'bg-white border-b-2 border-orange-500 text-orange-600'
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  {tab.label} ({tab.count})
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsCollapsed(true)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Collapse"
-            >
-              <ChevronDown size={20} className="text-gray-600" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <pre className="bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto text-xs font-mono">
-          {JSON.stringify(getActiveTabData(), null, 2)}
-        </pre>
-      </div>
-
-      {/* Footer with Actions */}
-      <div className="flex items-center justify-between px-4 py-3 pr-64 border-t bg-gray-50">
-        <div className="flex gap-2">
-          {(() => {
-            const spreadsheetId = settings.getSpreadsheetId();
-            return spreadsheetId ? (
-              <a
-                href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-1.5 text-xs border border-green-600 text-green-600 rounded hover:bg-green-50 transition-colors"
-              >
-                <GoogleSheetsIcon size={14} />
-                <span>Open in Spreadsheets</span>
-                <ExternalLink size={12} />
-              </a>
-            ) : null;
-          })()}
-          {feedData && feedData.length > 0 && downloadFeedCSV && (
-            <button
-              onClick={downloadFeedCSV}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
-            >
-              <Download size={14} />
-              <span>Download Feed CSV</span>
-            </button>
+    <>
+      {/* Bottom Panel - Just the pill content */}
+      <div className="bottom-panel" onClick={() => setIsOpen(true)}>
+        <Save size={20} className="bottom-panel-icon" />
+        <span className="bottom-panel-title">Matrix State</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onClearReload(); }}
+          className="bottom-panel-btn"
+        >
+          Reload
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSave(); }}
+          disabled={isSaving || saveProgress !== null}
+          className="bottom-panel-btn"
+          style={{ opacity: isSaving || saveProgress ? 0.7 : 1, position: 'relative' }}
+        >
+          {saveProgress ? (
+            <><Loader size={14} className="animate-spin" /> Saving...</>
+          ) : isSaving ? (
+            <><Loader size={14} className="animate-spin" /> Saving...</>
+          ) : (
+            <>Save</>
           )}
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            Close
-          </button>
-          <button
-            onClick={onClearReload}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
-          >
-            <RefreshCw size={14} />
-            Reload
-          </button>
-          <button
-            onClick={onSave}
-            disabled={isSaving || saveProgress !== null}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
-          >
-            {saveProgress ? (
-              <>
-                <Loader size={14} className="animate-spin" />
-                {saveProgress.message}
-              </>
-            ) : isSaving ? (
-              <>
-                <Loader size={14} className="animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save size={14} />
-                Save
-              </>
-            )}
-          </button>
-        </div>
+          {changeCount > 0 && !isSaving && !saveProgress && (
+            <span style={{
+              position: 'absolute',
+              top: '-6px',
+              right: '-6px',
+              background: '#ffcc00',
+              color: '#000',
+              fontSize: '10px',
+              fontWeight: 700,
+              borderRadius: '10px',
+              padding: '2px 6px',
+              minWidth: '18px',
+              textAlign: 'center',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}>
+              {changeCount}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Save Progress Modal */}
+      {/* Dialog - rendered via portal to escape z-index stacking context */}
+      {isOpen && createPortal(
+        <div className="dialog-overlay overlay-animated open" onClick={() => setIsOpen(false)}>
+          <div className="dialog dialog-animated open" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-layout">
+              {/* LEFT SIDEBAR */}
+              <div className="dialog-sidebar custom-scrollbar">
+                <h2 className="dialog-title">Matrix State</h2>
+                {/* Sync status with link to sheets */}
+                {(() => {
+                  const spreadsheetId = settings.getSpreadsheetId();
+                  return spreadsheetId ? (
+                    <a
+                      href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: '12px',
+                        marginTop: '-8px',
+                        marginBottom: '16px',
+                        textDecoration: 'none'
+                      }}
+                      title="Open in Google Sheets"
+                    >
+                      <GoogleSheetsIcon size={20} />
+                      <span style={{ textDecoration: 'underline' }}>Synced: {formatSync(lastSync)}</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <div style={{
+                      color: 'rgba(255,255,255,0.6)',
+                      fontSize: '12px',
+                      marginTop: '-8px',
+                      marginBottom: '16px'
+                    }}>
+                      Synced: {formatSync(lastSync)}
+                    </div>
+                  );
+                })()}
+
+                {/* Vertical Tabs */}
+                <div className="dialog-tabs">
+                  {tabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`dialog-tab ${activeTab === tab.id ? 'active' : ''}`}
+                    >
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '1rem', fontWeight: 500 }}>
+                        {tab.label}
+                        <span style={{
+                          fontSize: '11px',
+                          opacity: 0.7,
+                          fontWeight: 400
+                        }}>
+                          ({tab.count})
+                        </span>
+                        {tab.changes > 0 && (
+                          <span style={{
+                            fontSize: '10px',
+                            background: '#ffcc00',
+                            color: '#000',
+                            padding: '1px 6px',
+                            borderRadius: '8px',
+                            fontWeight: 600
+                          }}>
+                            {tab.changes}
+                          </span>
+                        )}
+                      </h3>
+                      <tab.icon size={18} />
+                    </button>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div className="dialog-actions">
+                  {feedData && feedData.length > 0 && downloadFeedCSV && (
+                    <button onClick={downloadFeedCSV} className="link-button">
+                      <Download size={16} />
+                      Download Feed
+                    </button>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="btn btn-secondary btn-lg"
+                      style={{ flex: 1 }}
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={onClearReload}
+                      className="btn btn-secondary btn-lg"
+                      style={{ flex: 1 }}
+                    >
+                      <RefreshCw size={16} />
+                      Reload
+                    </button>
+                  </div>
+                  <button
+                    onClick={onSave}
+                    disabled={isSaving || saveProgress !== null}
+                    className="btn btn-primary btn-lg"
+                    style={{ position: 'relative' }}
+                  >
+                    {saveProgress ? (
+                      <><Loader size={14} className="animate-spin" /> {saveProgress.message}</>
+                    ) : isSaving ? (
+                      <><Loader size={14} className="animate-spin" /> Saving...</>
+                    ) : (
+                      <>Save to Sheets</>
+                    )}
+                    {changeCount > 0 && !isSaving && !saveProgress && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-6px',
+                        background: '#ffcc00',
+                        color: '#000',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        borderRadius: '10px',
+                        padding: '2px 6px',
+                        minWidth: '18px',
+                        textAlign: 'center',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                      }}>
+                        {changeCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* RIGHT CONTENT - JSON Preview */}
+              <div className="dialog-content-area" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                {/* Changes Only Toggle - absolute positioned */}
+                <button
+                  className={`dialog-toggle ${changesOnly ? 'checked' : ''}`}
+                  onClick={() => setChangesOnly(!changesOnly)}
+                  style={{
+                    position: 'absolute',
+                    top: '2rem',
+                    right: '2rem',
+                    zIndex: 10
+                  }}
+                >
+                  <div className="checkbox-box">
+                    <Check size={14} />
+                  </div>
+                  <span>Changes only</span>
+                </button>
+
+                <div className="dialog-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <style>{`
+                    .json-changed {
+                      background: rgba(255, 204, 0, 0.3);
+                      color: #ffcc00;
+                      display: inline;
+                    }
+                  `}</style>
+                  <pre
+                    className="custom-scrollbar"
+                    style={{
+                      background: 'rgba(0,0,0,0.2)',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      color: 'rgba(255,255,255,0.9)',
+                      fontSize: '11px',
+                      fontFamily: 'monospace',
+                      margin: 0,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      flex: 1,
+                      overflow: 'auto'
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: `[${renderHighlightedJson(getFilteredData(), getActiveTabChanges())}]`
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <SaveProgressDialog saveProgress={saveProgress} />
-    </div>
+    </>
   );
 };
 

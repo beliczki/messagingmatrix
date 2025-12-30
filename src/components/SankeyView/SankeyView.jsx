@@ -4,7 +4,6 @@
  */
 
 import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
-import { GripHorizontal } from 'lucide-react';
 import { useSankey } from '../sankey/hooks/useSankey.js';
 
 /**
@@ -28,6 +27,7 @@ const SankeyView = forwardRef(function SankeyView({
   statusFilters = [],
   sankeyStructure = 'Product → Strategy → Audience → Topic → Message',
   lookAndFeel = {},
+  variant: variantProp,
   onEditAudience,
   onEditTopic,
   onEditMessage,
@@ -48,21 +48,55 @@ const SankeyView = forwardRef(function SankeyView({
     }
   };
 
-  // Panel position state for dragging
-  const [settingsPanelPos, setSettingsPanelPos] = useState(() => loadSavedState('settingsPanelPos', { x: 16, y: 16 }));
-  const [navPanelPos, setNavPanelPos] = useState(() => loadSavedState('navPanelPos', { x: 200, y: 16 }));
-  const [draggingPanel, setDraggingPanel] = useState(null);
-  const dragStartRef = useRef({ x: 0, y: 0, panelX: 0, panelY: 0 });
-  const settingsPanelRef = useRef(null);
-  const navPanelRef = useRef(null);
-
-  // Local state for sliders (to persist)
-  const [localFlowScale, setLocalFlowScale] = useState(() => loadSavedState('flowScale', 10));
-  const [localLevelSpacing, setLocalLevelSpacing] = useState(() => loadSavedState('levelSpacing', 300));
-  const [localTextScale, setLocalTextScale] = useState(() => loadSavedState('textScale', 1));
-
   // View type state (linear = horizontal Sankey, circular = radial Sankey)
-  const [viewType, setViewType] = useState(() => loadSavedState('viewType', 'linear'));
+  // Map prop values: 'sankey' -> 'linear', 'circular' -> 'circular'
+  const mapVariantToViewType = (variant) => variant === 'circular' ? 'circular' : 'linear';
+  const [viewType, setViewType] = useState(() =>
+    variantProp ? mapVariantToViewType(variantProp) : loadSavedState('viewType', 'linear')
+  );
+
+  // Helper to get view-type-specific storage key
+  const getViewTypeKey = (viewType, key) => `${key}_${viewType}`;
+
+  // Local state for sliders (stored separately per view type)
+  const [localFlowScale, setLocalFlowScale] = useState(() => {
+    const vt = variantProp ? mapVariantToViewType(variantProp) : loadSavedState('viewType', 'linear');
+    return loadSavedState(getViewTypeKey(vt, 'flowScale'), 10);
+  });
+  const [localLevelSpacing, setLocalLevelSpacing] = useState(() => {
+    const vt = variantProp ? mapVariantToViewType(variantProp) : loadSavedState('viewType', 'linear');
+    return loadSavedState(getViewTypeKey(vt, 'levelSpacing'), vt === 'circular' ? 200 : 300);
+  });
+  const [localTextScale, setLocalTextScale] = useState(() => {
+    const vt = variantProp ? mapVariantToViewType(variantProp) : loadSavedState('viewType', 'linear');
+    return loadSavedState(getViewTypeKey(vt, 'textScale'), 1);
+  });
+
+  // Sync viewType from variant prop when it changes
+  useEffect(() => {
+    if (variantProp) {
+      const mappedType = mapVariantToViewType(variantProp);
+      if (mappedType !== viewType) {
+        setViewType(mappedType);
+      }
+    }
+  }, [variantProp]);
+
+  // Load view-type-specific slider values when view type changes
+  useEffect(() => {
+    const newFlowScale = loadSavedState(getViewTypeKey(viewType, 'flowScale'), 10);
+    const newLevelSpacing = loadSavedState(getViewTypeKey(viewType, 'levelSpacing'), viewType === 'circular' ? 200 : 300);
+    const newTextScale = loadSavedState(getViewTypeKey(viewType, 'textScale'), 1);
+
+    setLocalFlowScale(newFlowScale);
+    setLocalLevelSpacing(newLevelSpacing);
+    setLocalTextScale(newTextScale);
+
+    // Also update the hook state
+    setFlowScale(newFlowScale);
+    setLevelSpacing(newLevelSpacing);
+    setTextScale(newTextScale);
+  }, [viewType]);
 
   // Convert user-friendly format to internal format
   // "Product → Strategy → Audience → Topic → Message" -> "Audiences.Product -> Audiences.Strategy -> ..."
@@ -153,87 +187,8 @@ const SankeyView = forwardRef(function SankeyView({
     viewType
   });
 
-  // Expose zoom controls to parent via ref
-  useImperativeHandle(ref, () => ({
-    zoom,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    fitToView
-  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView]);
-
   // Check if we have data (nodes is now array of arrays)
   const hasData = nodes && nodes.length > 0 && nodes.some(level => level.length > 0);
-  const totalNodes = nodes ? nodes.reduce((sum, level) => sum + level.length, 0) : 0;
-
-  // Panel drag handler - use direct DOM manipulation for smooth dragging
-  const handlePanelDragStart = useCallback((e, panelType) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const panelPos = panelType === 'settings' ? settingsPanelPos : navPanelPos;
-    const panelRef = panelType === 'settings' ? settingsPanelRef : navPanelRef;
-    const setPanelPos = panelType === 'settings' ? setSettingsPanelPos : setNavPanelPos;
-
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panelX: panelPos.x,
-      panelY: panelPos.y
-    };
-    setDraggingPanel(panelType);
-
-    // Disable pointer events on panel content during drag
-    if (panelRef.current) {
-      panelRef.current.style.pointerEvents = 'none';
-    }
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'grabbing';
-
-    const handleMouseMove = (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-
-      const deltaX = ev.clientX - dragStartRef.current.x;
-      const deltaY = ev.clientY - dragStartRef.current.y;
-      const newX = Math.max(0, dragStartRef.current.panelX + deltaX);
-      const newY = Math.max(0, dragStartRef.current.panelY + deltaY);
-
-      // Direct DOM update for smooth dragging
-      if (panelRef.current) {
-        panelRef.current.style.left = `${newX}px`;
-        panelRef.current.style.top = `${newY}px`;
-      }
-    };
-
-    const handleMouseUp = (ev) => {
-      ev.preventDefault();
-
-      const deltaX = ev.clientX - dragStartRef.current.x;
-      const deltaY = ev.clientY - dragStartRef.current.y;
-      const newX = Math.max(0, dragStartRef.current.panelX + deltaX);
-      const newY = Math.max(0, dragStartRef.current.panelY + deltaY);
-
-      // Update React state only on mouse up
-      setPanelPos({ x: newX, y: newY });
-      setDraggingPanel(null);
-
-      // Re-enable pointer events
-      if (panelRef.current) {
-        panelRef.current.style.pointerEvents = '';
-      }
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-
-      // Remove listeners with capture phase
-      document.removeEventListener('mousemove', handleMouseMove, true);
-      document.removeEventListener('mouseup', handleMouseUp, true);
-    };
-
-    // Use capture phase so we get events before they're stopped by child elements
-    document.addEventListener('mousemove', handleMouseMove, true);
-    document.addEventListener('mouseup', handleMouseUp, true);
-  }, [settingsPanelPos, navPanelPos]);
 
   // Sync local state with hook state on mount
   useEffect(() => {
@@ -242,27 +197,18 @@ const SankeyView = forwardRef(function SankeyView({
     setTextScale(localTextScale);
   }, []); // Only on mount
 
-  // Save panel positions to localStorage
+  // Save slider settings to localStorage (view-type-specific)
   useEffect(() => {
-    localStorage.setItem('sankeyview_settingsPanelPos', JSON.stringify(settingsPanelPos));
-  }, [settingsPanelPos]);
+    localStorage.setItem(`sankeyview_${getViewTypeKey(viewType, 'flowScale')}`, JSON.stringify(localFlowScale));
+  }, [localFlowScale, viewType, getViewTypeKey]);
 
   useEffect(() => {
-    localStorage.setItem('sankeyview_navPanelPos', JSON.stringify(navPanelPos));
-  }, [navPanelPos]);
-
-  // Save slider settings to localStorage
-  useEffect(() => {
-    localStorage.setItem('sankeyview_flowScale', JSON.stringify(localFlowScale));
-  }, [localFlowScale]);
+    localStorage.setItem(`sankeyview_${getViewTypeKey(viewType, 'levelSpacing')}`, JSON.stringify(localLevelSpacing));
+  }, [localLevelSpacing, viewType, getViewTypeKey]);
 
   useEffect(() => {
-    localStorage.setItem('sankeyview_levelSpacing', JSON.stringify(localLevelSpacing));
-  }, [localLevelSpacing]);
-
-  useEffect(() => {
-    localStorage.setItem('sankeyview_textScale', JSON.stringify(localTextScale));
-  }, [localTextScale]);
+    localStorage.setItem(`sankeyview_${getViewTypeKey(viewType, 'textScale')}`, JSON.stringify(localTextScale));
+  }, [localTextScale, viewType, getViewTypeKey]);
 
   useEffect(() => {
     localStorage.setItem('sankeyview_viewType', JSON.stringify(viewType));
@@ -283,6 +229,32 @@ const SankeyView = forwardRef(function SankeyView({
     setLocalTextScale(value);
     setTextScale(value);
   }, [setTextScale]);
+
+  // Expose zoom and slider controls to parent via ref
+  useImperativeHandle(ref, () => ({
+    zoom,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    fitToView,
+    // Slider settings
+    flowScale: localFlowScale,
+    setFlowScale: handleFlowScaleChange,
+    levelSpacing: localLevelSpacing,
+    setLevelSpacing: handleLevelSpacingChange,
+    textScale: localTextScale,
+    setTextScale: handleTextScaleChange,
+    viewType,
+    // Navigation
+    selectedNode,
+    levelCount,
+    selectAndCenterNode,
+    centerOnNode,
+    navigateToParent,
+    navigateToChild,
+    navigateToPrevSibling,
+    navigateToNextSibling
+  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView, localFlowScale, localLevelSpacing, localTextScale, handleFlowScaleChange, handleLevelSpacingChange, handleTextScaleChange, viewType, selectedNode, levelCount, selectAndCenterNode, centerOnNode, navigateToParent, navigateToChild, navigateToPrevSibling, navigateToNextSibling]);
 
   // Store callbacks in refs to avoid re-initialization when they change
   const onEditAudienceRef = useRef(onEditAudience);
@@ -392,9 +364,9 @@ const SankeyView = forwardRef(function SankeyView({
       ref={containerRef}
       className="relative w-full overflow-hidden"
       style={{
-        backgroundColor: '#f8fafc',
+        backgroundColor: 'var(--color-primary)',
         minHeight: '600px',
-        height: 'calc(100vh - 200px)',
+        height: '100%',
         cursor: hoveredNode ? 'pointer' : 'default'
       }}
     >
@@ -404,194 +376,6 @@ const SankeyView = forwardRef(function SankeyView({
         className="absolute inset-0"
         style={{ display: 'block', width: '100%', height: '100%' }}
       />
-
-      {/* Settings panel - draggable */}
-      <div
-        ref={settingsPanelRef}
-        className="absolute z-10 bg-white/95 rounded-lg shadow-md overflow-hidden"
-        style={{ left: settingsPanelPos.x, top: settingsPanelPos.y, minWidth: '160px' }}
-        data-control-panel="true"
-        onMouseMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle */}
-        <div
-          onMouseDown={(e) => handlePanelDragStart(e, 'settings')}
-          className={`w-full h-5 flex items-center justify-center cursor-grab hover:bg-gray-200 transition-colors ${draggingPanel === 'settings' ? 'bg-gray-300 cursor-grabbing' : 'bg-gray-100'}`}
-        >
-          <GripHorizontal size={14} className="text-gray-400" />
-        </div>
-
-        <div className="flex flex-col gap-3 p-3">
-          {/* View type switch - Linear / Circular */}
-          <div className="flex items-center gap-1 p-0.5 rounded" style={{ backgroundColor: '#e5e7eb' }}>
-            {/* Linear view */}
-            <button
-              onClick={() => setViewType('linear')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                viewType === 'linear' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: viewType === 'linear' ? '#374151' : '#9ca3af' }}
-              title="Linear Sankey"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 12h16M12 4l8 8-8 8" />
-              </svg>
-            </button>
-            {/* Circular view */}
-            <button
-              onClick={() => setViewType('circular')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                viewType === 'circular' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: viewType === 'circular' ? '#374151' : '#9ca3af' }}
-              title="Circular Sankey"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="8" />
-                <path d="M12 4v4M12 16v4M4 12h4M16 12h4" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Flow Scale (height per leaf) */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Flow Height</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="3"
-                max="30"
-                step="1"
-                value={localFlowScale}
-                onChange={(e) => handleFlowScaleChange(parseInt(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-8">{localFlowScale}px</span>
-            </div>
-          </div>
-
-          {/* Level Spacing (horizontal distance) */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Level Spacing</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="150"
-                max="1500"
-                step="25"
-                value={localLevelSpacing}
-                onChange={(e) => handleLevelSpacingChange(parseInt(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-10">{localLevelSpacing}</span>
-            </div>
-          </div>
-
-          {/* Text Size */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Text Size</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0.5"
-                max="3"
-                step="0.1"
-                value={localTextScale}
-                onChange={(e) => handleTextScaleChange(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-8">{localTextScale.toFixed(1)}x</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation panel - draggable */}
-      <div
-        ref={navPanelRef}
-        className="absolute z-10 bg-white/95 rounded-lg shadow-md overflow-hidden"
-        style={{ left: navPanelPos.x, top: navPanelPos.y }}
-        data-control-panel="true"
-        onMouseMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle */}
-        <div
-          onMouseDown={(e) => handlePanelDragStart(e, 'nav')}
-          className={`w-full h-5 flex items-center justify-center cursor-grab hover:bg-gray-200 transition-colors ${draggingPanel === 'nav' ? 'bg-gray-300 cursor-grabbing' : 'bg-gray-100'}`}
-        >
-          <GripHorizontal size={14} className="text-gray-400" />
-        </div>
-
-        {/* Navigation grid - Sankey is horizontal, so left/right = levels, up/down = siblings in level */}
-        <div className="p-2">
-          <div className="grid grid-cols-3 gap-1" style={{ width: '72px', height: '72px' }}>
-            <div />
-            {/* Up arrow: Previous node in same level */}
-            <button
-              onClick={navigateToPrevSibling}
-              disabled={!selectedNode}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Previous in level"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 15l6-6 6 6" />
-              </svg>
-            </button>
-            <div />
-            {/* Left arrow: Go to source level */}
-            <button
-              onClick={navigateToParent}
-              disabled={!selectedNode || selectedNode.level === 0}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Go to source"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-            </button>
-            {/* Center: Center on selected or fit to view */}
-            <button
-              onClick={() => selectedNode ? centerOnNode(selectedNode) : fitToView()}
-              className="nav-btn flex items-center justify-center rounded transition-all"
-              title={selectedNode ? "Center on selected" : "Fit to view"}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            </button>
-            {/* Right arrow: Go to target level */}
-            <button
-              onClick={navigateToChild}
-              disabled={!selectedNode || selectedNode.level >= levelCount - 1}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Go to target"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M9 6l6 6-6 6" />
-              </svg>
-            </button>
-            <div />
-            {/* Down arrow: Next node in same level */}
-            <button
-              onClick={navigateToNextSibling}
-              disabled={!selectedNode}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Next in level"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            <div />
-          </div>
-        </div>
-      </div>
 
       {/* Empty state */}
       {!hasData && (

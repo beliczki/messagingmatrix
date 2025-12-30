@@ -1,0 +1,297 @@
+/* ========================================
+   MATRIX GRID COMPONENT STYLES
+   Grid layout for audiences, topics, and messages
+   ======================================== */
+
+/* --- Fullscreen Layout --- */
+.matrix-fullscreen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.matrix-view-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+/* --- Matrix Grid Scroll Container --- */
+.matrix-grid-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: transparent;
+}
+
+/* --- Matrix Container --- */
+.matrix-container {
+  padding: var(--space-6);
+  min-height: 100%;
+}
+
+/* --- Matrix Grid --- */
+.matrix-grid {
+  display: grid;
+  gap: 2px;
+}
+
+/* Dynamic grid columns set via inline style or JS */
+
+/* --- Corner Cell (empty) --- */
+.matrix-corner {
+  /* Empty corner cell */
+}
+
+/* --- Audience Header (top row) --- */
+.matrix-audience-header {
+  padding: var(--space-3);
+  border-bottom: 3px solid var(--color-accent-pink);
+  transition: background var(--transition-fast);
+}
+
+.matrix-audience-header.highlight {
+  background: var(--white-10);
+}
+
+.matrix-audience-name {
+  color: var(--color-white);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-1);
+}
+
+.matrix-audience-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.matrix-audience-tag {
+  background: var(--white-20);
+  color: var(--color-white);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-medium);
+}
+
+/* --- Topic Header (left column) --- */
+.matrix-topic-header {
+  padding: var(--space-3);
+  border-right: 3px solid var(--color-white);
+  transition: background var(--transition-fast);
+}
+
+.matrix-topic-header.highlight {
+  background: var(--white-10);
+}
+
+.matrix-topic-name {
+  color: var(--color-white);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-1);
+}
+
+.matrix-topic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.matrix-topic-tag {
+  background: var(--white-20);
+  color: var(--color-white);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-medium);
+}
+
+/* --- Message Cell --- */
+/* Note: Do not use display:flex on table cells - it breaks table layout */
+.matrix-cell-content {
+  padding: var(--space-3);
+  transition: background var(--transition-fast);
+}
+
+.matrix-cell-content.highlight {
+  background: var(--white-10);
+}
+
+.matrix-cell-content:hover {
+  background: var(--white-15);
+}
+
+/* --- Message Card --- */
+.message-card {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  border: 2px solid transparent;
+}
+
+.message-card:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.message-card.selected {
+  border-color: var(--color-white);
+}
+
+.message-card.shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/* Status Colors */
+.message-card.planned {
+  background: var(--status-planned-bg);
+  color: var(--status-planned-text);
+}
+
+.message-card.active {
+  background: var(--status-active-bg);
+  color: var(--status-active-text);
+}
+
+.message-card.inprogress {
+  background: var(--status-inprogress-bg);
+  color: var(--status-inprogress-text);
+}
+
+.message-card.inactive {
+  background: var(--status-inactive-bg);
+  color: var(--status-inactive-text);
+}
+
+.message-card.error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+}
+
+/* Message Card Content */
+.message-card-product {
+  font-size: 0.6rem;
+  font-weight: var(--font-weight-bold);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message-card-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.message-card-variant {
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+  margin-left: 2px;
+}
+
+/* --- Tree View Styles --- */
+.tree-container {
+  padding: var(--space-6);
+  min-height: 100%;
+  position: relative;
+}
+
+/* Tree Node Card */
+.tree-node-card {
+  background: linear-gradient(135deg, #4dd4e1 0%, #3bc4d1 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-white);
+  box-shadow: var(--shadow-lg);
+  min-width: 120px;
+}
+
+.tree-node-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+}
+
+.tree-node-subtitle {
+  font-size: var(--font-size-sm);
+  opacity: 0.8;
+}
+
+/* Tree Connecting Lines */
+.tree-line {
+  stroke: var(--white-30);
+  stroke-width: 2;
+  fill: none;
+}
+
+/* Level Labels */
+.tree-level-label {
+  position: absolute;
+  left: var(--space-4);
+  background: var(--color-accent-pink);
+  color: var(--color-white);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.status-badge.planned {
+  background: var(--status-planned-bg);
+  color: var(--status-planned-text);
+}
+
+.status-badge.active {
+  background: var(--status-active-bg);
+  color: var(--status-active-text);
+}
+
+.status-badge.inprogress {
+  background: var(--status-inprogress-bg);
+  color: var(--status-inprogress-text);
+}
+
+.status-badge.inactive {
+  background: var(--status-inactive-bg);
+  color: var(--status-inactive-text);
+}
+
+.status-badge.error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+}
+
+/* --- Hover Highlight Classes (DOM-based, no React re-render) --- */
+.cell-highlight {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.row-highlight {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.col-highlight {
+  background: rgba(255, 255, 255, 0.1) !important;
+}

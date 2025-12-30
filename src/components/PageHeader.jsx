@@ -31,25 +31,25 @@ export const getButtonStyle = (lookAndFeel) => {
   };
 };
 
-const PageHeader = ({ onMenuToggle, title, titleFilters, children, lookAndFeel, viewMode, setViewMode, viewModes }) => {
+const PageHeader = ({ onMenuToggle, title, titleFilters, children, lookAndFeel, viewMode, setViewMode, viewModes, hideHamburger = true }) => {
   const headerColor = lookAndFeel?.headerColor || '#2870ed';
   const logo = lookAndFeel?.logo;
   const logoStyle = parseCSSString(lookAndFeel?.logoStyle || '');
 
   return (
-    <div className="sticky top-0 z-50" style={{ backgroundColor: headerColor, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
-      <div className="px-4 py-3 flex items-center gap-4">
-        <button
-          onClick={onMenuToggle}
-          className="p-2 rounded transition-colors"
-          style={{ color: 'white' }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <Menu size={24} />
-        </button>
-        {logo && (
-          <img src={logo} alt="Logo" style={logoStyle} />
+    <div className="sticky top-0 z-40" style={{ backgroundColor: 'transparent' }}>
+      <div className="px-4 py-3 flex items-center gap-4" style={{ marginLeft: 'calc(var(--hamburger-size) + var(--space-6) + var(--space-4))' }}>
+        {/* Hamburger button is now in App.jsx - hide here by default */}
+        {!hideHamburger && onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            className="p-2 rounded transition-colors"
+            style={{ color: 'white' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <Menu size={24} />
+          </button>
         )}
         <h1 className="text-2xl font-bold text-white">{title}</h1>
 

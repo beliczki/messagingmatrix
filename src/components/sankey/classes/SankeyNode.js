@@ -5,7 +5,7 @@
 
 // Level-based colors for flows
 const LEVEL_COLORS = [
-  '#6366f1', // indigo - level 0 (Product)
+  '#ffffff', // white - level 0 (Product)
   '#eb4c79', // pink - level 1 (Strategy)
   '#02a3a4', // teal - level 2 (Audience)
   '#711c7a', // purple - level 3 (Topic)

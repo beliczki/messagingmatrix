@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid, Tag } from 'lucide-react';
 import { apiGet, apiPost } from '../utils/api';
-import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
 
@@ -275,60 +274,9 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <PageHeader
-        title={currentModuleName || 'Tasks'}
-        onMenuToggle={onMenuToggle}
-        lookAndFeel={lookAndFeel}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        viewModes={[
-          { value: 'list', label: 'List View' },
-          { value: 'card', label: 'Card View' }
-        ]}
-        titleFilters={
-          <>
-            {/* Filter Input */}
-            <div className="flex items-center gap-2">
-              <Filter size={18} className="text-white" />
-              <input
-                type="text"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                placeholder="Filter tasks..."
-                className="w-64 px-3 py-2 border border-white/20 rounded bg-white/10 text-white placeholder-white/60 focus:ring-2 focus:ring-white/30 focus:border-white/30 focus:bg-white/20"
-              />
-            </div>
-
-            {/* Task Count */}
-            {tasks.length > 0 && (
-              <div className="text-sm text-white/80 whitespace-nowrap">
-                {pendingTasks.length} pending, {completedTasks.length} completed
-              </div>
-            )}
-          </>
-        }
-      >
-        <button
-          onClick={handleFetchAndConvert}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-          style={getButtonStyle(lookAndFeel)}
-        >
-          {loading ? (
-            <>
-              <RefreshCw className="animate-spin" size={18} />
-              Processing...
-            </>
-          ) : (
-            <>
-              <Mail size={18} />
-              Fetch Emails
-            </>
-          )}
-        </button>
-      </PageHeader>
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
+      {/* Content */}
+      <div className="matrix-view-container">
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
@@ -466,6 +414,8 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         </div>
       </div>
 
+      </div>
+
       {/* Task Editor Dialog */}
       <TaskEditorDialog
         editingTask={editingTask}
@@ -475,14 +425,16 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel }) => {
         buckets={buckets}
       />
 
-      {/* AI Assistant */}
-      <AIAssistant
-        ref={claudeChatRef}
-        taskContext={{
-          tasks,
-          emails
-        }}
-      />
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <AIAssistant
+          ref={claudeChatRef}
+          taskContext={{
+            tasks,
+            emails
+          }}
+        />
+      </div>
     </div>
   );
 };

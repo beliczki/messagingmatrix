@@ -44,3 +44,9 @@ cache/drive/*
 
 # Server config
 nginx-*.conf
+
+# Claude Code task planning
+tasks/
+
+# Windows special file
+nul

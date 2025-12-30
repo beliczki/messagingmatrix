@@ -61,7 +61,11 @@
       "Bash(python:*)",
       "Bash(cat:*)",
       "Bash(git revert:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(if exist dbcache.db del dbcache.db)",
+      "Bash(grep:*)",
+      "Bash(npm run pm2:start:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

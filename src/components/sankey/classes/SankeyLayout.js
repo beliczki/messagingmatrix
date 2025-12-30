@@ -365,10 +365,25 @@ export class SankeyLayout {
 
     this.levelCount = levelCount;
 
-    // Chord diagram configuration - single circle
-    const centerX = 500;
-    const centerY = 500;
-    const radius = 300 + this.levelSpacing * 0.3; // Single circle radius
+    // Calculate what the linear layout's center would be (to match positions)
+    // Linear bounds: minX=0, maxX = startX + (levelCount-1)*levelSpacing + nodeWidth + 100
+    const linearMaxX = this.startX + (levelCount - 1) * this.levelSpacing + this.nodeWidth + 100;
+
+    // Calculate total weight for linear height estimation
+    let maxLevelWeight = 0;
+    levels.forEach(levelNodes => {
+      const totalWeight = levelNodes.reduce((sum, node) => sum + (node.weight || 1), 0);
+      maxLevelWeight = Math.max(maxLevelWeight, totalWeight);
+    });
+    const linearTotalHeight = maxLevelWeight * this.flowScale + (Math.max(...levels.map(l => l.length)) - 1) * this.nodeGap + 60;
+
+    // Use linear layout's center point for the circular layout
+    const centerX = linearMaxX / 2;
+    const centerY = linearTotalHeight / 2 + 30;
+
+    // Calculate radius based on available space (fit within linear bounds)
+    const maxRadius = Math.min(linearMaxX, linearTotalHeight) * 0.35;
+    const radius = Math.max(150, maxRadius + this.levelSpacing * 0.1);
 
     // Build node lookup map
     const nodeMap = new Map();
@@ -435,13 +450,13 @@ export class SankeyLayout {
     // Calculate chord flow positions
     this.calculateChordFlowPositions(levels, flows, nodeMap, centerX, centerY, radius);
 
-    // Calculate bounds (circle bounding box)
-    const padding = 150;
+    // Calculate bounds - use same bounds as linear layout would have for consistent panning
+    const padding = 100;
     this.bounds = {
-      minX: centerX - radius - padding,
-      maxX: centerX + radius + padding,
-      minY: centerY - radius - padding,
-      maxY: centerY + radius + padding
+      minX: Math.min(0, centerX - radius - padding),
+      maxX: Math.max(linearMaxX, centerX + radius + padding),
+      minY: Math.min(0, centerY - radius - padding),
+      maxY: Math.max(linearTotalHeight + 60, centerY + radius + padding)
     };
 
     return this.bounds;

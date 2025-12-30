@@ -4,7 +4,6 @@
  */
 
 import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
-import { GripHorizontal } from 'lucide-react';
 import { useTree2 } from '../tree2/hooks/useTree2.js';
 
 /**
@@ -28,6 +27,7 @@ const Tree2View = forwardRef(function Tree2View({
   statusFilters = [],
   treeStructure = 'Audiences.Product → Audiences.Strategy → Audiences.Name → Topics.Name → Messages.Number',
   lookAndFeel = {},
+  orientation: orientationProp,
   onEditAudience,
   onEditTopic,
   onEditMessage,
@@ -48,14 +48,17 @@ const Tree2View = forwardRef(function Tree2View({
     }
   };
 
-  // Panel position state for dragging
-  const [settingsPanelPos, setSettingsPanelPos] = useState(() => loadSavedState('settingsPanelPos', { x: 16, y: 16 }));
-  const [navPanelPos, setNavPanelPos] = useState(() => loadSavedState('navPanelPos', { x: 210, y: 16 }));
-  const [draggingPanel, setDraggingPanel] = useState(null);
-  const dragStartRef = useRef({ x: 0, y: 0, panelX: 0, panelY: 0 });
-
   // Tree orientation state (vertical = top-down, horizontal = left-right)
-  const [treeOrientation, setTreeOrientation] = useState(() => loadSavedState('treeOrientation', 'vertical'));
+  const [treeOrientation, setTreeOrientation] = useState(() =>
+    orientationProp || loadSavedState('treeOrientation', 'vertical')
+  );
+
+  // Sync orientation from prop when it changes
+  useEffect(() => {
+    if (orientationProp && orientationProp !== treeOrientation) {
+      setTreeOrientation(orientationProp);
+    }
+  }, [orientationProp]);
 
   // Load orientation-specific slider settings
   const getOrientationKey = (orientation, key) => `${key}_${orientation}`;
@@ -117,92 +120,6 @@ const Tree2View = forwardRef(function Tree2View({
     orientation: treeOrientation
   });
 
-  // Expose zoom controls to parent via ref
-  useImperativeHandle(ref, () => ({
-    zoom,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    fitToView
-  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView]);
-
-  // Panel refs for direct DOM manipulation during drag
-  const settingsPanelRef = useRef(null);
-  const navPanelRef = useRef(null);
-
-  // Panel drag handlers - use direct DOM manipulation for smooth dragging
-  const handlePanelDragStart = useCallback((e, panelType) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const pos = panelType === 'settings' ? settingsPanelPos : navPanelPos;
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panelX: pos.x,
-      panelY: pos.y,
-      panelType
-    };
-    setDraggingPanel(panelType);
-
-    const panelRef = panelType === 'settings' ? settingsPanelRef : navPanelRef;
-
-    // Disable pointer events on panel content during drag
-    if (panelRef.current) {
-      panelRef.current.style.pointerEvents = 'none';
-    }
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'grabbing';
-
-    const handleMouseMove = (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-
-      const deltaX = ev.clientX - dragStartRef.current.x;
-      const deltaY = ev.clientY - dragStartRef.current.y;
-      const newX = Math.max(0, dragStartRef.current.panelX + deltaX);
-      const newY = Math.max(0, dragStartRef.current.panelY + deltaY);
-
-      // Direct DOM update for smooth dragging
-      if (panelRef.current) {
-        panelRef.current.style.left = `${newX}px`;
-        panelRef.current.style.top = `${newY}px`;
-      }
-    };
-
-    const handleMouseUp = (ev) => {
-      ev.preventDefault();
-
-      const deltaX = ev.clientX - dragStartRef.current.x;
-      const deltaY = ev.clientY - dragStartRef.current.y;
-      const newX = Math.max(0, dragStartRef.current.panelX + deltaX);
-      const newY = Math.max(0, dragStartRef.current.panelY + deltaY);
-
-      // Update React state only on mouse up
-      if (dragStartRef.current.panelType === 'settings') {
-        setSettingsPanelPos({ x: newX, y: newY });
-      } else if (dragStartRef.current.panelType === 'nav') {
-        setNavPanelPos({ x: newX, y: newY });
-      }
-      setDraggingPanel(null);
-
-      // Re-enable pointer events
-      if (panelRef.current) {
-        panelRef.current.style.pointerEvents = '';
-      }
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-
-      // Remove listeners with capture phase
-      document.removeEventListener('mousemove', handleMouseMove, true);
-      document.removeEventListener('mouseup', handleMouseUp, true);
-    };
-
-    // Use capture phase so we get events before they're stopped by child elements
-    document.addEventListener('mousemove', handleMouseMove, true);
-    document.addEventListener('mouseup', handleMouseUp, true);
-  }, [settingsPanelPos, navPanelPos]);
-
   // Sync local state with hook state on mount
   useEffect(() => {
     setNodeScale(localNodeScale);
@@ -210,15 +127,6 @@ const Tree2View = forwardRef(function Tree2View({
     setScaleBase(localScaleBase);
     setConnectorType(localConnectorType);
   }, []); // Only on mount
-
-  // Save panel positions to localStorage
-  useEffect(() => {
-    localStorage.setItem('tree2view_settingsPanelPos', JSON.stringify(settingsPanelPos));
-  }, [settingsPanelPos]);
-
-  useEffect(() => {
-    localStorage.setItem('tree2view_navPanelPos', JSON.stringify(navPanelPos));
-  }, [navPanelPos]);
 
   // Save tree settings to localStorage (orientation-specific for sliders)
   useEffect(() => {
@@ -283,6 +191,31 @@ const Tree2View = forwardRef(function Tree2View({
     setLocalConnectorType(value);
     setConnectorType(value);
   }, [setConnectorType]);
+
+  // Expose zoom and slider controls to parent via ref
+  useImperativeHandle(ref, () => ({
+    zoom,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    fitToView,
+    // Slider settings
+    nodeScale: localNodeScale,
+    setNodeScale: handleNodeScaleChange,
+    layerHeightScale: localLayerHeightScale,
+    setLayerHeightScale: handleLayerHeightScaleChange,
+    scaleBase: localScaleBase,
+    setScaleBase: handleScaleBaseChange,
+    treeOrientation,
+    // Navigation
+    selectedNode,
+    selectAndCenterNode,
+    centerOnNode,
+    navigateToParent,
+    navigateToChild,
+    navigateToPrevSibling,
+    navigateToNextSibling
+  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView, localNodeScale, localLayerHeightScale, localScaleBase, handleNodeScaleChange, handleLayerHeightScaleChange, handleScaleBaseChange, treeOrientation, selectedNode, selectAndCenterNode, centerOnNode, navigateToParent, navigateToChild, navigateToPrevSibling, navigateToNextSibling]);
 
   // Store callbacks in refs to avoid re-initialization when they change
   const onEditAudienceRef = useRef(onEditAudience);
@@ -393,9 +326,8 @@ const Tree2View = forwardRef(function Tree2View({
       ref={containerRef}
       className="relative w-full overflow-hidden"
       style={{
-        backgroundColor: '#f8fafc',
-        minHeight: '600px',
-        height: 'calc(100vh - 200px)',
+        backgroundColor: 'var(--color-primary)',
+        height: '100%',
         cursor: hoveredNode ? 'pointer' : 'default'
       }}
     >
@@ -405,219 +337,6 @@ const Tree2View = forwardRef(function Tree2View({
         className="absolute inset-0"
         style={{ display: 'block', width: '100%', height: '100%' }}
       />
-
-      {/* Settings panel - draggable */}
-      <div
-        ref={settingsPanelRef}
-        className="absolute z-10 bg-white/95 rounded-lg shadow-md overflow-hidden"
-        style={{ left: settingsPanelPos.x, top: settingsPanelPos.y, minWidth: '160px' }}
-        data-control-panel="true"
-        onMouseMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle */}
-        <div
-          onMouseDown={(e) => handlePanelDragStart(e, 'settings')}
-          className={`w-full h-5 flex items-center justify-center cursor-grab hover:bg-gray-200 transition-colors ${draggingPanel === 'settings' ? 'bg-gray-300 cursor-grabbing' : 'bg-gray-100'}`}
-        >
-          <GripHorizontal size={14} className="text-gray-400" />
-        </div>
-
-        <div className="flex flex-col gap-3 p-3">
-          {/* Orientation and Connector switches - styled like header view switch */}
-          <div className="flex items-center gap-1 p-0.5 rounded" style={{ backgroundColor: '#e5e7eb' }}>
-            {/* Orientation: Vertical */}
-            <button
-              onClick={() => setTreeOrientation('vertical')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                treeOrientation === 'vertical' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: treeOrientation === 'vertical' ? '#374151' : '#9ca3af' }}
-              title="Vertical tree (top-down)"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 21V3M12 21l-4-4M12 21l4-4" />
-              </svg>
-            </button>
-            {/* Orientation: Horizontal */}
-            <button
-              onClick={() => setTreeOrientation('horizontal')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                treeOrientation === 'horizontal' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: treeOrientation === 'horizontal' ? '#374151' : '#9ca3af' }}
-              title="Horizontal tree (left-right)"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 12h18M21 12l-4-4M21 12l-4 4" />
-              </svg>
-            </button>
-            <div className="w-px h-4 bg-gray-300 mx-0.5" />
-            {/* Connector: Curved */}
-            <button
-              onClick={() => handleConnectorTypeChange('curved')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                localConnectorType === 'curved' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: localConnectorType === 'curved' ? '#374151' : '#9ca3af' }}
-              title="Curved connectors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4 C4 14, 14 14, 20 20" />
-              </svg>
-            </button>
-            {/* Connector: Elbow */}
-            <button
-              onClick={() => handleConnectorTypeChange('elbow')}
-              className={`flex items-center justify-center p-1.5 rounded transition-all ${
-                localConnectorType === 'elbow' ? 'bg-white shadow-sm' : 'hover:bg-white/50'
-              }`}
-              style={{ color: localConnectorType === 'elbow' ? '#374151' : '#9ca3af' }}
-              title="Elbow connectors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4 L4 14 L20 14 L20 20" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Node Scale */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Node Size</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0.1"
-                max="2"
-                step="0.1"
-                value={localNodeScale}
-                onChange={(e) => handleNodeScaleChange(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-8">{localNodeScale.toFixed(1)}x</span>
-            </div>
-          </div>
-
-          {/* Layer Height/Width Scale */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">{treeOrientation === 'horizontal' ? 'Layer Width' : 'Layer Height'}</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0.01"
-                max={treeOrientation === 'horizontal' ? '10' : '1'}
-                step="0.01"
-                value={localLayerHeightScale}
-                onChange={(e) => handleLayerHeightScaleChange(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-10">{localLayerHeightScale.toFixed(2)}x</span>
-            </div>
-          </div>
-
-          {/* Scale Base */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Scale Base</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="1"
-                max="100"
-                step="1"
-                value={localScaleBase}
-                onChange={(e) => handleScaleBaseChange(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-xs text-gray-500 w-8">{localScaleBase}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation panel - draggable, independent square */}
-      <div
-        ref={navPanelRef}
-        className="absolute z-10 bg-white/95 rounded-lg shadow-md overflow-hidden"
-        style={{ left: navPanelPos.x, top: navPanelPos.y }}
-        data-control-panel="true"
-        onMouseMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle */}
-        <div
-          onMouseDown={(e) => handlePanelDragStart(e, 'nav')}
-          className={`w-full h-5 flex items-center justify-center cursor-grab hover:bg-gray-200 transition-colors ${draggingPanel === 'nav' ? 'bg-gray-300 cursor-grabbing' : 'bg-gray-100'}`}
-        >
-          <GripHorizontal size={14} className="text-gray-400" />
-        </div>
-
-        {/* Navigation grid - arrows swap meaning based on orientation */}
-        <div className="p-2">
-          <div className="grid grid-cols-3 gap-1" style={{ width: '72px', height: '72px' }}>
-            <div />
-            {/* Up arrow: parent in vertical, prev sibling in horizontal */}
-            <button
-              onClick={treeOrientation === 'horizontal' ? navigateToPrevSibling : navigateToParent}
-              disabled={treeOrientation === 'horizontal' ? !selectedNode : !selectedNode || !selectedNode.parent}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title={treeOrientation === 'horizontal' ? 'Previous sibling' : 'Go to parent'}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 15l6-6 6 6" />
-              </svg>
-            </button>
-            <div />
-            {/* Left arrow: prev sibling in vertical, parent in horizontal */}
-            <button
-              onClick={treeOrientation === 'horizontal' ? navigateToParent : navigateToPrevSibling}
-              disabled={treeOrientation === 'horizontal' ? !selectedNode || !selectedNode.parent : !selectedNode}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title={treeOrientation === 'horizontal' ? 'Go to parent' : 'Previous sibling'}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-            </button>
-            <button
-              onClick={() => selectedNode ? centerOnNode(selectedNode) : fitToView()}
-              className="nav-btn flex items-center justify-center rounded transition-all"
-              title={selectedNode ? "Center on selected node" : "Fit to view"}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            </button>
-            {/* Right arrow: next sibling in vertical, child in horizontal */}
-            <button
-              onClick={treeOrientation === 'horizontal' ? navigateToChild : navigateToNextSibling}
-              disabled={treeOrientation === 'horizontal' ? !selectedNode || !selectedNode.children || selectedNode.children.length === 0 : !selectedNode}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title={treeOrientation === 'horizontal' ? 'Go to first child' : 'Next sibling'}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M9 6l6 6-6 6" />
-              </svg>
-            </button>
-            <div />
-            {/* Down arrow: child in vertical, next sibling in horizontal */}
-            <button
-              onClick={treeOrientation === 'horizontal' ? navigateToNextSibling : navigateToChild}
-              disabled={treeOrientation === 'horizontal' ? !selectedNode : !selectedNode || !selectedNode.children || selectedNode.children.length === 0}
-              className="nav-btn flex items-center justify-center rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title={treeOrientation === 'horizontal' ? 'Next sibling' : 'Go to first child'}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            <div />
-          </div>
-        </div>
-      </div>
 
       {/* Empty state */}
       {(!nodes || nodes.length === 0) && (

@@ -47,6 +47,9 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const menuContentRef = useRef(null);
+  const selectorRef = useRef(null);
 
   // Get current module from URL path (handle nested paths like /templates/edit/html)
   const pathParts = location.pathname.slice(1).split('/');
@@ -54,9 +57,40 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
   const CurrentModuleComponent = modules.find(m => m.id === currentModule)?.component || Matrix;
   const currentModuleName = modules.find(m => m.id === currentModule)?.name || 'Messaging Matrix';
 
-  const handleModuleChange = (moduleId) => {
-    navigate(`/${moduleId}`);
-    setMenuOpen(false);
+  // Update active index when module changes
+  useEffect(() => {
+    const index = modules.findIndex(m => m.id === currentModule);
+    if (index >= 0) setActiveIndex(index);
+  }, [currentModule]);
+
+  // Position selector on active item
+  useEffect(() => {
+    if (menuOpen && menuContentRef.current && selectorRef.current) {
+      // Hide selector initially
+      selectorRef.current.classList.remove('visible');
+      // Wait for scale animation to complete (500ms bounce)
+      setTimeout(() => {
+        const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+        if (allItems[activeIndex]) {
+          const item = allItems[activeIndex];
+          const menuRect = menuContentRef.current.getBoundingClientRect();
+          const itemRect = item.getBoundingClientRect();
+          selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+          // Show selector after position is set
+          selectorRef.current.classList.add('visible');
+        }
+      }, 500);
+    } else if (selectorRef.current) {
+      selectorRef.current.classList.remove('visible');
+    }
+  }, [menuOpen, activeIndex]);
+
+  const handleModuleChange = (moduleId, index) => {
+    setActiveIndex(index);
+    setTimeout(() => {
+      navigate(`/${moduleId}`);
+      setMenuOpen(false);
+    }, 150);
   };
 
   const handleLogout = () => {
@@ -64,92 +98,167 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
     setMenuOpen(false);
   };
 
+  // Get user initials for avatar
+  const userInitials = currentUser?.email?.substring(0, 2).toUpperCase() || 'U';
+  // Get username (part before @)
+  const userName = currentUser?.email?.split('@')[0] || 'User';
+
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Slide-in Menu */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col ${
-          menuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+    <div className="h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-primary)' }}>
+      {/* Hamburger Button */}
+      <button
+        className={`hamburger-btn ${menuOpen ? 'menu-open' : ''}`}
+        onClick={() => setMenuOpen(!menuOpen)}
       >
-        {/* Menu Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-bold text-gray-800">Menu</h2>
+        <Menu size={24} />
+      </button>
+
+      {/* Menu Panel */}
+      <div className={`menu-panel ${menuOpen ? 'open' : ''}`}>
+        <div className="menu-content" ref={menuContentRef}>
+          {/* Logo */}
+          <svg className="menu-logo" viewBox="0 0 800 800" fill="white">
+            <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766 297.22773 561.72334"/>
+            <polygon points="372.33197 238.27666 288.79499 238.27661 355.46653 561.72334 439.00351 561.72339 372.33197 238.27666"/>
+            <polygon points="514.8137 238.27666 431.27672 238.27661 497.94825 561.72334 581.48524 561.72339 514.8137 238.27666"/>
+            <polygon points="530.95895 238.27666 447.42197 238.27661 514.0935 561.72334 597.63048 561.72339 530.95895 238.27666"/>
+            <rect x="88.60344" y="87.13551" width="27.34135" height="610.59038"/>
+            <rect x="124.98303" y="50.75592" width="30.27721" height="103.03638" transform="translate(242.39574 -37.84752) rotate(90)"/>
+            <rect x="124.98303" y="646.20769" width="30.27721" height="103.03638" transform="translate(837.84752 557.60426) rotate(90)"/>
+            <rect x="684.05521" y="87.13551" width="27.34135" height="610.59038" transform="translate(1395.45177 784.8614) rotate(-180)"/>
+            <rect x="644.73977" y="50.75592" width="30.27721" height="103.03638" transform="translate(762.15248 -557.60426) rotate(90)"/>
+            <rect x="644.73977" y="646.20769" width="30.27721" height="103.03638" transform="translate(1357.60426 37.84752) rotate(90)"/>
+          </svg>
+
+          {/* Selector highlight */}
+          <div className="menu-selector" ref={selectorRef}></div>
+
+          {/* Navigation Menu */}
+          <nav className="nav-menu">
+            {modules.map((module, index) => {
+              const Icon = module.icon;
+              return (
+                <button
+                  key={module.id}
+                  className={`nav-item ${currentModule === module.id ? 'active' : ''}`}
+                  onClick={() => handleModuleChange(module.id, index)}
+                  onMouseEnter={() => {
+                    if (selectorRef.current && menuContentRef.current) {
+                      selectorRef.current.classList.add('visible');
+                      const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+                      if (allItems[index]) {
+                        const menuRect = menuContentRef.current.getBoundingClientRect();
+                        const itemRect = allItems[index].getBoundingClientRect();
+                        selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                      }
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    // Return to active item
+                    if (selectorRef.current && menuContentRef.current) {
+                      const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+                      if (allItems[activeIndex]) {
+                        const menuRect = menuContentRef.current.getBoundingClientRect();
+                        const itemRect = allItems[activeIndex].getBoundingClientRect();
+                        selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                      }
+                    }
+                  }}
+                >
+                  <Icon size={24} />
+                  <span>{module.name}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Spacer to push profile/logout to bottom */}
+          <div className="menu-spacer"></div>
+
+          {/* Profile */}
           <button
-            onClick={() => setMenuOpen(false)}
-            className="p-2 hover:bg-gray-100 rounded"
+            className="nav-item profile-item"
+            onMouseEnter={() => {
+              if (selectorRef.current && menuContentRef.current) {
+                selectorRef.current.classList.add('visible');
+                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+                const profileItem = menuContentRef.current.querySelector('.nav-item.profile-item');
+                if (profileItem) {
+                  const menuRect = menuContentRef.current.getBoundingClientRect();
+                  const itemRect = profileItem.getBoundingClientRect();
+                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                }
+              }
+            }}
+            onMouseLeave={() => {
+              if (selectorRef.current && menuContentRef.current) {
+                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+                if (allItems[activeIndex]) {
+                  const menuRect = menuContentRef.current.getBoundingClientRect();
+                  const itemRect = allItems[activeIndex].getBoundingClientRect();
+                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                }
+              }
+            }}
           >
-            <X size={20} />
+            <div className="profile-avatar">{userInitials}</div>
+            <span>{userName}</span>
           </button>
-        </div>
 
-        {/* Menu Items */}
-        <nav className="p-4 flex-1">
-          {modules.map((module) => {
-            const Icon = module.icon;
-            const isActive = currentModule === module.id;
-            return (
-              <button
-                key={module.id}
-                onClick={() => handleModuleChange(module.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700 font-semibold'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Icon size={20} />
-                <span>{module.name}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User Info & Logout */}
-        <div className="border-t p-4">
-          <div className="flex items-center gap-3 px-4 py-2 mb-2 text-gray-700">
-            <User size={20} />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{currentUser?.email}</p>
-            </div>
-          </div>
+          {/* Logout */}
           <button
+            className="nav-item logout"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+            onMouseEnter={() => {
+              if (selectorRef.current && menuContentRef.current) {
+                selectorRef.current.classList.add('visible');
+                const logoutItem = menuContentRef.current.querySelector('.nav-item.logout');
+                if (logoutItem) {
+                  const menuRect = menuContentRef.current.getBoundingClientRect();
+                  const itemRect = logoutItem.getBoundingClientRect();
+                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                }
+              }
+            }}
+            onMouseLeave={() => {
+              if (selectorRef.current && menuContentRef.current) {
+                const allItems = menuContentRef.current.querySelectorAll('.nav-item');
+                if (allItems[activeIndex]) {
+                  const menuRect = menuContentRef.current.getBoundingClientRect();
+                  const itemRect = allItems[activeIndex].getBoundingClientRect();
+                  selectorRef.current.style.transform = `translateY(${itemRect.top - menuRect.top}px)`;
+                }
+              }
+            }}
           >
-            <LogOut size={20} />
+            <LogOut size={24} />
             <span>Logout</span>
           </button>
         </div>
       </div>
 
-      {/* Overlay */}
-      {menuOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
+      {/* Menu Overlay */}
+      <div
+        className={`menu-overlay ${menuOpen ? 'open' : ''}`}
+        onClick={() => setMenuOpen(false)}
+      />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Module Content with Suspense for lazy-loaded components */}
-        <div className="flex-1 overflow-auto">
-          <Suspense fallback={
-            <div className="flex items-center justify-center h-full" style={{ backgroundColor: '#2870ed' }}>
-              <div className="text-white text-lg">Loading...</div>
-            </div>
-          }>
-            <CurrentModuleComponent
-              onMenuToggle={() => setMenuOpen(!menuOpen)}
-              currentModuleName={currentModuleName}
-              matrixData={matrixData}
-              lookAndFeel={lookAndFeel}
-              matrixViewState={matrixViewState}
-              setMatrixViewState={setMatrixViewState}
-            />
-          </Suspense>
-        </div>
+      <div className="h-full overflow-auto">
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full" style={{ backgroundColor: 'var(--color-primary)' }}>
+            <div className="text-white text-lg">Loading...</div>
+          </div>
+        }>
+          <CurrentModuleComponent
+            onMenuToggle={() => setMenuOpen(!menuOpen)}
+            currentModuleName={currentModuleName}
+            matrixData={matrixData}
+            lookAndFeel={lookAndFeel}
+            matrixViewState={matrixViewState}
+            setMatrixViewState={setMatrixViewState}
+          />
+        </Suspense>
       </div>
     </div>
   );
@@ -176,12 +285,6 @@ const App = () => {
   const matrixData = useMemo(() => matrixDataRaw, [matrixDataRaw]);
 
   const prevMatrixDataRef = useRef();
-  const matrixDataRefChanged = prevMatrixDataRef.current !== matrixData;
-  console.log('🟢 App.jsx render', {
-    matrixDataRefChanged,
-    matrixDataId: matrixData?.__id || 'no-id',
-    rawChanged: prevMatrixDataRef.current !== matrixDataRaw
-  });
   prevMatrixDataRef.current = matrixData;
 
   // Matrix view state - persisted at app level
@@ -211,12 +314,9 @@ const App = () => {
 
   // Save matrix view state to localStorage whenever it changes (debounced to avoid excessive writes)
   useEffect(() => {
-    console.log('🟢 App.jsx: matrixViewState changed, saving to localStorage', matrixViewState);
     const timeoutId = setTimeout(() => {
       localStorage.setItem('matrixViewState', JSON.stringify(matrixViewState));
-      console.log('🟢 App.jsx: saved to localStorage');
-    }, 300); // Debounce: wait 300ms after last change before saving
-
+    }, 300);
     return () => clearTimeout(timeoutId);
   }, [matrixViewState]);
 

@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight, AlertCircle, Loader, Trash2 } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type } from 'lucide-react';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
-import { apiGet, apiPost } from '../utils/api';
-import { clearAndReloadApp } from '../utils/clearAndReload';
+import { apiGet } from '../utils/api';
 import mainCss from '../templates/html/main.css?raw';
 import css300x250 from '../templates/html/300x250.css?raw';
 import css300x600 from '../templates/html/300x600.css?raw';
@@ -22,6 +22,7 @@ const MessageEditorDialog = ({
   deleteMessage,
   keywords,
   textFormatting = [],
+  updateTextFormatting,
   previewSize,
   setPreviewSize,
   activeTab,
@@ -56,6 +57,8 @@ const MessageEditorDialog = ({
   const [templateHtml, setTemplateHtml] = useState('');
   const [variantClassOptions, setVariantClassOptions] = useState([]);
   const [availableDimensions, setAvailableDimensions] = useState([]);
+  const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
 
   // Skip animation state (persisted to localStorage)
   const [skipAnimation, setSkipAnimation] = useState(() => {
@@ -78,6 +81,162 @@ const MessageEditorDialog = ({
   useEffect(() => {
     localStorage.setItem('messageEditor_statusSyncMode', statusSyncMode);
   }, [statusSyncMode]);
+
+  // Auto-save state (persisted to localStorage)
+  const [autoSave, setAutoSave] = useState(() => {
+    const saved = localStorage.getItem('messageEditor_autoSave');
+    return saved === 'true';
+  });
+
+  // Persist autoSave to localStorage
+  useEffect(() => {
+    localStorage.setItem('messageEditor_autoSave', autoSave);
+  }, [autoSave]);
+
+  // Track if this is the initial load to prevent auto-save on open
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Reset initial load flag when message changes
+  useEffect(() => {
+    setIsInitialLoad(true);
+    const timer = setTimeout(() => setIsInitialLoad(false), 100);
+    return () => clearTimeout(timer);
+  }, [editingMessage?.id]);
+
+  // Auto-save debounce timer ref
+  const autoSaveTimerRef = useRef(null);
+
+  // Event-based auto-save function (called from onChange handlers)
+  const triggerAutoSave = useCallback((updatedMessage) => {
+    if (!autoSave || !updatedMessage) return;
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Debounce: wait 500ms before saving
+    autoSaveTimerRef.current = setTimeout(() => {
+
+      // Build all fields to save
+      const allFields = {
+        name: updatedMessage.name,
+        number: updatedMessage.number,
+        variant: updatedMessage.variant,
+        status: updatedMessage.status,
+        poms_id: updatedMessage.poms_id,
+        start_date: updatedMessage.start_date,
+        end_date: updatedMessage.end_date,
+        template: updatedMessage.template,
+        headline: updatedMessage.headline,
+        copy1: updatedMessage.copy1,
+        copy2: updatedMessage.copy2,
+        disclaimer: updatedMessage.disclaimer,
+        flash: updatedMessage.flash,
+        cta: updatedMessage.cta,
+        landingUrl: updatedMessage.landingUrl,
+        template_variant_classes: updatedMessage.template_variant_classes,
+        image1: updatedMessage.image1,
+        image2: updatedMessage.image2,
+        image3: updatedMessage.image3,
+        image4: updatedMessage.image4,
+        image5: updatedMessage.image5,
+        image6: updatedMessage.image6,
+        video1: updatedMessage.video1,
+        comment: updatedMessage.comment,
+        headline_style: updatedMessage.headline_style,
+        copy1_style: updatedMessage.copy1_style,
+        copy2_style: updatedMessage.copy2_style,
+        disclaimer_style: updatedMessage.disclaimer_style,
+        flash_style: updatedMessage.flash_style,
+        cta_style: updatedMessage.cta_style,
+        css: updatedMessage.css
+      };
+
+      // Update message in matrix state
+      updateMessage(updatedMessage.id, allFields);
+
+      // Find synced messages (same number + variant, different id)
+      const variantCopies = messages.filter(m =>
+        m.id !== updatedMessage.id &&
+        m.number === updatedMessage.number &&
+        m.variant === updatedMessage.variant &&
+        m.status !== 'deleted'
+      );
+
+      // Sync to variant copies
+      if (variantCopies.length > 0) {
+        const excludeFields = [
+          'audience', 'pmmid', 'id', 'version',
+          'utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_term', 'utm_cd26', 'final_trafficked_url'
+        ];
+        if (statusSyncMode === 'unique') {
+          excludeFields.push('status');
+        }
+
+        const syncUpdates = Object.keys(allFields)
+          .filter(key => !excludeFields.includes(key))
+          .reduce((obj, key) => {
+            obj[key] = allFields[key];
+            return obj;
+          }, {});
+
+        variantCopies.forEach(syncedMsg => {
+          updateMessage(syncedMsg.id, syncUpdates);
+        });
+      }
+    }, 500);
+  }, [autoSave, messages, updateMessage, statusSyncMode]);
+
+  // Cleanup auto-save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Helper: update field and trigger auto-save
+  const updateField = useCallback((field, value) => {
+    const updated = { ...editingMessage, [field]: value };
+    setEditingMessage(updated);
+    triggerAutoSave(updated);
+  }, [editingMessage, triggerAutoSave]);
+
+  // Helper: update multiple fields and trigger auto-save
+  const updateFields = useCallback((updates) => {
+    const updated = { ...editingMessage, ...updates };
+    setEditingMessage(updated);
+    triggerAutoSave(updated);
+  }, [editingMessage, triggerAutoSave]);
+
+  // Auto-save debounce timer ref for text formatting
+  const textFormattingAutoSaveTimerRef = useRef(null);
+
+  // Event-based auto-save for text formatting changes
+  const triggerTextFormattingAutoSave = useCallback((updatedFormatting) => {
+    if (!autoSave || !updateTextFormatting) return;
+
+    // Clear existing timer
+    if (textFormattingAutoSaveTimerRef.current) {
+      clearTimeout(textFormattingAutoSaveTimerRef.current);
+    }
+
+    // Debounce: wait 120ms before saving
+    textFormattingAutoSaveTimerRef.current = setTimeout(() => {
+      updateTextFormatting(updatedFormatting);
+    }, 120);
+  }, [autoSave, updateTextFormatting]);
+
+  // Cleanup text formatting auto-save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (textFormattingAutoSaveTimerRef.current) {
+        clearTimeout(textFormattingAutoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   // Check if template is a non-HTML template (from keywords, not from templates folder)
   const isNonHtmlTemplate = useMemo(() => {
@@ -107,22 +266,6 @@ const MessageEditorDialog = ({
 
       return matchesMC && matchesVariant && matchesDimensions;
     });
-
-    if (match) {
-      console.log('🎨 Found matching creative for Adobe PSD:', {
-        mcNumber, mcVariant, previewSize,
-        creative: match.File_name
-      });
-    } else {
-      console.log('⚠️ No matching creative found for Adobe PSD:', {
-        mcNumber, mcVariant, previewSize,
-        availableCreatives: creatives.slice(0, 5).map(c => ({
-          MC_Number: c.MC_Number,
-          MC_Variant: c.MC_Variant,
-          File_dimensions: c.File_dimensions
-        }))
-      });
-    }
 
     return match;
   }, [isAdobePSD, editingMessage?.number, editingMessage?.variant, previewSize, creatives]);
@@ -162,6 +305,117 @@ const MessageEditorDialog = ({
 
   // Track which field/scope is currently saving
   const [savingFormatting, setSavingFormatting] = useState({ fieldName: null, scope: null });
+
+  // Track which formatting dropdown is open (only one at a time)
+  const [openFormattingDropdown, setOpenFormattingDropdown] = useState(null);
+
+  // Sync warning state
+  const [syncWarningVisible, setSyncWarningVisible] = useState(true);
+  const [syncWarningCountdown, setSyncWarningCountdown] = useState(3);
+  const [syncWarningPaused, setSyncWarningPaused] = useState(false);
+
+  // Auto-hide sync warning after 3 seconds
+  useEffect(() => {
+    if (!syncWarningVisible || syncWarningPaused || syncWarningCountdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setSyncWarningCountdown(prev => {
+        if (prev <= 1) {
+          setSyncWarningVisible(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [syncWarningVisible, syncWarningCountdown, syncWarningPaused]);
+
+  // Reset sync warning when switching messages
+  useEffect(() => {
+    setSyncWarningVisible(true);
+    setSyncWarningCountdown(3);
+    setSyncWarningPaused(false);
+  }, [editingMessage?.id]);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Check if any dropdown is open
+      const hasOpenDropdown = sizeDropdownOpen || templateDropdownOpen || openFormattingDropdown;
+      if (!hasOpenDropdown) return;
+
+      // Check if click was inside a dropdown
+      const clickedDropdown = e.target.closest('.dropdown');
+      if (clickedDropdown) return;
+
+      // Close all dropdowns
+      setSizeDropdownOpen(false);
+      setTemplateDropdownOpen(false);
+      setOpenFormattingDropdown(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sizeDropdownOpen, templateDropdownOpen, openFormattingDropdown]);
+
+  // Get new formatting entries to pass to parent for saving to matrix state
+  const getNewFormattingEntries = () => {
+    // Find the max existing ID
+    const maxId = textFormatting.reduce((max, rule) => {
+      const id = parseInt(rule.id, 10);
+      return isNaN(id) ? max : Math.max(max, id);
+    }, 0);
+
+    let nextId = maxId + 1;
+
+    const newEntries = Object.entries(editedFormattingValues)
+      .filter(([key, data]) => key.includes(':new:') && data.text)
+      .map(([key, data]) => {
+        const fieldName = key.split(':')[0];
+        const originalText = editingMessage?.[fieldName] || '';
+        const scopes = data.scopes || ['All sizes'];
+        const scopeArray = scopes.includes('All sizes') ? [] : scopes;
+        const mcScope = data.isGlobal ? '' : `${editingMessage?.number || ''}${editingMessage?.variant || ''}`;
+
+        return {
+          id: String(nextId++),
+          text_original: originalText,
+          text_formatted: data.text,
+          formatting_scope: scopeArray,
+          formatting_mc_scope: mcScope
+        };
+      });
+    return newEntries;
+  };
+
+  // Merge existing text formatting with new entries for real-time preview
+  const mergedTextFormatting = useMemo(() => {
+    const merged = [...(textFormatting || [])];
+
+    // Add new formatting entries from editedFormattingValues
+    Object.entries(editedFormattingValues).forEach(([key, data]) => {
+      if (key.includes(':new:') && data.text) {
+        // Extract field name from key (e.g., "headline:new:12345" -> "headline")
+        const fieldName = key.split(':')[0];
+        const originalText = editingMessage?.[fieldName] || '';
+        const scopes = data.scopes || ['All sizes'];
+        // Pass as array for textFormatter (empty array = all sizes)
+        const scopeArray = scopes.includes('All sizes') ? [] : scopes;
+        const mcScope = data.isGlobal !== false ? '' : `${editingMessage?.number || ''}${editingMessage?.variant || ''}`;
+
+        merged.push({
+          id: key,
+          text_original: originalText,
+          text_formatted: data.text,
+          formatting_scope: scopeArray,
+          formatting_mc_scope: mcScope
+        });
+      }
+    });
+
+    return merged;
+  }, [textFormatting, editedFormattingValues, editingMessage]);
 
   // Get formatting rules for a specific text
   const getFormattingRulesForText = (text) => {
@@ -321,8 +575,6 @@ const MessageEditorDialog = ({
 
       // Get unique dimensions from matching creatives
       const dimensions = [...new Set(matchingCreatives.map(c => c.File_dimensions))].sort();
-
-      console.log('📐 Adobe PSD dimensions for MC' + mcNumber + mcVariant + ':', dimensions);
 
       setAvailableDimensions(dimensions);
 
@@ -513,44 +765,30 @@ const MessageEditorDialog = ({
             numberVariant: `${editingMessage.number || ''}${editingMessage.variant || ''}`
           };
 
-          // Debug: log message identifiers and text formatting rules
-          // if (fieldName === 'headline') {
-          //   console.log('🔧 Preview generation for headline:', {
-          //     messageNumber: editingMessage.number,
-          //     messageVariant: editingMessage.variant,
-          //     identifiers: msgIdentifiers,
-          //     headlineText: editingMessage.headline,
-          //     textFormattingRulesCount: textFormatting?.length || 0,
-          //     hasHeadlineRules: textFormatting?.filter(r => r.text_original === editingMessage.headline).length || 0
-          //   });
-          // }
-
           // Map message fields to values (including style fields and span-formatted text)
+          // Use mergedTextFormatting for real-time preview of new formatting entries
           const fieldMap = {
             'headline': (() => {
               if (textFields.includes('headline') && editingMessage.headline) {
-                const formatted = applyTextFormattingSpans(editingMessage.headline, textFormatting, msgIdentifiers);
-                // if (formatted.includes('<span')) {
-                //   console.log('📝 Preview: Added spans to headline:', formatted.substring(0, 150) + '...');
-                // }
+                const formatted = applyTextFormattingSpans(editingMessage.headline, mergedTextFormatting, msgIdentifiers);
                 return formatted;
               }
               return editingMessage.headline;
             })(),
             'copy1': textFields.includes('copy1') && editingMessage.copy1
-              ? applyTextFormattingSpans(editingMessage.copy1, textFormatting, msgIdentifiers)
+              ? applyTextFormattingSpans(editingMessage.copy1, mergedTextFormatting, msgIdentifiers)
               : editingMessage.copy1,
             'copy2': textFields.includes('copy2') && editingMessage.copy2
-              ? applyTextFormattingSpans(editingMessage.copy2, textFormatting, msgIdentifiers)
+              ? applyTextFormattingSpans(editingMessage.copy2, mergedTextFormatting, msgIdentifiers)
               : editingMessage.copy2,
             'flash': textFields.includes('flash') && editingMessage.flash
-              ? applyTextFormattingSpans(editingMessage.flash, textFormatting, msgIdentifiers)
+              ? applyTextFormattingSpans(editingMessage.flash, mergedTextFormatting, msgIdentifiers)
               : editingMessage.flash,
             'cta': textFields.includes('cta') && editingMessage.cta
-              ? applyTextFormattingSpans(editingMessage.cta, textFormatting, msgIdentifiers)
+              ? applyTextFormattingSpans(editingMessage.cta, mergedTextFormatting, msgIdentifiers)
               : editingMessage.cta,
             'disclaimer': textFields.includes('disclaimer') && editingMessage.disclaimer
-              ? applyTextFormattingSpans(editingMessage.disclaimer, textFormatting, msgIdentifiers)
+              ? applyTextFormattingSpans(editingMessage.disclaimer, mergedTextFormatting, msgIdentifiers)
               : editingMessage.disclaimer,
             'image1': editingMessage.image1,
             'image2': editingMessage.image2,
@@ -605,7 +843,39 @@ const MessageEditorDialog = ({
     html = html.replace(/\[\[[^\]]+\]\]/g, '');
 
     // Add size class to body tag for CSS-based text formatting
-    html = html.replace(/<body([^>]*)>/i, `<body$1 class="size-${previewSize}">`);
+    // Handle both cases: body with existing class and body without class
+    if (/<body[^>]*class=/i.test(html)) {
+      // Body already has a class attribute - append to it
+      html = html.replace(/<body([^>]*class=["'])([^"']*)(['"'][^>]*)>/i, `<body$1$2 size-${previewSize}$3>`);
+    } else {
+      // Body has no class attribute - add one
+      html = html.replace(/<body([^>]*)>/i, `<body$1 class="size-${previewSize}">`);
+    }
+
+    // Add CSS for text formatting visibility
+    // Note: When scoped rules exist, text-{size} spans are generated for all sizes
+    // When all-sizes rule exists, only text-allSizes span is generated
+    // So we don't need to worry about conflicts between them
+    const textFormattingCSS = `
+      <style>
+        /* Text formatting - hide all spans by default */
+        .text-default, .text-allSizes, .text-300x250, .text-300x600, .text-640x360, .text-970x250, .text-1080x1080 {
+          display: none;
+        }
+        /* Show default text when no size class on body */
+        .text-default { display: inline; }
+        /* When body has size class, hide default and show formatted text */
+        body[class*="size-"] .text-default { display: none; }
+        body[class*="size-"] .text-allSizes { display: inline; }
+        body.size-300x250 .text-300x250 { display: inline; }
+        body.size-300x600 .text-300x600 { display: inline; }
+        body.size-640x360 .text-640x360 { display: inline; }
+        body.size-970x250 .text-970x250 { display: inline; }
+        body.size-1080x1080 .text-1080x1080 { display: inline; }
+      </style>
+    `;
+    // Inject CSS into head
+    html = html.replace(/<\/head>/i, `${textFormattingCSS}</head>`);
 
     return html;
   };
@@ -743,1343 +1013,1365 @@ const MessageEditorDialog = ({
   const scaledWidth = width * scale;
   const scaledHeight = height * scale;
 
+  // Tab configuration
+  const tabs = [
+    { id: 'naming', label: 'Naming', icon: Tag, color: 'pink' },
+    { id: 'content', label: 'Content', icon: CookingPot, color: 'blue' },
+    { id: 'generate', label: 'Generate', icon: Sparkles, color: 'purple' },
+    { id: 'styles', label: 'Styles', icon: PencilRuler, color: 'orange' },
+    { id: 'trafficking', label: 'Trafficking', icon: Rocket, color: 'green' }
+  ];
+
   // Render text input field with formatting info
   const renderTextInputWithFormatting = (fieldName, label, inputType = 'input', rows = 3) => {
-    const availableScopes = getAvailableScopes(fieldName);
-    const hasFormatting = availableScopes.length > 1; // More than just 'default'
-    const selectedScope = selectedFormattingScopes[fieldName];
     const defaultText = editingMessage?.[fieldName] || '';
+    const formattingRules = getFormattingRulesForText(defaultText);
+    const hasFormatting = formattingRules.length > 0;
+    const isAddMode = formattingAddMode[fieldName];
 
-    // Get the saved formatted text for this scope
-    const savedFormattedText = selectedScope === 'default'
-      ? defaultText
-      : getFormattedTextForScope(fieldName, selectedScope);
+    // Size options for dropdown
+    const sizeOptions = ['All sizes', '1080x1080', '970x250', '640x360', '300x600', '300x250'];
 
-    // Check if there's an edited value for this field/scope
-    const editKey = `${fieldName}:${selectedScope}`;
-    const hasEditedValue = editedFormattingValues[editKey] !== undefined;
-    const currentValue = hasEditedValue ? editedFormattingValues[editKey] : savedFormattedText;
-
-    // Check if the current edited value differs from saved
-    const hasChanges = hasEditedValue && editedFormattingValues[editKey] !== savedFormattedText;
-
-    // Also check if non-default scope differs from default (for new formatting)
-    const differsFromDefault = selectedScope !== 'default' && currentValue !== defaultText;
-    const shouldShowSave = hasChanges || (hasEditedValue && differsFromDefault && !scopeHasCustomFormatting(fieldName, selectedScope));
-
-    const handleValueChange = (value) => {
-      if (selectedScope === 'default') {
-        // Update the default message value
-        setEditingMessage({ ...editingMessage, [fieldName]: value });
-      } else {
-        // Track edited value for this field/scope
-        setEditedFormattingValues(prev => ({
-          ...prev,
-          [editKey]: value
-        }));
-      }
+    const handleDefaultValueChange = (value) => {
+      updateField(fieldName, value);
     };
 
-    const handleSaveFormatting = async () => {
-      const text_original = defaultText;
-      const text_formatted = currentValue;
+    const handleAddFormatting = () => {
+      // Add a new empty formatting entry to editedFormattingValues
+      const newKey = `${fieldName}:new:${Date.now()}`;
+      const newEntryData = {
+        text: defaultText,
+        scopes: ['All sizes'],
+        isGlobal: true,
+        isNew: true
+      };
+      setEditedFormattingValues(prev => ({
+        ...prev,
+        [newKey]: newEntryData
+      }));
+      setFormattingAddMode(prev => ({ ...prev, [fieldName]: true }));
 
-      // Determine formatting_scope
-      let formatting_scope = '';
-      if (selectedScope === 'allSizes') {
-        formatting_scope = ''; // Empty string means all sizes
-      } else if (selectedScope !== 'default') {
-        formatting_scope = selectedScope;
-      }
+      // Auto-save: if auto-save is on and there's text, save immediately
+      if (autoSave && defaultText && updateTextFormatting) {
+        // Find max ID
+        const maxId = textFormatting.reduce((max, rule) => {
+          const id = parseInt(rule.id, 10);
+          return isNaN(id) ? max : Math.max(max, id);
+        }, 0);
 
-      // Set saving state
-      setSavingFormatting({ fieldName, scope: selectedScope });
+        const newEntry = {
+          id: String(maxId + 1),
+          text_original: defaultText,
+          text_formatted: defaultText,
+          formatting_scope: [],
+          formatting_mc_scope: ''
+        };
 
-      try {
-        const response = await apiPost('/api/textformatting', {
-          text_original,
-          text_formatted,
-          formatting_scope
-        });
+        triggerTextFormattingAutoSave([...textFormatting, newEntry]);
 
-        if (response.ok) {
-          // Clear the edited value
+        // Clear this new entry from editedFormattingValues since it's now saved
+        setTimeout(() => {
           setEditedFormattingValues(prev => {
             const newValues = { ...prev };
-            delete newValues[editKey];
+            delete newValues[newKey];
             return newValues;
           });
-
-          // Reload the page to refresh data
-          clearAndReloadApp();
-        } else {
-          const error = await response.json();
-          alert(`Failed to save formatting: ${error.error || 'Unknown error'}`);
-        }
-      } catch (error) {
-        console.error('Error saving formatting:', error);
-        alert(`Error saving formatting: ${error.message}`);
-      } finally {
-        setSavingFormatting({ fieldName: null, scope: null });
+        }, 200);
       }
     };
 
-    const InputComponent = inputType === 'textarea' ? 'textarea' : 'input';
-    const isSaving = savingFormatting.fieldName === fieldName && savingFormatting.scope === selectedScope;
+    const handleFormattingChange = (key, updates, existingRule = null) => {
+      const updatedData = { ...editedFormattingValues[key], ...updates };
+
+      setEditedFormattingValues(prev => ({
+        ...prev,
+        [key]: updatedData
+      }));
+
+      // Auto-save: if this is an existing rule with an ID, update textFormatting immediately
+      if (autoSave && existingRule && existingRule.id && updateTextFormatting) {
+        // Convert updates to the textFormatting format
+        const scopeArray = updates.scopes
+          ? (updates.scopes.includes('All sizes') ? [] : updates.scopes)
+          : (existingRule.formatting_scope || []);
+        const mcScope = updates.isGlobal !== undefined
+          ? (updates.isGlobal ? '' : `${editingMessage?.number || ''}${editingMessage?.variant || ''}`)
+          : (existingRule.formatting_mc_scope || '');
+
+        const updatedFormatting = textFormatting.map(r =>
+          r.id === existingRule.id
+            ? {
+                ...r,
+                text_formatted: updates.text !== undefined ? updates.text : r.text_formatted,
+                formatting_scope: scopeArray,
+                formatting_mc_scope: mcScope
+              }
+            : r
+        );
+        triggerTextFormattingAutoSave(updatedFormatting);
+      }
+
+      // Auto-save: for NEW entries, add them to textFormatting when they have text
+      if (autoSave && !existingRule && key.includes(':new:') && updateTextFormatting) {
+        const textValue = updates.text !== undefined ? updates.text : updatedData.text;
+        if (textValue) {
+          // Build the new entry
+          const fieldName = key.split(':')[0];
+          const originalText = editingMessage?.[fieldName] || '';
+          const scopes = updatedData.scopes || ['All sizes'];
+          const scopeArray = scopes.includes('All sizes') ? [] : scopes;
+          const mcScope = updatedData.isGlobal ? '' : `${editingMessage?.number || ''}${editingMessage?.variant || ''}`;
+
+          // Find max ID
+          const maxId = textFormatting.reduce((max, rule) => {
+            const id = parseInt(rule.id, 10);
+            return isNaN(id) ? max : Math.max(max, id);
+          }, 0);
+
+          const newEntry = {
+            id: String(maxId + 1),
+            text_original: originalText,
+            text_formatted: textValue,
+            formatting_scope: scopeArray,
+            formatting_mc_scope: mcScope
+          };
+
+          // Add the new entry to textFormatting
+          triggerTextFormattingAutoSave([...textFormatting, newEntry]);
+
+          // Clear this new entry from editedFormattingValues since it's now saved
+          // Use setTimeout to avoid state update conflict
+          setTimeout(() => {
+            setEditedFormattingValues(prev => {
+              const newValues = { ...prev };
+              delete newValues[key];
+              return newValues;
+            });
+          }, 200); // After debounce completes
+        }
+      }
+    };
+
+    const handleDeleteFormatting = (key, rule) => {
+      if (rule && rule.id && updateTextFormatting) {
+        // Delete from matrix state (in-memory)
+        const updatedFormatting = textFormatting.filter(r => r.id !== rule.id);
+        updateTextFormatting(updatedFormatting);
+      } else {
+        // Just remove from local state (for new entries not yet saved)
+        setEditedFormattingValues(prev => {
+          const newValues = { ...prev };
+          delete newValues[key];
+          return newValues;
+        });
+      }
+    };
+
+    // Get new formatting entries from editedFormattingValues
+    const newFormattingEntries = Object.entries(editedFormattingValues)
+      .filter(([key]) => key.startsWith(`${fieldName}:new:`));
+
+    // If there's formatting, use single line input even for textarea fields
+    const useLineInput = hasFormatting || newFormattingEntries.length > 0;
+    const InputComponent = (inputType === 'textarea' && !useLineInput) ? 'textarea' : 'input';
 
     return (
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-sm font-medium text-gray-700">{label}</label>
-          <div className="flex gap-1">
-            {(hasFormatting || formattingAddMode[fieldName]) ? (
-              <>
-                {['1080x1080', '970x250', '640x360', '300x600', '300x250', 'allSizes', 'default'].map(scope => {
-                  const hasCustom = scopeHasCustomFormatting(fieldName, scope);
-                  const isDefault = scope === 'default';
-                  return (
-                    <button
-                      key={scope}
-                      onClick={() => setSelectedFormattingScopes(prev => ({ ...prev, [fieldName]: scope }))}
-                      className={`px-2 py-0.5 rounded text-xs ${
-                        selectedScope === scope
-                          ? 'bg-blue-600 text-white opacity-100'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      } ${isDefault || hasCustom ? 'opacity-100' : 'opacity-25'}`}
-                    >
-                      {scope}
-                    </button>
-                  );
-                })}
-              </>
-            ) : (
-              <button
-                onClick={() => toggleAddMode(fieldName)}
-                className="px-2 py-0.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 font-bold"
-                title="Add formatting"
-              >
-                +
-              </button>
-            )}
-          </div>
+      <div className="form-group">
+        {/* Label row with add button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '-2px' }}>
+          <label className="form-label" style={{ marginTop: 0, marginBottom: 0 }}>{label}</label>
+          <button
+            onClick={handleAddFormatting}
+            className="link-button"
+            style={{ marginBottom: 0, padding: '2px 0' }}
+          >
+            <Type size={14} />
+            <span>add text formatting</span>
+          </button>
         </div>
-        <div className="relative">
+
+        {/* Main input */}
+        <div style={{ position: 'relative' }}>
           <InputComponent
-            type={inputType === 'input' ? 'text' : undefined}
-            value={currentValue}
-            onChange={(e) => handleValueChange(e.target.value)}
-            rows={inputType === 'textarea' ? rows : undefined}
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-            disabled={selectedScope !== 'default' && isSaving}
+            type="text"
+            value={defaultText}
+            onChange={(e) => handleDefaultValueChange(e.target.value)}
+            rows={inputType === 'textarea' && !useLineInput ? rows : undefined}
+            className={inputType === 'textarea' && !useLineInput ? 'form-textarea' : 'form-input'}
+            style={{ width: '100%' }}
           />
-          {selectedScope !== 'default' && shouldShowSave && (
-            <button
-              onClick={handleSaveFormatting}
-              disabled={isSaving}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              style={inputType === 'textarea' ? { top: '20px', transform: 'none' } : {}}
-            >
-              {isSaving ? (
-                <>
-                  <Loader size={12} className="animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Formatting'
-              )}
-            </button>
-          )}
           {isGeneratingContent && (
-            <div className={`absolute right-3 ${inputType === 'textarea' ? 'top-3' : 'top-1/2 transform -translate-y-1/2'}`}>
-              <Loader size={16} className="animate-spin text-purple-600" />
+            <div style={{
+              position: 'absolute',
+              right: '12px',
+              top: inputType === 'textarea' && !useLineInput ? '12px' : '50%',
+              transform: inputType === 'textarea' && !useLineInput ? 'none' : 'translateY(-50%)'
+            }}>
+              <Loader size={16} className="animate-spin" style={{ color: '#9b59b6' }} />
             </div>
           )}
         </div>
-        {selectedScope !== 'default' && !shouldShowSave && (
-          <div className="mt-1 text-xs text-blue-600">
-            Editing formatted variant for {selectedScope}. Default text remains unchanged.
-          </div>
-        )}
+
+        {/* Existing formatting rules */}
+        {formattingRules.map((rule, idx) => {
+          const key = `${fieldName}:existing:${rule.id || idx}`;
+          const editedData = editedFormattingValues[key];
+          const currentText = editedData?.text ?? rule.text_formatted;
+          // Parse scopes - can be comma-separated string, array, or empty for "All sizes"
+          let parsedScopes = [];
+          if (Array.isArray(rule.formatting_scope)) {
+            parsedScopes = rule.formatting_scope.filter(s => s);
+          } else if (rule.formatting_scope && typeof rule.formatting_scope === 'string') {
+            parsedScopes = rule.formatting_scope.split(',').map(s => s.trim()).filter(s => s);
+          }
+          const savedScopes = parsedScopes.length > 0 ? parsedScopes : ['All sizes'];
+          const currentScopes = editedData?.scopes ?? savedScopes;
+          const isGlobal = editedData?.isGlobal ?? true;
+          const hasChanges = editedData && (
+            editedData.text !== rule.text_formatted ||
+            JSON.stringify(editedData.scopes) !== JSON.stringify(savedScopes)
+          );
+          const isSaving = savingFormatting.fieldName === fieldName && savingFormatting.scope === key;
+
+          const toggleScope = (scope) => {
+            let newScopes;
+            if (scope === 'All sizes') {
+              newScopes = ['All sizes'];
+            } else if (currentScopes.includes('All sizes')) {
+              newScopes = [scope];
+            } else if (currentScopes.includes(scope)) {
+              newScopes = currentScopes.filter(s => s !== scope);
+              if (newScopes.length === 0) newScopes = ['All sizes'];
+            } else {
+              newScopes = [...currentScopes, scope];
+            }
+            handleFormattingChange(key, { text: currentText, scopes: newScopes, isGlobal }, rule);
+          };
+
+          const scopeLabel = currentScopes.includes('All sizes')
+            ? 'All sizes'
+            : currentScopes.length > 1
+              ? `${currentScopes.length} sizes`
+              : currentScopes[0];
+
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <input
+                type="text"
+                className="form-input"
+                value={currentText}
+                onChange={(e) => handleFormattingChange(key, { text: e.target.value, scopes: currentScopes, isGlobal }, rule)}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <div className={`dropdown ${openFormattingDropdown === key ? 'open' : ''}`} style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  className="dropdown-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenFormattingDropdown(openFormattingDropdown === key ? null : key);
+                  }}
+                  style={{ minWidth: '90px' }}
+                >
+                  <span>{scopeLabel}</span>
+                  <ChevronDown size={16} />
+                </button>
+                <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} style={{ minWidth: '140px', left: 'auto', right: 0 }}>
+                  {sizeOptions.map(size => {
+                    const isSelected = size === 'All sizes'
+                      ? currentScopes.includes('All sizes')
+                      : currentScopes.includes(size);
+                    return (
+                      <div
+                        key={size}
+                        className={`dropdown-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => toggleScope(size)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '3px',
+                          border: '1px solid var(--white-50)',
+                          background: isSelected ? 'var(--color-white)' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {isSelected && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
+                        </div>
+                        {size}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className={`toggle-tag ${isGlobal ? 'active' : ''}`}
+                onClick={() => handleFormattingChange(key, { text: currentText, scopes: currentScopes, isGlobal: !isGlobal }, rule)}
+              >
+                {isGlobal ? 'Global' : 'Local'}
+              </button>
+              <button
+                className="row-delete-btn"
+                onClick={() => handleDeleteFormatting(key, rule)}
+                title="Remove formatting"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          );
+        })}
+
+        {/* New formatting entries */}
+        {newFormattingEntries.map(([key, data]) => {
+          const isSaving = savingFormatting.fieldName === fieldName && savingFormatting.scope === key;
+          const hasContent = data.text && data.text !== defaultText;
+          const currentScopes = data.scopes || ['All sizes'];
+
+          const toggleNewScope = (scope) => {
+            let newScopes;
+            if (scope === 'All sizes') {
+              newScopes = ['All sizes'];
+            } else if (currentScopes.includes('All sizes')) {
+              newScopes = [scope];
+            } else if (currentScopes.includes(scope)) {
+              newScopes = currentScopes.filter(s => s !== scope);
+              if (newScopes.length === 0) newScopes = ['All sizes'];
+            } else {
+              newScopes = [...currentScopes, scope];
+            }
+            handleFormattingChange(key, { ...data, scopes: newScopes });
+          };
+
+          const scopeLabel = currentScopes.includes('All sizes')
+            ? 'All sizes'
+            : currentScopes.length > 1
+              ? `${currentScopes.length} sizes`
+              : currentScopes[0];
+
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <input
+                type="text"
+                className="form-input"
+                value={data.text}
+                onChange={(e) => handleFormattingChange(key, { ...data, text: e.target.value })}
+                placeholder="Enter formatted text..."
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <div className={`dropdown ${openFormattingDropdown === key ? 'open' : ''}`} style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  className="dropdown-trigger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenFormattingDropdown(openFormattingDropdown === key ? null : key);
+                  }}
+                  style={{ minWidth: '90px' }}
+                >
+                  <span>{scopeLabel}</span>
+                  <ChevronDown size={16} />
+                </button>
+                <div className="dropdown-menu" onClick={(e) => e.stopPropagation()} style={{ minWidth: '140px', left: 'auto', right: 0 }}>
+                  {sizeOptions.map(size => {
+                    const isSelected = size === 'All sizes'
+                      ? currentScopes.includes('All sizes')
+                      : currentScopes.includes(size);
+                    return (
+                      <div
+                        key={size}
+                        className={`dropdown-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => toggleNewScope(size)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '3px',
+                          border: '1px solid var(--white-50)',
+                          background: isSelected ? 'var(--color-white)' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {isSelected && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
+                        </div>
+                        {size}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className={`toggle-tag ${data.isGlobal ? 'active' : ''}`}
+                onClick={() => handleFormattingChange(key, { ...data, isGlobal: !data.isGlobal })}
+              >
+                {data.isGlobal ? 'Global' : 'Local'}
+              </button>
+              <button
+                className="row-delete-btn"
+                onClick={() => handleDeleteFormatting(key, null)}
+                title="Remove formatting"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          );
+        })}
       </div>
     );
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Edit Messaging Card</h2>
+  // Render preview panel
+  const renderPreview = () => (
+    <div className="dialog-preview">
+      <div className="preview-header">
+        <button
+          className={`skip-animation-btn ${skipAnimation ? 'checked' : ''}`}
+          onClick={() => setSkipAnimation(!skipAnimation)}
+        >
+          <div className="checkbox-box">
+            <Check size={12} />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (hasPrevious) {
-                  setEditingMessage(uniqueVariants[currentIndex - 1]);
-                } else {
-                  // Wrap around to last message
-                  setEditingMessage(uniqueVariants[uniqueVariants.length - 1]);
-                }
-              }}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Previous variant"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div className="flex items-center gap-2 px-3 py-1 rounded" style={{ backgroundColor: statusColor }}>
-              <span className="font-bold text-lg" style={{ color: textColor }}>{editingMessage.number || ''}</span>
-              <span className="text-sm font-semibold" style={{ color: textColor }}>{editingMessage.variant || ''}</span>
-            </div>
-            <button
-              onClick={() => {
-                if (hasNext) {
-                  setEditingMessage(uniqueVariants[currentIndex + 1]);
-                } else {
-                  // Wrap around to first message
-                  setEditingMessage(uniqueVariants[0]);
-                }
-              }}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Next variant"
-            >
-              <ChevronRight size={20} />
-            </button>
-            <select
-              value={availableDimensions.length > 0 ? previewSize : 'N/A'}
-              onChange={(e) => setPreviewSize(e.target.value)}
-              disabled={!editingMessage.template || availableDimensions.length === 0}
-              className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed mr-2"
-            >
-              {availableDimensions.length > 0 ? (
-                availableDimensions.map(dim => (
-                  <option key={dim} value={dim}>{dim}</option>
-                ))
-              ) : (
-                <option value="N/A">N/A</option>
-              )}
-            </select>
-            <button
-              onClick={() => setEditingMessage(null)}
-              className="p-1 hover:bg-gray-100 rounded"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="border-b bg-gray-50">
-          <div className="flex">
-            <button
-              onClick={() => setActiveTab('naming')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'naming'
-                  ? 'bg-white border-b-2 border-blue-500 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Naming
-            </button>
-            <button
-              onClick={() => setActiveTab('content')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'content'
-                  ? 'bg-white border-b-2 border-blue-500 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Content
-            </button>
-            <button
-              onClick={() => setActiveTab('styles')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'styles'
-                  ? 'bg-white border-b-2 border-blue-500 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Styles
-            </button>
-            <button
-              onClick={() => setActiveTab('trafficking')}
-              className={`px-6 py-3 font-medium transition-colors ${
-                activeTab === 'trafficking'
-                  ? 'bg-white border-b-2 border-blue-500 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Trafficking
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Naming Tab */}
-          {activeTab === 'naming' && (
-            <>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <input
-                    type="text"
-                    value={editingMessage.name || ''}
-                    onChange={(e) => setEditingMessage({ ...editingMessage, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Audience Key</label>
-                    <input
-                      type="text"
-                      value={editingMessage.audience || ''}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Topic Key</label>
-                    <input
-                      type="text"
-                      value={editingMessage.topic || ''}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Number</label>
-                    <input
-                      type="number"
-                      value={editingMessage.number || ''}
-                      onChange={(e) => {
-                        const newNumber = parseInt(e.target.value) || 0;
-                        setEditingMessage({ ...editingMessage, number: newNumber });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Variant</label>
-                    <input
-                      type="text"
-                      value={editingMessage.variant || ''}
-                      onChange={(e) => {
-                        const newVariant = e.target.value;
-                        setEditingMessage({ ...editingMessage, variant: newVariant });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Version (auto-increments)</label>
-                    <input
-                      type="number"
-                      value={editingMessage.version || 1}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-sm font-medium text-gray-700">Status</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setStatusSyncMode('all')}
-                          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                            statusSyncMode === 'all'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                          title="Sync status to all variant copies"
-                        >
-                          all
-                        </button>
-                        <button
-                          onClick={() => setStatusSyncMode('unique')}
-                          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                            statusSyncMode === 'unique'
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                          title="Keep status unique per audience"
-                        >
-                          unique
-                        </button>
-                      </div>
-                    </div>
-                    {(() => {
-                      const keywordValues = keywords.messages && keywords.messages.status;
-                      const statusOptions = keywordValues && keywordValues.length > 0
-                        ? keywordValues
-                        : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
-
-                      const currentStatus = (editingMessage.status || 'PLANNED').toUpperCase();
-                      const statusColors = settings.getStatusColors();
-                      const currentColor = statusColors[currentStatus] || statusColors['PLANNED'] || '#ffff00';
-
-                      return (
-                        <select
-                          value={editingMessage.status || 'PLANNED'}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, status: e.target.value })}
-                          className="w-full px-3 py-2 border-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-semibold"
-                          style={{
-                            backgroundColor: currentColor,
-                            borderColor: currentColor,
-                            color: getTextColor(currentColor)
-                          }}
-                        >
-                          {statusOptions.map((val) => {
-                            const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
-                            return (
-                              <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
-                                {val}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
-                    <input
-                      type="text"
-                      value={editingMessage.id || ''}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">POMS ID</label>
-                    <input
-                      type="text"
-                      value={editingMessage.poms_id || ''}
-                      onChange={(e) => setEditingMessage({ ...editingMessage, poms_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="POMS ID"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PMMID (Auto-generated)</label>
-                    <input
-                      type="text"
-                      value={generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed font-mono text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={editingMessage.start_date || ''}
-                      onChange={(e) => setEditingMessage({ ...editingMessage, start_date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={editingMessage.end_date || ''}
-                      onChange={(e) => setEditingMessage({ ...editingMessage, end_date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
-                    <select
-                      value={editingMessage.template || ''}
-                      onChange={(e) => setEditingMessage({ ...editingMessage, template: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select a template</option>
-                      {/* HTML Templates from templates folder */}
-                      {templates.map(t => (
-                        <option key={t.name} value={t.name}>{t.name}</option>
-                      ))}
-                      {/* Keyword Templates from Keywords sheet (e.g., Adobe PSD, Adobe AEP) */}
-                      {keywords?.messages?.template?.map(t => (
-                        <option key={`kw-${t}`} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+          <span>Skip animation</span>
+        </button>
+        <div className={`dropdown ${sizeDropdownOpen ? 'open' : ''}`}>
+          <button
+            className="dropdown-trigger"
+            onClick={() => setSizeDropdownOpen(!sizeDropdownOpen)}
+            disabled={!editingMessage.template || availableDimensions.length === 0}
+          >
+            <span>{availableDimensions.length > 0 ? previewSize : 'N/A'}</span>
+            <ChevronDown size={16} />
+          </button>
+          <div className="dropdown-menu">
+            {availableDimensions.map(dim => (
+              <div
+                key={dim}
+                className={`dropdown-item ${previewSize === dim ? 'selected' : ''}`}
+                onClick={() => {
+                  setPreviewSize(dim);
+                  setSizeDropdownOpen(false);
+                }}
+              >
+                {dim}
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="preview-frame">
+        {editingMessage.template ? (
+          <div style={{
+            width: `${scaledWidth}px`,
+            height: `${scaledHeight}px`,
+            overflow: 'hidden',
+            position: 'relative',
+            boxShadow: 'var(--ui-shadow)'
+          }}>
+            <iframe
+              key={`${editingMessage.id}-${previewSize}-${mergedTextFormatting.map(r => r.text_formatted || '').join('')}`}
+              srcDoc={generatePreviewHtml()}
+              style={{
+                width: `${width}px`,
+                height: `${height}px`,
+                transform: shouldScale ? 'scale(0.5)' : 'none',
+                transformOrigin: 'top left',
+                border: 0,
+                position: 'absolute',
+                top: 0,
+                left: 0
+              }}
+              title="Message Preview"
+              sandbox="allow-same-origin allow-scripts"
+            />
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--white-50)',
+            fontSize: '13px',
+            height: '300px'
+          }}>
+            Select a template to see preview
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-              {/* Naming Tab Footer */}
-              <div className="border-t bg-white px-6 py-4 flex items-center justify-between shrink-0">
+  return createPortal(
+    <div className="dialog-overlay overlay-animated open">
+      <div className="dialog-panel dialog-animated open">
+        <div className={`dialog-layout ${isWide ? 'wide-layout' : ''}`}>
+          {/* LEFT SIDEBAR */}
+          <div className="dialog-sidebar">
+            <h2 className="dialog-title">Edit</h2>
+
+            {/* Navigation */}
+            <div className="dialog-nav">
+              <button
+                onClick={() => {
+                  if (hasPrevious) {
+                    setEditingMessage(uniqueVariants[currentIndex - 1]);
+                  } else {
+                    setEditingMessage(uniqueVariants[uniqueVariants.length - 1]);
+                  }
+                }}
+                className="dialog-nav-btn"
+                title="Previous variant"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div
+                className="dialog-nav-indicator"
+                style={{
+                  backgroundColor: statusColor,
+                  color: textColor,
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  paddingTop: '3px',
+                  position: 'relative'
+                }}
+              >
+                {editingMessage.number || ''}{editingMessage.variant || ''}
+                {/* Sync warning badge */}
+                {!isNonHtmlTemplate && syncedMessages.length > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-6px',
+                      background: '#f97316',
+                      color: '#fff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      borderRadius: '10px',
+                      padding: '2px 6px',
+                      minWidth: '18px',
+                      textAlign: 'center',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                    }}
+                    title={`${syncedMessages.length} other message${syncedMessages.length > 1 ? 's' : ''} will sync`}
+                  >
+                    {syncedMessages.length}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (hasNext) {
+                    setEditingMessage(uniqueVariants[currentIndex + 1]);
+                  } else {
+                    setEditingMessage(uniqueVariants[0]);
+                  }
+                }}
+                className="dialog-nav-btn"
+                title="Next variant"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            {/* Auto-Save Toggle */}
+            <button
+              className={`dialog-toggle ${autoSave ? 'checked' : ''}`}
+              onClick={() => setAutoSave(!autoSave)}
+            >
+              <div className="checkbox-box">
+                <Check size={14} />
+              </div>
+              <span>Auto-Save</span>
+            </button>
+
+            {/* Vertical Tabs */}
+            <div className="dialog-tabs">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`dialog-tab ${activeTab === tab.id ? 'active' : ''}`}
+                >
+                  <h2 className="text-xl">{tab.label}</h2>
+                  <tab.icon size={18} />
+                </button>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="dialog-actions">
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to delete this message?')) {
+                    deleteMessage(editingMessage.id);
+                    setEditingMessage(null);
+                  }
+                }}
+                className="link-button"
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setEditingMessage(null)}
+                  className="btn btn-secondary btn-lg"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
                 <button
                   onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this message?')) {
-                      deleteMessage(editingMessage.id);
-                      setEditingMessage(null);
+                    // Add new text formatting entries to matrix state
+                    const newEntries = getNewFormattingEntries();
+                    if (newEntries.length > 0 && updateTextFormatting) {
+                      updateTextFormatting([...textFormatting, ...newEntries]);
+                      setEditedFormattingValues({});
                     }
+                    // Save all message fields
+                    const allFields = {
+                      name: editingMessage.name,
+                      number: editingMessage.number,
+                      variant: editingMessage.variant,
+                      status: editingMessage.status,
+                      poms_id: editingMessage.poms_id,
+                      start_date: editingMessage.start_date,
+                      end_date: editingMessage.end_date,
+                      template: editingMessage.template,
+                      headline: editingMessage.headline,
+                      copy1: editingMessage.copy1,
+                      copy2: editingMessage.copy2,
+                      disclaimer: editingMessage.disclaimer,
+                      flash: editingMessage.flash,
+                      cta: editingMessage.cta,
+                      landingUrl: editingMessage.landingUrl,
+                      template_variant_classes: editingMessage.template_variant_classes,
+                      image1: editingMessage.image1,
+                      image2: editingMessage.image2,
+                      image3: editingMessage.image3,
+                      image4: editingMessage.image4,
+                      image5: editingMessage.image5,
+                      image6: editingMessage.image6,
+                      video1: editingMessage.video1,
+                      comment: editingMessage.comment,
+                      headline_style: editingMessage.headline_style,
+                      copy1_style: editingMessage.copy1_style,
+                      copy2_style: editingMessage.copy2_style,
+                      disclaimer_style: editingMessage.disclaimer_style,
+                      flash_style: editingMessage.flash_style,
+                      cta_style: editingMessage.cta_style,
+                      css: editingMessage.css
+                    };
+                    updateMessageWithSync(editingMessage.id, allFields);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
+                  className="btn btn-secondary btn-lg"
+                  style={{ flex: 1 }}
                 >
-                  <Trash2 size={16} />
-                  Delete Message
+                  Save
                 </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingMessage(null)}
-                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        name: editingMessage.name,
-                        number: editingMessage.number,
-                        variant: editingMessage.variant,
-                        status: editingMessage.status,
-                        poms_id: editingMessage.poms_id,
-                        start_date: editingMessage.start_date,
-                        end_date: editingMessage.end_date,
-                        template: editingMessage.template
-                      });
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        name: editingMessage.name,
-                        number: editingMessage.number,
-                        variant: editingMessage.variant,
-                        status: editingMessage.status,
-                        poms_id: editingMessage.poms_id,
-                        start_date: editingMessage.start_date,
-                        end_date: editingMessage.end_date,
-                        template: editingMessage.template
-                      });
-                      setEditingMessage(null);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save & Close
-                  </button>
-                </div>
               </div>
-            </>
-          )}
+              <button
+                onClick={() => {
+                  // Add new text formatting entries to matrix state
+                  const newEntries = getNewFormattingEntries();
+                  if (newEntries.length > 0 && updateTextFormatting) {
+                    updateTextFormatting([...textFormatting, ...newEntries]);
+                    setEditedFormattingValues({});
+                  }
+                  // Save all message fields
+                  const allFields = {
+                    name: editingMessage.name,
+                    number: editingMessage.number,
+                    variant: editingMessage.variant,
+                    status: editingMessage.status,
+                    poms_id: editingMessage.poms_id,
+                    start_date: editingMessage.start_date,
+                    end_date: editingMessage.end_date,
+                    template: editingMessage.template,
+                    headline: editingMessage.headline,
+                    copy1: editingMessage.copy1,
+                    copy2: editingMessage.copy2,
+                    disclaimer: editingMessage.disclaimer,
+                    flash: editingMessage.flash,
+                    cta: editingMessage.cta,
+                    landingUrl: editingMessage.landingUrl,
+                    template_variant_classes: editingMessage.template_variant_classes,
+                    image1: editingMessage.image1,
+                    image2: editingMessage.image2,
+                    image3: editingMessage.image3,
+                    image4: editingMessage.image4,
+                    image5: editingMessage.image5,
+                    image6: editingMessage.image6,
+                    video1: editingMessage.video1,
+                    comment: editingMessage.comment,
+                    headline_style: editingMessage.headline_style,
+                    copy1_style: editingMessage.copy1_style,
+                    copy2_style: editingMessage.copy2_style,
+                    disclaimer_style: editingMessage.disclaimer_style,
+                    flash_style: editingMessage.flash_style,
+                    cta_style: editingMessage.cta_style,
+                    css: editingMessage.css
+                  };
+                  updateMessageWithSync(editingMessage.id, allFields);
+                  setEditingMessage(null);
+                }}
+                className="btn btn-primary btn-lg"
+              >
+                Save & Close
+              </button>
+            </div>
+          </div>
 
-          {/* Content Tab */}
-          {activeTab === 'content' && (
-            <>
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className={isWide ? 'space-y-6' : 'flex gap-6'}>
-                  {/* Preview - Top position for wide sizes */}
-                  {isWide && (
-                    <div className="border border-gray-300 rounded bg-gray-50 p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium text-gray-700">Preview</div>
-                        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={skipAnimation}
-                            onChange={(e) => setSkipAnimation(e.target.checked)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span>skip animation</span>
-                        </label>
+          {/* CONTENT AREA */}
+          <div className="dialog-content-area">
+            {/* MAIN CONTENT */}
+            <div className="dialog-main custom-scrollbar">
+              {/* Naming Tab */}
+              {activeTab === 'naming' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Name</label>
+                    <input
+                      type="text"
+                      value={editingMessage.name || ''}
+                      onChange={(e) => updateField('name', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div className="form-grid-2">
+                    <div className="form-group">
+                      <label className="form-label">Audience Key</label>
+                      <input
+                        type="text"
+                        value={editingMessage.audience || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Topic Key</label>
+                      <input
+                        type="text"
+                        value={editingMessage.topic || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-grid-4">
+                    <div className="form-group">
+                      <label className="form-label">Number</label>
+                      <input
+                        type="number"
+                        value={editingMessage.number || ''}
+                        onChange={(e) => {
+                          const newNumber = parseInt(e.target.value) || 0;
+                          updateField('number', newNumber);
+                        }}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Variant</label>
+                      <input
+                        type="text"
+                        value={editingMessage.variant || ''}
+                        onChange={(e) => {
+                          const newVariant = e.target.value;
+                          updateField('variant', newVariant);
+                        }}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Version</label>
+                      <input
+                        type="number"
+                        value={editingMessage.version || 1}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label className="form-label">Status</label>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            onClick={() => setStatusSyncMode('all')}
+                            className={`toggle-tag ${statusSyncMode === 'all' ? 'active' : ''}`}
+                          >
+                            all
+                          </button>
+                          <button
+                            onClick={() => setStatusSyncMode('unique')}
+                            className={`toggle-tag ${statusSyncMode === 'unique' ? 'active' : ''}`}
+                          >
+                            unique
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex justify-center">
-                        {editingMessage.template ? (
-                          <div style={{
-                            width: `${scaledWidth}px`,
-                            height: `${scaledHeight}px`,
-                            overflow: 'hidden',
-                            position: 'relative'
-                          }}>
-                            <iframe
-                              key={`${editingMessage.id}-${previewSize}`}
-                              srcDoc={generatePreviewHtml()}
-                              style={{
-                                width: `${width}px`,
-                                height: `${height}px`,
-                                transform: shouldScale ? 'scale(0.5)' : 'none',
-                                transformOrigin: 'top left',
-                                border: 0,
-                                position: 'absolute',
-                                top: 0,
-                                left: 0
+                      {(() => {
+                        const keywordValues = keywords.messages && keywords.messages.status;
+                        const statusOptions = keywordValues && keywordValues.length > 0
+                          ? keywordValues
+                          : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
+
+                        return (
+                          <select
+                            value={editingMessage.status || 'PLANNED'}
+                            onChange={(e) => updateField('status', e.target.value)}
+                            className="form-input"
+                            style={{
+                              backgroundColor: statusColor,
+                              borderColor: statusColor,
+                              color: textColor,
+                              fontWeight: 600
+                            }}
+                          >
+                            {statusOptions.map((val) => {
+                              const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
+                              return (
+                                <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
+                                  {val}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="form-grid-1-1-2">
+                    <div className="form-group">
+                      <label className="form-label">ID</label>
+                      <input
+                        type="text"
+                        value={editingMessage.id || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">POMS ID</label>
+                      <input
+                        type="text"
+                        value={editingMessage.poms_id || ''}
+                        onChange={(e) => updateField('poms_id', e.target.value)}
+                        className="form-input"
+                        style={{ fontSize: '12px' }}
+                        placeholder="POMS ID"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">PMMID (Auto-generated)</label>
+                      <input
+                        type="text"
+                        value={generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5, fontFamily: 'monospace', fontSize: '11px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-grid-1-1-2">
+                    <div className="form-group">
+                      <label className="form-label">Start Date</label>
+                      <input
+                        type="date"
+                        value={editingMessage.start_date || ''}
+                        onChange={(e) => updateField('start_date', e.target.value)}
+                        onClick={(e) => e.target.showPicker()}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">End Date</label>
+                      <input
+                        type="date"
+                        value={editingMessage.end_date || ''}
+                        onChange={(e) => updateField('end_date', e.target.value)}
+                        onClick={(e) => e.target.showPicker()}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Template</label>
+                      <div className={`dropdown ${templateDropdownOpen ? 'open' : ''}`} style={{ width: '100%' }}>
+                        <button
+                          className="dropdown-trigger"
+                          onClick={() => setTemplateDropdownOpen(!templateDropdownOpen)}
+                          style={{ width: '100%', justifyContent: 'space-between' }}
+                        >
+                          <span>{editingMessage.template || 'Select a template'}</span>
+                          <ChevronDown size={16} />
+                        </button>
+                        <div className="dropdown-menu" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                          <div
+                            className={`dropdown-item ${!editingMessage.template ? 'selected' : ''}`}
+                            onClick={() => {
+                              updateField('template', '');
+                              setTemplateDropdownOpen(false);
+                            }}
+                          >
+                            Select a template
+                          </div>
+                          {/* HTML Templates from templates folder */}
+                          {templates.map(t => (
+                            <div
+                              key={t.name}
+                              className={`dropdown-item ${editingMessage.template === t.name ? 'selected' : ''}`}
+                              onClick={() => {
+                                updateField('template', t.name);
+                                setTemplateDropdownOpen(false);
                               }}
-                              title="Message Preview"
-                              sandbox="allow-same-origin allow-scripts"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}>
-                            Select a template to see preview
-                          </div>
-                        )}
+                            >
+                              {t.name}
+                            </div>
+                          ))}
+                          {/* Keyword Templates from Keywords sheet (e.g., Adobe PSD, Adobe AEP) */}
+                          {keywords?.messages?.template?.map(t => (
+                            <div
+                              key={`kw-${t}`}
+                              className={`dropdown-item ${editingMessage.template === t ? 'selected' : ''}`}
+                              onClick={() => {
+                                updateField('template', t);
+                                setTemplateDropdownOpen(false);
+                              }}
+                            >
+                              {t}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Content Tab */}
+              {activeTab === 'content' && (
+                <>
+                  {/* Notice for non-HTML templates */}
+                  {isNonHtmlTemplate && (
+                    <div style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid var(--white-20)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <AlertCircle size={18} style={{ color: 'var(--white-80)', flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ fontSize: '13px' }}>
+                        <p style={{ fontWeight: 600, marginBottom: '4px' }}>Non-HTML Template: {editingMessage?.template}</p>
+                        <p style={{ color: 'var(--white-70)' }}>Content fields are disabled for this template type. Use external tools to edit the creative.</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Content Fields */}
-                  <div className={isWide ? 'w-full space-y-4' : 'w-[60%] space-y-4'}>
-                    {/* Notice for non-HTML templates */}
-                    {isNonHtmlTemplate && (
-                      <div className="bg-blue-50 border border-blue-300 rounded p-3 mb-4">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
-                          <div className="text-sm text-blue-800">
-                            <p className="font-semibold">Non-HTML Template: {editingMessage?.template}</p>
-                            <p>Content fields are disabled for this template type. Use external tools (e.g., Adobe Photoshop, After Effects) to edit the creative.</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Warning about synced fields - only show for HTML templates */}
-                    {!isNonHtmlTemplate && syncedMessages.length > 0 && (
-                      <div className="bg-yellow-50 border border-yellow-300 rounded p-3">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={16} />
-                          <div className="text-sm">
-                            <p className="font-semibold text-yellow-800 mb-1">
-                              Content Sync Warning: {syncedMessages.length} other message{syncedMessages.length > 1 ? 's' : ''} will be updated
-                            </p>
-                            <p className="text-yellow-700 mb-2">
-                              Changes to Template, Template Variant Classes, Landing URL, Headline, Copy 1, Copy 2, Disclaimer, Flash, CTA, and Image fields will be automatically applied to:
-                            </p>
-                            <ul className="text-yellow-700 list-disc list-inside">
-                              {syncedMessages.map(m => {
-                                const aud = audiences.find(a => a.key === m.audience);
-                                return (
-                                  <li key={m.id}>
-                                    <span className="font-medium">{aud ? aud.name : m.audience}</span>
-                                    {' '}({m.name})
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={isNonHtmlTemplate ? 'opacity-50 pointer-events-none' : ''}>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div style={{ opacity: isNonHtmlTemplate ? 0.5 : 1, pointerEvents: isNonHtmlTemplate ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                    <div className="form-group">
+                      <label className="form-label">
                         Template Variant Classes
                         {variantClassOptions.length > 0 && (
-                          <span className="text-xs text-gray-500 ml-1">({variantClassOptions.length} options)</span>
+                          <span style={{ fontSize: '11px', color: 'var(--white-50)', marginLeft: '8px' }}>({variantClassOptions.length} options)</span>
                         )}
                       </label>
                       {variantClassOptions.length > 0 ? (
-                        <div className="border border-gray-300 rounded p-2 min-h-[42px]">
-                          <div className="flex flex-wrap gap-1">
-                            {variantClassOptions.map(option => {
-                              const selectedClasses = (editingMessage.template_variant_classes || '').split(/\s+/).filter(c => c);
-                              const isSelected = selectedClasses.includes(option);
+                        <div style={{
+                          background: 'var(--white-10)',
+                          border: '1px solid var(--white-20)',
+                          borderRadius: '5px',
+                          padding: '8px',
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '4px'
+                        }}>
+                          {variantClassOptions.map(option => {
+                            const selectedClasses = (editingMessage.template_variant_classes || '').split(/\s+/).filter(c => c);
+                            const isSelected = selectedClasses.includes(option);
 
-                              return (
-                                <button
-                                  key={option}
-                                  type="button"
-                                  onClick={() => {
-                                    let newClasses;
-                                    if (isSelected) {
-                                      // Remove the class
-                                      newClasses = selectedClasses.filter(c => c !== option);
-                                    } else {
-                                      // Add the class
-                                      newClasses = [...selectedClasses, option];
-                                    }
-                                    setEditingMessage({
-                                      ...editingMessage,
-                                      template_variant_classes: newClasses.join(' ')
-                                    });
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                                    isSelected
-                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                                  }`}
-                                >
-                                  {option}
-                                </button>
-                              );
-                            })}
-                          </div>
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => {
+                                  let newClasses;
+                                  if (isSelected) {
+                                    newClasses = selectedClasses.filter(c => c !== option);
+                                  } else {
+                                    newClasses = [...selectedClasses, option];
+                                  }
+                                  setEditingMessage({
+                                    ...editingMessage,
+                                    template_variant_classes: newClasses.join(' ')
+                                  });
+                                }}
+                                className={`toggle-tag ${isSelected ? 'active' : ''}`}
+                                style={{ fontSize: 'var(--font-size-xs)' }}
+                              >
+                                {option}
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : (
                         <input
                           type="text"
                           value={editingMessage.template_variant_classes || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, template_variant_classes: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('template_variant_classes', e.target.value)}
+                          className="form-input"
                           placeholder="Select a template with variant options or enter manually"
                         />
                       )}
                     </div>
 
                     {renderTextInputWithFormatting('headline', 'Headline', 'input')}
-
                     {renderTextInputWithFormatting('copy1', 'Copy 1', 'textarea', 3)}
-
                     {renderTextInputWithFormatting('copy2', 'Copy 2', 'input')}
-
                     {renderTextInputWithFormatting('disclaimer', 'Disclaimer', 'textarea', 2)}
-
                     {renderTextInputWithFormatting('flash', 'Flash', 'input')}
-
                     {renderTextInputWithFormatting('cta', 'CTA', 'input')}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Landing URL</label>
+                    <div className="form-group">
+                      <label className="form-label">Landing URL</label>
                       <input
                         type="text"
                         value={editingMessage.landingUrl || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, landingUrl: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => updateField('landingUrl', e.target.value)}
+                        className="form-input"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 1</label>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Image 1</label>
                         <input
                           type="text"
                           value={editingMessage.image1 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image1: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image1', e.target.value)}
+                          className="form-input"
                           placeholder="Image URL or path"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 2</label>
+                      <div className="form-group">
+                        <label className="form-label">Image 2</label>
                         <input
                           type="text"
                           value={editingMessage.image2 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image2: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image2', e.target.value)}
+                          className="form-input"
                           placeholder="Image URL or path"
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 3</label>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Image 3</label>
                         <input
                           type="text"
                           value={editingMessage.image3 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image3: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image3', e.target.value)}
+                          className="form-input"
                           placeholder="Image URL or path"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 4</label>
+                      <div className="form-group">
+                        <label className="form-label">Image 4</label>
                         <input
                           type="text"
                           value={editingMessage.image4 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image4: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image4', e.target.value)}
+                          className="form-input"
                           placeholder="Image URL or path"
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 5 (Logo)</label>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Image 5 (Logo)</label>
                         <input
                           type="text"
                           value={editingMessage.image5 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image5: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image5', e.target.value)}
+                          className="form-input"
                           placeholder="Logo image URL or path"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Image 6 (Sticker)</label>
+                      <div className="form-group">
+                        <label className="form-label">Image 6 (Sticker)</label>
                         <input
                           type="text"
                           value={editingMessage.image6 || ''}
-                          onChange={(e) => setEditingMessage({ ...editingMessage, image6: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onChange={(e) => updateField('image6', e.target.value)}
+                          className="form-input"
                           placeholder="Sticker image URL or path"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Video 1 (Background)</label>
+                    <div className="form-group">
+                      <label className="form-label">Video 1 (Background)</label>
                       <input
                         type="text"
                         value={editingMessage.video1 || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, video1: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => updateField('video1', e.target.value)}
+                        className="form-input"
                         placeholder="Video URL or path"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+                    <div className="form-group">
+                      <label className="form-label">Comment</label>
                       <textarea
                         value={editingMessage.comment || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, comment: e.target.value })}
+                        onChange={(e) => updateField('comment', e.target.value)}
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="form-textarea"
+                        style={{ minHeight: '60px' }}
                       />
                     </div>
-                    </div>{/* End of disabled wrapper for non-HTML templates */}
                   </div>
+                </>
+              )}
 
-                  {/* Right Column - Preview (40%) for narrow sizes */}
-                  {!isWide && (
-                    <div className="w-[40%]">
-                      <div className="border border-gray-300 rounded bg-gray-50 p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-sm font-medium text-gray-700">Preview</div>
-                          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={skipAnimation}
-                              onChange={(e) => setSkipAnimation(e.target.checked)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span>skip animation</span>
-                          </label>
-                        </div>
-                        {editingMessage.template ? (
-                          <div style={{
-                            width: `${scaledWidth}px`,
-                            height: `${scaledHeight}px`,
-                            overflow: 'hidden',
-                            position: 'relative',
-                            margin: '0 auto'
-                          }}>
-                            <iframe
-                              key={`${editingMessage.id}-${previewSize}`}
-                              srcDoc={generatePreviewHtml()}
-                              style={{
-                                width: `${width}px`,
-                                height: `${height}px`,
-                                transform: shouldScale ? 'scale(0.5)' : 'none',
-                                transformOrigin: 'top left',
-                                border: 0,
-                                position: 'absolute',
-                                top: 0,
-                                left: 0
-                              }}
-                              title="Message Preview"
-                              sandbox="allow-same-origin allow-scripts"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
-                            Select a template to see preview
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Content Tab Footer */}
-              <div className="border-t bg-white px-6 py-4 flex items-center justify-between shrink-0">
-                <button
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this message?')) {
-                      deleteMessage(editingMessage.id);
-                      setEditingMessage(null);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
-                >
-                  <Trash2 size={16} />
-                  Delete Message
-                </button>
-                <div className="flex items-center gap-2">
+              {/* Generate Tab */}
+              {activeTab === 'generate' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
+                  <Sparkles size={48} style={{ color: 'var(--white-50)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>AI Content Generation</h3>
+                    <p style={{ color: 'var(--white-60)', fontSize: '13px', maxWidth: '300px' }}>
+                      Generate headlines, copy, and CTAs using AI based on your topic and audience.
+                    </p>
+                  </div>
                   <button
                     onClick={handleGenerateContent}
                     disabled={isGeneratingContent}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="btn btn-primary"
+                    style={{ padding: '12px 24px' }}
                   >
                     {isGeneratingContent ? (
-                      <>
-                        <Loader size={16} className="animate-spin" />
-                        Generating...
-                      </>
+                      <><Loader size={16} className="animate-spin" /> Generating...</>
                     ) : (
-                      'Generate'
+                      <><Sparkles size={16} /> Generate Content</>
                     )}
                   </button>
-                  <button
-                    onClick={() => setEditingMessage(null)}
-                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        headline: editingMessage.headline,
-                        copy1: editingMessage.copy1,
-                        copy2: editingMessage.copy2,
-                        disclaimer: editingMessage.disclaimer,
-                        flash: editingMessage.flash,
-                        cta: editingMessage.cta,
-                        landingUrl: editingMessage.landingUrl,
-                        template: editingMessage.template,
-                        template_variant_classes: editingMessage.template_variant_classes,
-                        image1: editingMessage.image1,
-                        image2: editingMessage.image2,
-                        image3: editingMessage.image3,
-                        image4: editingMessage.image4,
-                        image5: editingMessage.image5,
-                        image6: editingMessage.image6,
-                        comment: editingMessage.comment
-                      });
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        headline: editingMessage.headline,
-                        copy1: editingMessage.copy1,
-                        copy2: editingMessage.copy2,
-                        disclaimer: editingMessage.disclaimer,
-                        flash: editingMessage.flash,
-                        cta: editingMessage.cta,
-                        landingUrl: editingMessage.landingUrl,
-                        template: editingMessage.template,
-                        template_variant_classes: editingMessage.template_variant_classes,
-                        image1: editingMessage.image1,
-                        image2: editingMessage.image2,
-                        image3: editingMessage.image3,
-                        image4: editingMessage.image4,
-                        image5: editingMessage.image5,
-                        image6: editingMessage.image6,
-                        comment: editingMessage.comment
-                      });
-                      setEditingMessage(null);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save & Close
-                  </button>
                 </div>
-              </div>
-            </>
-          )}
+              )}
 
-          {/* Styles Tab */}
-          {activeTab === 'styles' && (
-            <>
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className={isWide ? 'space-y-6' : 'flex gap-6'}>
-                  {/* Preview - Top position for wide sizes */}
-                  {isWide && (
-                    <div className="border border-gray-300 rounded bg-gray-50 p-4">
-                      <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
-                      <div className="flex justify-center">
-                        {editingMessage.template ? (
-                          <div style={{
-                            width: `${scaledWidth}px`,
-                            height: `${scaledHeight}px`,
-                            overflow: 'hidden',
-                            position: 'relative'
-                          }}>
-                            <iframe
-                              key={`${editingMessage.id}-${previewSize}-styles`}
-                              srcDoc={generatePreviewHtml()}
-                              style={{
-                                width: `${width}px`,
-                                height: `${height}px`,
-                                transform: shouldScale ? 'scale(0.5)' : 'none',
-                                transformOrigin: 'top left',
-                                border: 0,
-                                position: 'absolute',
-                                top: 0,
-                                left: 0
-                              }}
-                              title="Message Preview"
-                              sandbox="allow-same-origin allow-scripts"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center text-gray-400 text-sm" style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}>
-                            Select a template to see preview
-                          </div>
-                        )}
+              {/* Styles Tab */}
+              {activeTab === 'styles' && (
+                <>
+                  {isNonHtmlTemplate && (
+                    <div style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid var(--white-20)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <AlertCircle size={18} style={{ color: 'var(--white-80)', flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ fontSize: '13px' }}>
+                        <p style={{ fontWeight: 600, marginBottom: '4px' }}>Non-HTML Template: {editingMessage?.template}</p>
+                        <p style={{ color: 'var(--white-70)' }}>Style fields are disabled for this template type.</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Style Fields */}
-                  <div className={isWide ? 'w-full space-y-4' : 'w-[60%] space-y-4'}>
-                    {/* Notice for non-HTML templates */}
-                    {isNonHtmlTemplate && (
-                      <div className="bg-blue-50 border border-blue-300 rounded p-3 mb-4">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
-                          <div className="text-sm text-blue-800">
-                            <p className="font-semibold">Non-HTML Template: {editingMessage?.template}</p>
-                            <p>Style fields are disabled for this template type.</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className={isNonHtmlTemplate ? 'opacity-50 pointer-events-none space-y-4' : 'space-y-4'}>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Headline Style</label>
+                  <div style={{ opacity: isNonHtmlTemplate ? 0.5 : 1, pointerEvents: isNonHtmlTemplate ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                    <div className="form-group">
+                      <label className="form-label">Headline Style</label>
                       <input
                         type="text"
                         value={editingMessage.headline_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, headline_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('headline_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., color: #333; font-size: 24px;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 1 Style</label>
+                    <div className="form-group">
+                      <label className="form-label">Copy 1 Style</label>
                       <input
                         type="text"
                         value={editingMessage.copy1_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, copy1_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('copy1_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., color: #666; font-size: 14px;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Copy 2 Style</label>
+                    <div className="form-group">
+                      <label className="form-label">Copy 2 Style</label>
                       <input
                         type="text"
                         value={editingMessage.copy2_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, copy2_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('copy2_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., color: #666; font-size: 14px;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Disclaimer Style</label>
+                    <div className="form-group">
+                      <label className="form-label">Disclaimer Style</label>
                       <input
                         type="text"
                         value={editingMessage.disclaimer_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, disclaimer_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('disclaimer_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., color: #999; font-size: 10px;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Flash Style</label>
+                    <div className="form-group">
+                      <label className="form-label">Flash Style</label>
                       <input
                         type="text"
                         value={editingMessage.flash_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, flash_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('flash_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., background: #ff0000; color: white;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">CTA Style</label>
+                    <div className="form-group">
+                      <label className="form-label">CTA Style</label>
                       <input
                         type="text"
                         value={editingMessage.cta_style || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, cta_style: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        onChange={(e) => updateField('cta_style', e.target.value)}
+                        className="form-input"
+                        style={{ fontFamily: 'monospace', fontSize: '12px' }}
                         placeholder="e.g., background: #007bff; color: white;"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Custom CSS</label>
+                    <div className="form-group">
+                      <label className="form-label">Custom CSS</label>
                       <textarea
                         value={editingMessage.css || ''}
-                        onChange={(e) => setEditingMessage({ ...editingMessage, css: e.target.value })}
+                        onChange={(e) => updateField('css', e.target.value)}
                         rows={10}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                        placeholder="/* Enter custom CSS here */
-.headline_text_1 {
-  color: #333;
-  font-size: 24px;
-}
-
-.copy_text_1 {
-  color: #666;
-  line-height: 1.5;
-}"
+                        className="form-textarea"
+                        style={{ fontFamily: 'monospace', fontSize: '11px' }}
+                        placeholder="/* Enter custom CSS here */"
                       />
                     </div>
-                    </div>{/* End of disabled wrapper for non-HTML templates */}
+                  </div>
+                </>
+              )}
+
+              {/* Trafficking Tab */}
+              {activeTab === 'trafficking' && (
+                <>
+                  <div className="form-grid-2">
+                    <div className="form-group">
+                      <label className="form-label">UTM Campaign</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_campaign || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">UTM Source</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_source || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">UTM Medium</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_medium || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">UTM Content</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_content || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">UTM Term</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_term || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">UTM CD26</label>
+                      <input
+                        type="text"
+                        value={computedTrafficking.utm_cd26 || ''}
+                        disabled
+                        className="form-input"
+                        style={{ opacity: 0.5 }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Right Column - Preview (40%) for narrow sizes */}
-                  {!isWide && (
-                    <div className="w-[40%]">
-                      <div className="border border-gray-300 rounded bg-gray-50 p-4 sticky top-6">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Preview</div>
-                        {editingMessage.template ? (
-                          <div style={{
-                            width: `${scaledWidth}px`,
-                            height: `${scaledHeight}px`,
-                            overflow: 'hidden',
-                            position: 'relative',
-                            margin: '0 auto'
-                          }}>
-                            <iframe
-                              key={`${editingMessage.id}-${previewSize}-styles`}
-                              srcDoc={generatePreviewHtml()}
-                              style={{
-                                width: `${width}px`,
-                                height: `${height}px`,
-                                transform: shouldScale ? 'scale(0.5)' : 'none',
-                                transformOrigin: 'top left',
-                                border: 0,
-                                position: 'absolute',
-                                top: 0,
-                                left: 0
-                              }}
-                              title="Message Preview"
-                              sandbox="allow-same-origin allow-scripts"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center w-full h-[600px] text-gray-400 text-sm">
-                            Select a template to see preview
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  <div className="form-group">
+                    <label className="form-label">Final Trafficked URL</label>
+                    <textarea
+                      value={computedTrafficking.final_trafficked_url || ''}
+                      disabled
+                      className="form-textarea"
+                      style={{ opacity: 0.5, fontFamily: 'monospace', fontSize: '11px', minHeight: '80px' }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
 
-              {/* Styles Tab Footer */}
-              <div className="border-t bg-white px-6 py-4 flex items-center justify-between shrink-0">
-                <button
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this message?')) {
-                      deleteMessage(editingMessage.id);
-                      setEditingMessage(null);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
-                >
-                  <Trash2 size={16} />
-                  Delete Message
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingMessage(null)}
-                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        headline_style: editingMessage.headline_style,
-                        copy1_style: editingMessage.copy1_style,
-                        copy2_style: editingMessage.copy2_style,
-                        disclaimer_style: editingMessage.disclaimer_style,
-                        flash_style: editingMessage.flash_style,
-                        cta_style: editingMessage.cta_style,
-                        css: editingMessage.css
-                      });
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        headline_style: editingMessage.headline_style,
-                        copy1_style: editingMessage.copy1_style,
-                        copy2_style: editingMessage.copy2_style,
-                        disclaimer_style: editingMessage.disclaimer_style,
-                        flash_style: editingMessage.flash_style,
-                        cta_style: editingMessage.cta_style,
-                        css: editingMessage.css
-                      });
-                      setEditingMessage(null);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save & Close
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Trafficking Tab */}
-          {activeTab === 'trafficking' && (
-            <>
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM Campaign</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_campaign || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Campaign identifier"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM Source</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_source || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Traffic source"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM Medium</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_medium || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Marketing medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM Content</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_content || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Ad variation identifier"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM Term</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_term || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Keyword"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">UTM CD26</label>
-                  <input
-                    type="text"
-                    value={computedTrafficking.utm_cd26 || ''}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-                    placeholder="Custom dimension"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Final Trafficked URL</label>
-                <textarea
-                  value={computedTrafficking.final_trafficked_url || ''}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed font-mono text-sm"
-                  placeholder="Complete URL with all parameters"
-                  rows={3}
-                />
-              </div>
-              </div>
-
-              {/* Trafficking Tab Footer */}
-              <div className="border-t bg-white px-6 py-4 flex items-center justify-between shrink-0">
-                <button
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this message?')) {
-                      deleteMessage(editingMessage.id);
-                      setEditingMessage(null);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
-                >
-                  <Trash2 size={16} />
-                  Delete Message
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingMessage(null)}
-                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        utm_campaign: editingMessage.utm_campaign,
-                        utm_source: editingMessage.utm_source,
-                        utm_medium: editingMessage.utm_medium,
-                        utm_content: editingMessage.utm_content,
-                        utm_term: editingMessage.utm_term,
-                        utm_cd26: editingMessage.utm_cd26,
-                        final_trafficked_url: editingMessage.final_trafficked_url
-                      });
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateMessageWithSync(editingMessage.id, {
-                        utm_campaign: editingMessage.utm_campaign,
-                        utm_source: editingMessage.utm_source,
-                        utm_medium: editingMessage.utm_medium,
-                        utm_content: editingMessage.utm_content,
-                        utm_term: editingMessage.utm_term,
-                        utm_cd26: editingMessage.utm_cd26,
-                        final_trafficked_url: editingMessage.final_trafficked_url
-                      });
-                      setEditingMessage(null);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Save & Close
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+            {/* PREVIEW PANEL */}
+            {renderPreview()}
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

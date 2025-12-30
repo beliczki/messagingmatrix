@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users as UsersIcon, Key, X, Check, AlertCircle, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import PageHeader from './PageHeader';
 import AIAssistant from './AIAssistant';
 
 const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
@@ -127,16 +126,10 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader
-        onMenuToggle={onMenuToggle}
-        title={currentModuleName || 'Users'}
-        lookAndFeel={lookAndFeel}
-      />
-
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
-      <div className="p-8">
+      <div className="matrix-view-container">
+        <div className="p-8">
         <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-lg shadow-sm p-8">
             <div className="flex items-center justify-between mb-6">
@@ -210,6 +203,7 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
 
@@ -431,11 +425,13 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
         </div>
       )}
 
-      {/* AI Assistant */}
-      <AIAssistant
-        moduleContext={{ module: 'users' }}
-        matrixData={matrixData}
-      />
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <AIAssistant
+          moduleContext={{ module: 'users' }}
+          matrixData={matrixData}
+        />
+      </div>
     </div>
   );
 };

@@ -1,0 +1,392 @@
+/* ========================================
+   TOOLBAR COMPONENT STYLES
+   Matches style-guide.html exactly
+   ======================================== */
+
+/* --- Toolbar Toggle Button (52x52 teal square) --- */
+.toolbar-toggle {
+  position: fixed;
+  top: var(--space-6);
+  right: var(--space-6);
+  width: 52px;
+  height: 52px;
+  background: var(--toolbar-color);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-shadow);
+  color: var(--color-white);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all var(--transition-base);
+}
+
+.toolbar-toggle:hover {
+  background: var(--toolbar-color);
+}
+
+/* --- Toolbar Panel (opens below toggle button) --- */
+.toolbar {
+  position: fixed;
+  /* Top-left of panel at bottom-right of toggle button */
+  top: calc(var(--space-6) + 46px + 8px);
+  right: calc(var(--space-6) + 46px);
+  width: 280px;
+  background: var(--toolbar-color);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--ui-shadow);
+  z-index: 100;
+  overflow: hidden;
+
+  /* Animation - same as menu */
+  transform-origin: top right;
+  transform: scale(0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--transition-bounce),
+    opacity var(--transition-base);
+}
+
+.toolbar.open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* --- Drag Handle --- */
+.toolbar-drag-row {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2);
+  cursor: grab;
+  color: var(--color-white);
+  opacity: 0.4;
+}
+
+/* --- Content --- */
+.toolbar-content {
+  padding: 2rem;
+  padding-top: 0;
+}
+
+/* --- View Mode Switcher --- */
+.view-modes {
+  display: flex;
+  gap: var(--space-1);
+  background: rgba(255, 255, 255, 0.15);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+}
+
+.view-mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-white);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all var(--transition-fast);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-mode-btn:hover {
+  opacity: 1;
+}
+
+.view-mode-btn.active {
+  background: var(--color-white);
+  color: var(--toolbar-color);
+  opacity: 1;
+}
+
+/* --- Filter Pills --- */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 0 var(--space-3);
+  height: 36px;
+  width: 100%;
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filter-pill:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.filter-pill-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  outline: none;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.filter-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.filter-pill-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--color-white);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.filter-pill-badge.zero {
+  background: #ff6130;
+}
+
+/* --- Sliders --- */
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.slider-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slider-label {
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+}
+
+.slider-value {
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
+}
+
+.slider-input {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--color-white);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Zoom Controls --- */
+.zoom-controls {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+.zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.zoom-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: var(--color-white);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.zoom-btn:hover {
+  background: var(--color-white);
+  color: var(--toolbar-color);
+}
+
+.zoom-value {
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  min-width: 60px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.zoom-fit {
+  cursor: pointer;
+}
+
+.zoom-fit:hover {
+  text-decoration: underline;
+}
+
+/* --- Navigation Pad --- */
+.nav-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: repeat(3, 36px);
+  gap: var(--space-1);
+  justify-content: center;
+}
+
+.nav-pad-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-white);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.nav-pad-btn:hover {
+  background: var(--color-white);
+  color: var(--toolbar-color);
+}
+
+.nav-pad-btn.center {
+  border-radius: var(--radius-md);
+}
+
+/* --- Filter Dropdown Menus --- */
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-pill-text {
+  white-space: nowrap;
+  flex: 1;
+  text-align: left;
+}
+
+.filter-pill-chevron {
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.filter-pill-chevron.open {
+  transform: rotate(180deg);
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: var(--toolbar-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ui-shadow);
+  padding: var(--space-2);
+  z-index: 200;
+}
+
+.filter-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+
+.filter-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.filter-dropdown-item svg {
+  flex-shrink: 0;
+  color: var(--color-white);
+}
+
+.filter-dropdown-item svg.hidden {
+  visibility: hidden;
+}
+
+.filter-dropdown-item svg.visible {
+  visibility: visible;
+}
+
+.filter-dropdown-empty {
+  padding: var(--space-3);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+/* Status chip in dropdown */
+.status-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}

@@ -110,7 +110,7 @@ const FeedTableView = ({
   const columns = feedStructure.split(',').map(col => col.trim());
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 97px - 57px)', width: '100%' }}>
+    <div className="bg-white overflow-hidden flex flex-col" style={{ height: '100%', width: '100%' }}>
       <div className="flex-1 overflow-auto" style={{ width: '100%' }}>
         <table className="border-collapse" style={{ width: 'max-content', minWidth: '100%' }}>
           <thead className="bg-gray-100 sticky top-0">
@@ -130,13 +130,13 @@ const FeedTableView = ({
                 </td>
               </tr>
             ) : (
-              filteredMessages.map((msg) => {
+              filteredMessages.map((msg, rowIdx) => {
                 const status = (msg.status || 'PLANNED').toUpperCase();
                 const colors = getStatusColors(status);
 
                 return (
                   <tr
-                    key={msg.id}
+                    key={`${msg.id}-${rowIdx}`}
                     onClick={() => onMessageClick(msg)}
                     className={`${colors.bg} border-b border-gray-200 cursor-pointer hover:bg-opacity-80 transition-colors`}
                   >

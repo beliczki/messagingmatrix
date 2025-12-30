@@ -37,7 +37,6 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
 
   // Return original text if no text or no rules
   if (!text || !formattingRules || formattingRules.length === 0) {
-    // console.log('⏩ Returning early:', { hasText: !!text, hasRules: !!formattingRules, rulesLength: formattingRules?.length });
     return text;
   }
 
@@ -46,13 +45,21 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
     // Must match text exactly
     if (rule.text_original !== text) return false;
 
-    // Check MC scope: empty array = global (apply to all), or must include this messageId
-    if (rule.formatting_mc_scope && rule.formatting_mc_scope.length > 0) {
+    // Check MC scope: empty = global (apply to all), or must include this messageId
+    // Handle both array and comma-separated string formats
+    let mcScopeArray = [];
+    if (Array.isArray(rule.formatting_mc_scope)) {
+      mcScopeArray = rule.formatting_mc_scope.filter(s => s);
+    } else if (rule.formatting_mc_scope && typeof rule.formatting_mc_scope === 'string') {
+      mcScopeArray = rule.formatting_mc_scope.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    if (mcScopeArray.length > 0) {
       if (!messageId) {
         // console.log('⚠️ MC Scope rule exists but no messageId provided:', {
         //   text: text.substring(0, 40),
         //   ruleId: rule.id,
-        //   mcScope: rule.formatting_mc_scope
+        //   mcScope: mcScopeArray
         // });
         return false;
       }
@@ -79,14 +86,14 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
 
       // Check if any identifier matches any value in the MC scope
       const matches = identifiersToCheck.some(identifier =>
-        rule.formatting_mc_scope.includes(identifier)
+        mcScopeArray.includes(identifier)
       );
 
       // Debug MC scope matching for this specific text
       // console.log('🔍 Checking MC Scope match:', {
       //   text: text.substring(0, 40),
       //   ruleId: rule.id,
-      //   mcScope: rule.formatting_mc_scope,
+      //   mcScope: mcScopeArray,
       //   identifiersChecked: identifiersToCheck,
       //   matches: matches
       // });
@@ -104,12 +111,18 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
 
   // If no matching rules, return original text as-is
   if (matchingRules.length === 0) {
-    // console.log('❌ No matching rules found for:', text.substring(0, 40));
     return text;
   }
 
+  // Helper to parse formatting_scope (can be array or comma-separated string)
+  const parseScopeArray = (scope) => {
+    if (Array.isArray(scope)) return scope.filter(s => s);
+    if (scope && typeof scope === 'string') return scope.split(',').map(s => s.trim()).filter(s => s);
+    return [];
+  };
+
   // Check if we have any scoped rules (rules with non-empty scope)
-  const hasScopedRules = matchingRules.some(rule => rule.formatting_scope && rule.formatting_scope.length > 0);
+  const hasScopedRules = matchingRules.some(rule => parseScopeArray(rule.formatting_scope).length > 0);
 
   // Build spans for all variants
   const spans = [];
@@ -119,19 +132,25 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
     // Default span (fallback)
     spans.push(`<span class="text-default">${text}</span>`);
 
+    // Find any "all sizes" rule (empty scope) to use as fallback for sizes without specific rules
+    const allSizesRule = matchingRules.find(rule => parseScopeArray(rule.formatting_scope).length === 0);
+    const allSizesFallback = allSizesRule ? allSizesRule.text_formatted : text;
+
     // Create a map of size -> formatted text
     const sizeTextMap = {};
     matchingRules.forEach(rule => {
-      if (rule.formatting_scope && rule.formatting_scope.length > 0) {
-        rule.formatting_scope.forEach(size => {
+      const scopeArray = parseScopeArray(rule.formatting_scope);
+      if (scopeArray.length > 0) {
+        scopeArray.forEach(size => {
           sizeTextMap[size] = rule.text_formatted;
         });
       }
     });
 
     // Generate span for each size
+    // Priority: scoped rule > all-sizes rule > original text
     allSizes.forEach(size => {
-      const textForSize = sizeTextMap[size] || text; // Use formatted if in scope, otherwise original
+      const textForSize = sizeTextMap[size] || allSizesFallback;
       spans.push(`<span class="text-${size}">${textForSize}</span>`);
     });
   } else {
@@ -140,7 +159,7 @@ export const applyTextFormattingSpans = (text, formattingRules, messageId = null
     spans.push(`<span class="text-default">${text}</span>`);
 
     // Find the formatted text from the all-sizes rule
-    const allSizesRule = matchingRules.find(rule => !rule.formatting_scope || rule.formatting_scope.length === 0);
+    const allSizesRule = matchingRules.find(rule => parseScopeArray(rule.formatting_scope).length === 0);
     if (allSizesRule) {
       spans.push(`<span class="text-allSizes">${allSizesRule.text_formatted}</span>`);
     }
@@ -170,8 +189,16 @@ export const applyTextFormatting = (text, size, formattingRules, messageId = nul
       return false;
     }
 
-    // Check MC scope: empty array = global (apply to all), or must include this messageId
-    if (rule.formatting_mc_scope && rule.formatting_mc_scope.length > 0) {
+    // Check MC scope: empty = global (apply to all), or must include this messageId
+    // Handle both array and comma-separated string formats
+    let mcScopeArray = [];
+    if (Array.isArray(rule.formatting_mc_scope)) {
+      mcScopeArray = rule.formatting_mc_scope.filter(s => s);
+    } else if (rule.formatting_mc_scope && typeof rule.formatting_mc_scope === 'string') {
+      mcScopeArray = rule.formatting_mc_scope.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    if (mcScopeArray.length > 0) {
       if (!messageId) return false;
 
       // Build list of identifiers to check (same logic as applyTextFormattingSpans)
@@ -192,20 +219,27 @@ export const applyTextFormatting = (text, size, formattingRules, messageId = nul
 
       // Check if any identifier matches
       const matches = identifiersToCheck.some(identifier =>
-        rule.formatting_mc_scope.includes(identifier)
+        mcScopeArray.includes(identifier)
       );
 
       if (!matches) return false;
     }
 
-    // Check size scope
-    // Empty scope array means apply to all sizes
-    if (!rule.formatting_scope || rule.formatting_scope.length === 0) {
+    // Check size scope - handle both array and comma-separated string formats
+    let scopeArray = [];
+    if (Array.isArray(rule.formatting_scope)) {
+      scopeArray = rule.formatting_scope.filter(s => s);
+    } else if (rule.formatting_scope && typeof rule.formatting_scope === 'string') {
+      scopeArray = rule.formatting_scope.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    // Empty scope means apply to all sizes
+    if (scopeArray.length === 0) {
       return true;
     }
 
     // Otherwise, check if current size is in the scope
-    return rule.formatting_scope.includes(size);
+    return scopeArray.includes(size);
   });
 
   // Return formatted text if match found, otherwise original

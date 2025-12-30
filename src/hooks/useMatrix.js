@@ -6,6 +6,110 @@ import { generatePMMID, generateTopicKey, generateTraffickingFields } from '../u
 // Module-level cache to persist across hook calls
 let cachedMatrixResult = null;
 
+// Normalize value for comparison (treat empty string, null, undefined as equivalent)
+const normalizeValue = (val) => {
+  if (val === null || val === undefined || val === '') return '';
+  return val;
+};
+
+// Check if two values are equivalent (lenient comparison)
+const valuesEqual = (a, b) => {
+  const normA = normalizeValue(a);
+  const normB = normalizeValue(b);
+
+  // Both empty
+  if (normA === '' && normB === '') return true;
+
+  // Same value
+  if (normA === normB) return true;
+
+  // Compare as strings for number/string equivalence (e.g., "1" vs 1)
+  if (String(normA) === String(normB)) return true;
+
+  return false;
+};
+
+// Deep compare two values for equality (lenient)
+const deepEqual = (a, b) => {
+  // Handle primitives and empty values
+  if (valuesEqual(a, b)) return true;
+
+  // If one is object and other isn't (after normalization), not equal
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  if (a === null || b === null) return false;
+
+  // Array comparison
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, i) => deepEqual(item, b[i]));
+  }
+
+  // Object comparison - only compare keys that have non-empty values
+  const keysA = Object.keys(a).filter(k => normalizeValue(a[k]) !== '');
+  const keysB = Object.keys(b).filter(k => normalizeValue(b[k]) !== '');
+
+  // Get union of non-empty keys
+  const allKeys = new Set([...keysA, ...keysB]);
+
+  return [...allKeys].every(key => deepEqual(a[key], b[key]));
+};
+
+// Compare arrays by ID and track changes
+const computeArrayChanges = (original, current, entityType) => {
+  const changes = {
+    added: [],      // New items (by ID)
+    modified: [],   // Modified items (by ID)
+    deleted: [],    // Deleted items (by ID)
+    changedFields: {} // Map of id -> [changed field names]
+  };
+
+  if (!original || !current) return changes;
+
+  const originalMap = new Map(original.map(item => [String(item.id), item]));
+  const currentMap = new Map(current.map(item => [String(item.id), item]));
+
+  // Find added and modified
+  current.forEach(item => {
+    const id = String(item.id);
+    const originalItem = originalMap.get(id);
+
+    if (!originalItem) {
+      // New item
+      changes.added.push(id);
+    } else {
+      // Check for modifications
+      const changedFields = [];
+      Object.keys(item).forEach(key => {
+        if (!deepEqual(item[key], originalItem[key])) {
+          changedFields.push(key);
+        }
+      });
+      // Also check for removed fields
+      Object.keys(originalItem).forEach(key => {
+        if (!(key in item) && !changedFields.includes(key)) {
+          changedFields.push(key);
+        }
+      });
+
+      if (changedFields.length > 0) {
+        changes.modified.push(id);
+        changes.changedFields[id] = changedFields;
+      }
+    }
+  });
+
+  // Find deleted
+  original.forEach(item => {
+    const id = String(item.id);
+    if (!currentMap.has(id)) {
+      changes.deleted.push(id);
+    }
+  });
+
+  return changes;
+};
+
 export const useMatrix = (currentUser = null) => {
   // State
   const [audiences, setAudiences] = useState([]);
@@ -20,6 +124,16 @@ export const useMatrix = (currentUser = null) => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+
+  // Original state (loaded from spreadsheet)
+  const [originalState, setOriginalState] = useState({
+    audiences: [],
+    topics: [],
+    messages: [],
+    assets: [],
+    creatives: [],
+    textFormatting: []
+  });
 
   // Rebuild message lookup index whenever messages change
   useEffect(() => {
@@ -47,6 +161,7 @@ export const useMatrix = (currentUser = null) => {
 
       const data = await sheets.loadAll();
 
+      // Store as current state
       setAudiences(data.audiences);
       setTopics(data.topics);
       setMessages(data.messages);
@@ -55,6 +170,16 @@ export const useMatrix = (currentUser = null) => {
       setCreatives(data.creatives || []);
       setTextFormatting(data.textFormatting || []);
       setLastSync(new Date());
+
+      // Store deep copy as original state (baseline for change tracking)
+      setOriginalState({
+        audiences: JSON.parse(JSON.stringify(data.audiences || [])),
+        topics: JSON.parse(JSON.stringify(data.topics || [])),
+        messages: JSON.parse(JSON.stringify(data.messages || [])),
+        assets: JSON.parse(JSON.stringify(data.assets || [])),
+        creatives: JSON.parse(JSON.stringify(data.creatives || [])),
+        textFormatting: JSON.parse(JSON.stringify(data.textFormatting || []))
+      });
     } catch (err) {
       console.error('Load error:', err);
       setError(err.message);
@@ -65,13 +190,6 @@ export const useMatrix = (currentUser = null) => {
 
   // Save data to sheets
   const save = useCallback(async (feedData = null, feedFields = null, assetsData = null, creativesData = null) => {
-    console.log('💾 [useMatrix.save] called with:', {
-      hasFeedData: !!feedData,
-      hasFeedFields: !!feedFields,
-      hasAssetsData: !!assetsData,
-      hasCreativesData: !!creativesData,
-      creativesCount: creativesData?.length || 0
-    });
     setIsSaving(true);
     setError(null);
 
@@ -116,13 +234,18 @@ export const useMatrix = (currentUser = null) => {
       //   });
       // }
 
-      console.log('💾 [useMatrix.save] calling sheets.saveAll with creativesData:', {
-        creativesCount: creativesData?.length || 0,
-        firstCreative: creativesData?.[0] ? JSON.stringify(creativesData[0]).substring(0, 200) : 'none'
-      });
       await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData);
-      console.log('✅ [useMatrix.save] sheets.saveAll completed successfully');
       setLastSync(new Date());
+
+      // Reset original state to current state (change counter goes to 0)
+      setOriginalState({
+        audiences: JSON.parse(JSON.stringify(audiences)),
+        topics: JSON.parse(JSON.stringify(topics)),
+        messages: JSON.parse(JSON.stringify(messages)),
+        assets: JSON.parse(JSON.stringify(assets)),
+        creatives: JSON.parse(JSON.stringify(creatives)),
+        textFormatting: JSON.parse(JSON.stringify(textFormatting))
+      });
     } catch (err) {
       console.error('❌ [useMatrix.save] Error saving:', err);
       setError(err.message);
@@ -130,7 +253,7 @@ export const useMatrix = (currentUser = null) => {
     } finally {
       setIsSaving(false);
     }
-  }, [audiences, topics, messages]);
+  }, [audiences, topics, messages, assets, creatives, textFormatting]);
 
   // Add audience - accepts either a name string or a full object
   const addAudience = useCallback((nameOrObject) => {
@@ -378,7 +501,6 @@ export const useMatrix = (currentUser = null) => {
       key: generateTopicKey(topic, topicKeyPattern)
     })));
 
-    console.log('🔄 Regenerated all topic keys based on pattern:', topicKeyPattern);
   }, []);
 
   // Get messages for cell - O(1) lookup instead of O(n) filtering
@@ -411,6 +533,63 @@ export const useMatrix = (currentUser = null) => {
     }
   }, []);
 
+  // Compute changes between current and original state
+  const changeTracking = useMemo(() => {
+    // Skip if original state hasn't been loaded yet (all empty arrays)
+    const originalLoaded = originalState.audiences.length > 0 ||
+                          originalState.topics.length > 0 ||
+                          originalState.messages.length > 0;
+
+    if (!originalLoaded) {
+      return {
+        audiences: { added: [], modified: [], deleted: [], changedFields: {} },
+        topics: { added: [], modified: [], deleted: [], changedFields: {} },
+        messages: { added: [], modified: [], deleted: [], changedFields: {} },
+        assets: { added: [], modified: [], deleted: [], changedFields: {} },
+        creatives: { added: [], modified: [], deleted: [], changedFields: {} },
+        textFormatting: { added: [], modified: [], deleted: [], changedFields: {} },
+        totalChanges: 0,
+        hasChanges: false
+      };
+    }
+
+    const audienceChanges = computeArrayChanges(originalState.audiences, audiences);
+    const topicChanges = computeArrayChanges(originalState.topics, topics);
+
+    // For messages, exclude new items that are deleted (undone adds shouldn't count as changes)
+    // But keep original items that are now deleted (to count them as deleted)
+    const originalMessageIds = new Set(originalState.messages.map(m => String(m.id)));
+    const messagesForTracking = messages.filter(m => {
+      // Keep if: not deleted, OR was in original (to detect deletions of original items)
+      return m.status !== 'deleted' || originalMessageIds.has(String(m.id));
+    });
+    const messageChanges = computeArrayChanges(originalState.messages, messagesForTracking);
+
+    const textFormattingChanges = computeArrayChanges(originalState.textFormatting, textFormatting);
+
+    // Skip assets and creatives - they get modified by Google Drive sync with computed fields
+    // (file_driveID, file_thumbnail, file_date, etc.) that aren't in the spreadsheet
+    const emptyChanges = { added: [], modified: [], deleted: [], changedFields: {} };
+
+    // Count unique changes (each added/modified/deleted item counts as 1)
+    const totalChanges =
+      audienceChanges.added.length + audienceChanges.modified.length + audienceChanges.deleted.length +
+      topicChanges.added.length + topicChanges.modified.length + topicChanges.deleted.length +
+      messageChanges.added.length + messageChanges.modified.length + messageChanges.deleted.length +
+      textFormattingChanges.added.length + textFormattingChanges.modified.length + textFormattingChanges.deleted.length;
+
+    return {
+      audiences: audienceChanges,
+      topics: topicChanges,
+      messages: messageChanges,
+      assets: emptyChanges,      // Skipped - modified by Drive sync
+      creatives: emptyChanges,   // Skipped - modified by Drive sync
+      textFormatting: textFormattingChanges,
+      totalChanges,
+      hasChanges: totalChanges > 0
+    };
+  }, [audiences, topics, messages, assets, creatives, textFormatting, originalState]);
+
   // Track reference changes for debugging
   const prevDepsRef = useRef({ audiences, topics, messages, keywords, assets, creatives, textFormatting });
   const depsChanged = {
@@ -422,18 +601,6 @@ export const useMatrix = (currentUser = null) => {
     creatives: prevDepsRef.current.creatives !== creatives,
     textFormatting: prevDepsRef.current.textFormatting !== textFormatting
   };
-
-  // Log every time the hook runs
-  console.log('🟡 useMatrix hook render', {
-    audiencesChanged: depsChanged.audiences,
-    topicsChanged: depsChanged.topics,
-    messagesChanged: depsChanged.messages,
-    creativesChanged: depsChanged.creatives,
-    audiencesRef: audiences,
-    topicsRef: topics,
-    messagesRef: messages,
-    creativesRef: creatives
-  });
 
   prevDepsRef.current = { audiences, topics, messages, keywords, assets, creatives, textFormatting };
 
@@ -450,18 +617,11 @@ export const useMatrix = (currentUser = null) => {
     cachedMatrixResult.isLoading !== isLoading ||
     cachedMatrixResult.isSaving !== isSaving ||
     cachedMatrixResult.error !== error ||
-    cachedMatrixResult.lastSync !== lastSync;
+    cachedMatrixResult.lastSync !== lastSync ||
+    cachedMatrixResult.changeTracking !== changeTracking ||
+    cachedMatrixResult.originalState !== originalState;
 
   if (shouldUpdate) {
-    console.log('🔴 useMatrix UPDATING CACHED RESULT', {
-      audiences: audiences.length,
-      topics: topics.length,
-      messages: messages.length,
-      creatives: creatives.length,
-      messagesByCellKeys: Object.keys(messagesByCell).length,
-      isLoading,
-      isSaving
-    });
     cachedMatrixResult = {
       audiences,
       topics,
@@ -470,6 +630,7 @@ export const useMatrix = (currentUser = null) => {
       assets,
       creatives,
       textFormatting,
+      setTextFormatting,
       messagesByCell,
       setAssets,
       setCreatives,
@@ -494,7 +655,10 @@ export const useMatrix = (currentUser = null) => {
       regenerateTopicKeys,
       getMessages,
       getUrl: () => sheets.getUrl(),
-      getSpreadsheetId: () => sheets.spreadsheetId
+      getSpreadsheetId: () => sheets.spreadsheetId,
+      // Change tracking
+      changeTracking,
+      originalState
     };
   }
 

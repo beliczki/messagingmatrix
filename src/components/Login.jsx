@@ -173,6 +173,30 @@ const Login = () => {
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.05)',
         }}
       >
+        {/* Top-left corner border */}
+        <div
+          className="absolute top-0 left-0 pointer-events-none"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderTop: '3px solid rgba(255, 255, 255, 0.8)',
+            borderLeft: '3px solid rgba(255, 255, 255, 0.8)',
+            borderTopLeftRadius: '24px',
+            filter: 'blur(5px)',
+          }}
+        />
+        {/* Bottom-right corner border */}
+        <div
+          className="absolute bottom-0 right-0 pointer-events-none"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderBottom: '3px solid rgba(255, 255, 255, 0.8)',
+            borderRight: '3px solid rgba(255, 255, 255, 0.8)',
+            borderBottomRightRadius: '24px',
+            filter: 'blur(5px)',
+          }}
+        />
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 mb-4">

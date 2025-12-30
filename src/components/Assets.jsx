@@ -224,8 +224,9 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   };
 
   return (
-    <>
-      <MediaLibraryBase
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
+      <div className="matrix-view-container">
+        <MediaLibraryBase
         items={assets}
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Assets'}
@@ -497,40 +498,43 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
             )}
           </div>
         )}
-      />
+        />
+      </div>
 
-      {/* AI Assistant */}
-      <AIAssistant
-        moduleContext={{ module: 'assets' }}
-        matrixData={matrixData}
-        filteredItems={filteredAssets}
-        getItemUrl={(asset) => {
-          if (asset.File_driveID) {
-            return `/api/drive/proxy/${asset.File_driveID}`;
-          }
-          return asset.File_DirectLink || asset.File_thumbnail;
-        }}
-      />
-
-      {/* Matrix State Panel */}
-      <MatrixStatePanel
-        audiences={matrixData?.audiences || []}
-        topics={matrixData?.topics || []}
-        messages={matrixData?.messages || []}
-        keywords={matrixData?.keywords || {}}
-        assets={spreadsheetAssets || []}
-        creatives={matrixData?.creatives || []}
-        textFormatting={matrixData?.textFormatting || []}
-        feedData={[]}
-        lastSync={matrixData?.lastSync}
-        isSaving={matrixData?.isSaving}
-        saveProgress={saveProgress}
-        onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
-        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
-        downloadFeedCSV={() => {}}
-      />
-    </>
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <MatrixStatePanel
+          audiences={matrixData?.audiences || []}
+          topics={matrixData?.topics || []}
+          messages={matrixData?.messages || []}
+          keywords={matrixData?.keywords || {}}
+          assets={spreadsheetAssets || []}
+          creatives={matrixData?.creatives || []}
+          textFormatting={matrixData?.textFormatting || []}
+          feedData={[]}
+          lastSync={matrixData?.lastSync}
+          isSaving={matrixData?.isSaving}
+          saveProgress={saveProgress}
+          onSave={handleSaveWithProgress}
+          onClearReload={clearAndReloadApp}
+          onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+          downloadFeedCSV={() => {}}
+          changeTracking={matrixData?.changeTracking}
+          originalState={matrixData?.originalState}
+        />
+        <AIAssistant
+          moduleContext={{ module: 'assets' }}
+          matrixData={matrixData}
+          filteredItems={filteredAssets}
+          getItemUrl={(asset) => {
+            if (asset.File_driveID) {
+              return `/api/drive/proxy/${asset.File_driveID}`;
+            }
+            return asset.File_DirectLink || asset.File_thumbnail;
+          }}
+        />
+      </div>
+    </div>
   );
 };
 

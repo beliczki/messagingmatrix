@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
-import PageHeader from './PageHeader';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import { clearAndReloadApp } from '../utils/clearAndReload';
@@ -48,49 +47,50 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Monitoring'} lookAndFeel={lookAndFeel} />
-
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
-      <div className="p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <BarChart3 size={32} className="text-green-600" />
-              <h2 className="text-xl font-bold text-gray-800">Monitoring</h2>
+      <div className="matrix-view-container">
+        <div className="p-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <BarChart3 size={32} className="text-green-600" />
+                <h2 className="text-xl font-bold text-gray-800">Monitoring</h2>
+              </div>
+              <p className="text-gray-600">
+                This module will provide analytics, performance metrics, and campaign monitoring.
+              </p>
             </div>
-            <p className="text-gray-600">
-              This module will provide analytics, performance metrics, and campaign monitoring.
-            </p>
           </div>
         </div>
       </div>
 
-      {/* AI Assistant */}
-      <AIAssistant
-        moduleContext={{ module: 'monitoring' }}
-        matrixData={matrixData}
-      />
-
-      {/* Matrix State Panel */}
-      <MatrixStatePanel
-        audiences={matrixData?.audiences || []}
-        topics={matrixData?.topics || []}
-        messages={matrixData?.messages || []}
-        keywords={matrixData?.keywords || {}}
-        assets={matrixData?.assets || []}
-        creatives={matrixData?.creatives || []}
-        textFormatting={matrixData?.textFormatting || []}
-        feedData={[]}
-        lastSync={matrixData?.lastSync}
-        isSaving={matrixData?.isSaving}
-        saveProgress={saveProgress}
-        onSave={handleSaveWithProgress}
-        onClearReload={clearAndReloadApp}
-        onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
-        downloadFeedCSV={() => {}}
-      />
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <MatrixStatePanel
+          audiences={matrixData?.audiences || []}
+          topics={matrixData?.topics || []}
+          messages={matrixData?.messages || []}
+          keywords={matrixData?.keywords || {}}
+          assets={matrixData?.assets || []}
+          creatives={matrixData?.creatives || []}
+          textFormatting={matrixData?.textFormatting || []}
+          feedData={[]}
+          lastSync={matrixData?.lastSync}
+          isSaving={matrixData?.isSaving}
+          saveProgress={saveProgress}
+          onSave={handleSaveWithProgress}
+          onClearReload={clearAndReloadApp}
+          onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+          downloadFeedCSV={() => {}}
+          changeTracking={matrixData?.changeTracking}
+          originalState={matrixData?.originalState}
+        />
+        <AIAssistant
+          moduleContext={{ module: 'monitoring' }}
+          matrixData={matrixData}
+        />
+      </div>
     </div>
   );
 };

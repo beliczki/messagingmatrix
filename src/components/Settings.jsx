@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles } from 'lucide-react';
 import settings from '../services/settings';
-import PageHeader, { getButtonStyle } from './PageHeader';
 import AIAssistant from './AIAssistant';
 import { callClaudeAPI } from '../api/claude-proxy';
 import { apiGet, apiPost } from '../utils/api';
@@ -399,29 +398,17 @@ Guidelines for creating instructions:
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading settings...</div>
+      <div className="matrix-fullscreen flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary)' }}>
+        <div className="text-white">Loading settings...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader onMenuToggle={onMenuToggle} title={currentModuleName || 'Settings'} lookAndFeel={config.lookAndFeel}>
-        <button
-          onClick={saveConfig}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50"
-          style={getButtonStyle(config.lookAndFeel)}
-        >
-          <Save size={16} />
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-      </PageHeader>
-
+    <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
-      <div className="p-8">
+      <div className="matrix-view-container" style={{ overflow: 'auto' }}>
+        <div className="p-8 pb-24">
         <div className="max-w-5xl mx-auto space-y-6">
           {/* Message */}
           {message.text && (
@@ -1917,13 +1904,47 @@ Guidelines for creating instructions:
           )}
 
         </div>
+        </div>
+
+        {/* Sticky Save Bar */}
+        <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4">
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              {message.text && (
+                <span className={message.type === 'success' ? 'text-green-600' : 'text-red-600'}>
+                  {message.text}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={saveConfig}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: 'var(--color-button, #ff6130)' }}
+            >
+              {saving ? (
+                <>
+                  <RefreshCw size={18} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={18} />
+                  Save Settings
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* AI Assistant */}
-      <AIAssistant
-        moduleContext={{ module: 'settings' }}
-        matrixData={matrixData}
-      />
+      {/* Bottom Bar */}
+      <div className="bottom-bar">
+        <AIAssistant
+          moduleContext={{ module: 'settings' }}
+          matrixData={matrixData}
+        />
+      </div>
     </div>
   );
 };
