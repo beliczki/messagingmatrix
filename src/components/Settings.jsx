@@ -76,11 +76,18 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       secondaryColor2: '#02a3a4',
       secondaryColor3: '#711c7a',
       statusColors: {
-        ACTIVE: '#34a853',
-        INACTIVE: '#cccccc',
-        ERROR: '#ff0000',
-        INPROGRESS: '#ff6d01',
-        PLANNED: '#ffff00'
+        // New workflow statuses
+        INCOMING: '#8B5CF6',
+        NAMING: '#EAB308',
+        CONTENT: '#F97316',
+        PREVIEW: '#3B82F6',
+        APPROVED: '#22C55E',
+        ACTIVE: '#15803D',
+        INACTIVE: '#9CA3AF',
+        ERROR: '#EF4444',
+        // Legacy statuses (for backward compatibility)
+        PLANNED: '#EAB308',
+        INPROGRESS: '#F97316'
       }
     }
   });
@@ -804,119 +811,185 @@ Guidelines for creating instructions:
               </div>
             </div>
 
-            {/* Status Colors Section */}
+            {/* Workflow Status Colors Section */}
             <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-md font-semibold text-gray-800 mb-4">Status Colors</h3>
+              <h3 className="text-md font-semibold text-gray-800 mb-4">Workflow Status Colors</h3>
               <p className="text-xs text-gray-600 mb-4">
-                These colors are used in status dropdowns and indicators throughout the application
+                Colors for the creative workflow stages: Incoming → Naming → Content → Preview → Approved → Delivered
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Active Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Incoming */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Active Status
+                    Incoming
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="color"
-                      value={config.lookAndFeel.statusColors?.ACTIVE || '#34a853'}
+                      value={config.lookAndFeel.statusColors?.INCOMING || '#8B5CF6'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INCOMING', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.INCOMING || '#8B5CF6'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INCOMING', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#8B5CF6"
+                    />
+                  </div>
+                </div>
+
+                {/* Naming */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Naming
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.NAMING || '#EAB308'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.NAMING', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.NAMING || '#EAB308'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.NAMING', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#EAB308"
+                    />
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.CONTENT || '#F97316'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.CONTENT', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.CONTENT || '#F97316'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.CONTENT', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#F97316"
+                    />
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Preview
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.PREVIEW || '#3B82F6'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PREVIEW', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.PREVIEW || '#3B82F6'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PREVIEW', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#3B82F6"
+                    />
+                  </div>
+                </div>
+
+                {/* Approved */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Approved
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.APPROVED || '#22C55E'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.APPROVED', e.target.value)}
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={config.lookAndFeel.statusColors?.APPROVED || '#22C55E'}
+                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.APPROVED', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      placeholder="#22C55E"
+                    />
+                  </div>
+                </div>
+
+                {/* Active */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Active
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={config.lookAndFeel.statusColors?.ACTIVE || '#15803D'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.ACTIVE', e.target.value)}
                       className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
                     />
                     <input
                       type="text"
-                      value={config.lookAndFeel.statusColors?.ACTIVE || '#34a853'}
+                      value={config.lookAndFeel.statusColors?.ACTIVE || '#15803D'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.ACTIVE', e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                      placeholder="#34a853"
+                      placeholder="#15803D"
                     />
                   </div>
                 </div>
 
-                {/* In Progress Status */}
+                {/* Inactive */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    In Progress Status
+                    Inactive
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="color"
-                      value={config.lookAndFeel.statusColors?.INPROGRESS || '#ff6d01'}
-                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INPROGRESS', e.target.value)}
-                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={config.lookAndFeel.statusColors?.INPROGRESS || '#ff6d01'}
-                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.INPROGRESS', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                      placeholder="#ff6d01"
-                    />
-                  </div>
-                </div>
-
-                {/* Planned Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Planned Status
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={config.lookAndFeel.statusColors?.PLANNED || '#ffff00'}
-                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PLANNED', e.target.value)}
-                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={config.lookAndFeel.statusColors?.PLANNED || '#ffff00'}
-                      onChange={(e) => handleInputChange('lookAndFeel.statusColors.PLANNED', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                      placeholder="#ffff00"
-                    />
-                  </div>
-                </div>
-
-                {/* Inactive Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Inactive Status
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={config.lookAndFeel.statusColors?.INACTIVE || '#cccccc'}
+                      value={config.lookAndFeel.statusColors?.INACTIVE || '#9CA3AF'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.INACTIVE', e.target.value)}
                       className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
                     />
                     <input
                       type="text"
-                      value={config.lookAndFeel.statusColors?.INACTIVE || '#cccccc'}
+                      value={config.lookAndFeel.statusColors?.INACTIVE || '#9CA3AF'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.INACTIVE', e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                      placeholder="#cccccc"
+                      placeholder="#9CA3AF"
                     />
                   </div>
                 </div>
 
-                {/* Error Status */}
-                <div className="md:col-span-2">
+                {/* Error */}
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Error Status
+                    Error
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="color"
-                      value={config.lookAndFeel.statusColors?.ERROR || '#ff0000'}
+                      value={config.lookAndFeel.statusColors?.ERROR || '#EF4444'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.ERROR', e.target.value)}
                       className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
                     />
                     <input
                       type="text"
-                      value={config.lookAndFeel.statusColors?.ERROR || '#ff0000'}
+                      value={config.lookAndFeel.statusColors?.ERROR || '#EF4444'}
                       onChange={(e) => handleInputChange('lookAndFeel.statusColors.ERROR', e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                      placeholder="#ff0000"
+                      placeholder="#EF4444"
                     />
                   </div>
                 </div>

@@ -157,11 +157,18 @@ class SettingsService {
   getStatusColors() {
     const lookAndFeel = this.getLookAndFeel();
     return lookAndFeel?.statusColors || {
-      ACTIVE: '#34a853',
-      INACTIVE: '#cccccc',
-      ERROR: '#ff0000',
-      INPROGRESS: '#ff6d01',
-      PLANNED: '#ffff00'
+      // Workflow statuses
+      INCOMING: '#8B5CF6',
+      NAMING: '#EAB308',
+      CONTENT: '#F97316',
+      PREVIEW: '#3B82F6',
+      APPROVED: '#22C55E',
+      ACTIVE: '#15803D',
+      INACTIVE: '#9CA3AF',
+      ERROR: '#EF4444',
+      // Legacy statuses (backward compatibility)
+      PLANNED: '#EAB308',
+      INPROGRESS: '#F97316'
     };
   }
 

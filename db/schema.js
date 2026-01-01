@@ -167,6 +167,7 @@ export const tasks = sqliteTable('tasks', {
   source: text('source'),
   from: text('from'),
   status: text('status').default('pending'), // 'pending', 'completed', 'in_progress'
+  workflow_type: text('workflow_type').default('general'), // 'general', 'creative'
   email_uid: integer('email_uid'),
   email_body: text('email_body'), // Full original email body
   email_subject: text('email_subject'), // Original email subject

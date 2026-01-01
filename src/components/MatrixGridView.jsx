@@ -18,8 +18,8 @@ const MessageCard = memo(({
   setActiveTab,
   lastClickRef
 }) => {
-  const status = (msg.status || 'PLANNED').toUpperCase();
-  const statusColorHex = lookAndFeel?.statusColors?.[status] || '#ffff00';
+  const status = (msg.status || 'INCOMING').toUpperCase();
+  const statusColorHex = lookAndFeel?.statusColors?.[status] || '#8B5CF6';
   const bgColor = statusColorHex;
 
   // Calculate text color based on background
@@ -209,7 +209,7 @@ const MatrixGridView = ({
 
     if (statusFilters.length > 0) {
       filtered = filtered.filter(msg => {
-        const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+        const msgStatus = (msg.status || 'INCOMING').toUpperCase();
         return statusFilters.includes(msgStatus);
       });
     }

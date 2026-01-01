@@ -3,15 +3,23 @@
  * Object-oriented class with memoized layout properties
  */
 
-// Status color mapping
+// Status color mapping - workflow statuses
 const STATUS_COLORS = {
-  'ACTIVE': '#10b981',
+  // Workflow statuses
+  'INCOMING': '#8B5CF6',
+  'NAMING': '#EAB308',
+  'CONTENT': '#F97316',
+  'PREVIEW': '#3B82F6',
+  'APPROVED': '#22C55E',
+  'ACTIVE': '#15803D',
+  'INACTIVE': '#9CA3AF',
+  'ERROR': '#EF4444',
+  // Legacy statuses (backward compatibility)
+  'PLANNED': '#EAB308',
+  'INPROGRESS': '#F97316',
+  'IN PROGRESS': '#F97316',
   'LIVE': '#10b981',
-  'IN PROGRESS': '#f59e0b',
-  'PLANNED': '#eab308',
   'STOPPED': '#9ca3af',
-  'INACTIVE': '#9ca3af',
-  'ERROR': '#ef4444',
   'DEFAULT': '#6366f1'
 };
 

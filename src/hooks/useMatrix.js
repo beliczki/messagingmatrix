@@ -374,7 +374,7 @@ export const useMatrix = (currentUser = null) => {
       topic,
       version,
       pmmid,
-      status: 'PLANNED',
+      status: 'INCOMING',
       start_date: '',
       end_date: '',
       template: '',

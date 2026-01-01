@@ -117,11 +117,11 @@ const TopicEditorDialog = ({
                 const keywordValues = keywords.topics && keywords.topics.status;
                 const statusOptions = keywordValues && keywordValues.length > 0
                   ? keywordValues
-                  : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
+                  : ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
 
                 const statusColors = settings.getStatusColors();
                 const currentStatus = (editingTopic.status || '').toUpperCase();
-                const currentColor = currentStatus ? (statusColors[currentStatus] || statusColors['PLANNED'] || '#cccccc') : '#ffffff';
+                const currentColor = currentStatus ? (statusColors[currentStatus] || statusColors['INCOMING'] || '#8B5CF6') : '#ffffff';
 
                 return (
                   <select
@@ -136,7 +136,7 @@ const TopicEditorDialog = ({
                   >
                     <option value="" style={{ backgroundColor: '#ffffff', color: '#000000' }}>None</option>
                     {statusOptions.map((val) => {
-                      const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
+                      const optionColor = statusColors[val.toUpperCase()] || statusColors['INCOMING'] || '#8B5CF6';
                       return (
                         <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
                           {val}

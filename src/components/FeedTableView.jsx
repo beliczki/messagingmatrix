@@ -85,7 +85,7 @@ const FeedTableView = ({
   const filteredMessages = messages.filter(msg => {
     // Filter by status if any status filters are selected
     if (statusFilters.length > 0) {
-      const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+      const msgStatus = (msg.status || 'INCOMING').toUpperCase();
       if (!statusFilters.includes(msgStatus)) return false;
     }
 
@@ -131,7 +131,7 @@ const FeedTableView = ({
               </tr>
             ) : (
               filteredMessages.map((msg, rowIdx) => {
-                const status = (msg.status || 'PLANNED').toUpperCase();
+                const status = (msg.status || 'INCOMING').toUpperCase();
                 const colors = getStatusColors(status);
 
                 return (

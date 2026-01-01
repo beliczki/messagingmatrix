@@ -908,7 +908,7 @@ const MessageEditorDialog = ({
 
       // Filter by status if statuses are selected
       if (selectedStatuses.length > 0) {
-        const messageStatus = (m.status || 'PLANNED').toUpperCase();
+        const messageStatus = (m.status || 'INCOMING').toUpperCase();
         if (!selectedStatuses.includes(messageStatus)) {
           return false;
         }
@@ -942,10 +942,22 @@ const MessageEditorDialog = ({
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < uniqueVariants.length - 1;
 
+  // Normalize legacy statuses to new workflow statuses
+  const normalizeStatus = (status) => {
+    const normalized = (status || 'INCOMING').toUpperCase();
+    // Map legacy statuses to new workflow statuses
+    const legacyMap = {
+      'PLANNED': 'NAMING',
+      'INPROGRESS': 'CONTENT'
+    };
+    return legacyMap[normalized] || normalized;
+  };
+
   // Determine status color from lookAndFeel config
-  const status = (editingMessage.status || 'PLANNED').toUpperCase();
+  const status = (editingMessage.status || 'INCOMING').toUpperCase();
   const statusColors = settings.getStatusColors();
-  const statusColor = statusColors[status] || statusColors['PLANNED'] || '#ffff00';
+  // Try exact match first, then normalized, then fallback
+  const statusColor = statusColors[status] || statusColors[normalizeStatus(status)] || statusColors['INCOMING'] || '#8B5CF6';
 
   // Function to determine if text should be dark or light based on background color
   const getTextColor = (hexColor) => {
@@ -1830,11 +1842,11 @@ const MessageEditorDialog = ({
                         const keywordValues = keywords.messages && keywords.messages.status;
                         const statusOptions = keywordValues && keywordValues.length > 0
                           ? keywordValues
-                          : ['PLANNED', 'INPROGRESS', 'ACTIVE', 'INACTIVE'];
+                          : ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
 
                         return (
                           <select
-                            value={editingMessage.status || 'PLANNED'}
+                            value={editingMessage.status || 'INCOMING'}
                             onChange={(e) => updateField('status', e.target.value)}
                             className="form-input"
                             style={{
@@ -1845,7 +1857,8 @@ const MessageEditorDialog = ({
                             }}
                           >
                             {statusOptions.map((val) => {
-                              const optionColor = statusColors[val.toUpperCase()] || statusColors['PLANNED'] || '#ffff00';
+                              const valUpper = val.toUpperCase();
+                              const optionColor = statusColors[valUpper] || statusColors[normalizeStatus(valUpper)] || statusColors['INCOMING'] || '#8B5CF6';
                               return (
                                 <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
                                   {val}

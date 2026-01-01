@@ -114,7 +114,7 @@ const TreeView = React.memo(({
     }
 
     return allMessages.filter(msg => {
-      const msgStatus = (msg.status || 'PLANNED').toUpperCase();
+      const msgStatus = (msg.status || 'INCOMING').toUpperCase();
       return statusFilters.includes(msgStatus);
     });
   }, [getMessages, statusFilters]);

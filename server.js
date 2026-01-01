@@ -1536,6 +1536,99 @@ function getEmailConfigFromDb() {
   }
 }
 
+// Message search endpoint for MC matching
+// Searches messages by keywords across multiple fields
+app.get('/api/messages/search', async (req, res) => {
+  try {
+    const { q, limit = 5 } = req.query;
+
+    if (!q) {
+      return res.json({ messages: [] });
+    }
+
+    // Load messages from Google Sheets cache or current state
+    // For now, we'll search the cached matrix data
+    const sheetsService = await import('./services/sheets.js');
+    const matrixData = await sheetsService.loadFromSheets();
+
+    if (!matrixData || !matrixData.messages) {
+      return res.json({ messages: [] });
+    }
+
+    const keywords = q.toLowerCase().split(/[\s,]+/).filter(k => k.length > 1);
+    const messages = matrixData.messages;
+    const audiences = matrixData.audiences || [];
+    const topics = matrixData.topics || [];
+
+    // Score each message based on keyword matches
+    const scoredMessages = messages.map(msg => {
+      let score = 0;
+      const matchedFields = [];
+
+      // Build searchable text from message fields
+      const searchableFields = {
+        name: msg.name || msg.Name || '',
+        pmmid: msg.pmmid || msg.PMMID || '',
+        copy1: msg.copy1 || msg.Copy1 || '',
+        copy2: msg.copy2 || msg.Copy2 || '',
+        comment: msg.comment || msg.Comment || '',
+        topic: msg.topic || '',
+        audience: msg.audience || ''
+      };
+
+      // Get audience and topic names
+      const audience = audiences.find(a => a.key === msg.audience);
+      const topic = topics.find(t => t.key === msg.topic);
+      if (audience) searchableFields.audienceName = audience.name || '';
+      if (topic) searchableFields.topicName = topic.name || '';
+
+      // Score keywords against fields
+      keywords.forEach(keyword => {
+        Object.entries(searchableFields).forEach(([field, value]) => {
+          if (value && value.toLowerCase().includes(keyword)) {
+            // Weight certain fields higher
+            const weight = field === 'name' || field === 'pmmid' ? 3 :
+                          field === 'audienceName' || field === 'topicName' ? 2 : 1;
+            score += weight;
+            if (!matchedFields.includes(field)) {
+              matchedFields.push(field);
+            }
+          }
+        });
+      });
+
+      return {
+        id: msg.id,
+        pmmid: searchableFields.pmmid || `MC${msg.number || msg.id}${msg.variant || ''}`,
+        name: searchableFields.name,
+        audience: searchableFields.audienceName || msg.audience,
+        topic: searchableFields.topicName || msg.topic,
+        status: msg.status,
+        score,
+        matchedFields
+      };
+    });
+
+    // Filter and sort by score
+    const results = scoredMessages
+      .filter(m => m.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, parseInt(limit));
+
+    // Normalize scores to 0-1 range
+    const maxScore = results[0]?.score || 1;
+    const normalizedResults = results.map(r => ({
+      ...r,
+      matchScore: Math.round((r.score / maxScore) * 100) / 100
+    }));
+
+    res.json({ messages: normalizedResults });
+  } catch (error) {
+    console.error('Error searching messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Email endpoints
 // Get emails from IMAP server
 app.get('/api/emails', async (req, res) => {
@@ -1575,16 +1668,18 @@ app.post('/api/emails/convert-to-tasks', async (req, res) => {
       `Email ${idx + 1}:\nFrom: ${email.fromName} <${email.from}>\nSubject: ${email.subject}\nDate: ${email.date}\nBody:\n${email.body}\n`
     ).join('\n---\n\n');
 
-    const prompt = `You are an intelligent task manager. Analyze the following emails and extract actionable tasks from them. For each email, identify:
+    const prompt = `You are an intelligent task manager for a creative/advertising workflow system. Analyze the following emails and extract actionable tasks from them. For each email, identify:
 1. What action needs to be taken
 2. The priority level (High, Medium, Low)
 3. A clear, concise task summary (2-3 sentences max - DO NOT copy the entire email)
 4. Any relevant deadline or due date mentioned
 5. The email source (subject and sender)
 6. Extract and structure the COMPLETE conversation context from the ENTIRE email thread
+7. **TASK TYPE**: Determine if this is a NEW creative request or a MODIFICATION to existing creative
+8. **KEYWORDS**: Extract searchable keywords (product names, campaign names, audience segments, etc.)
 
 CRITICAL INSTRUCTION - PRESERVE ORIGINAL LANGUAGE:
-- **IMPORTANT**: The "title", "description", and "context" fields MUST be in the ORIGINAL LANGUAGE of the email
+- **IMPORTANT**: The "title", "description", "context", and "keywords" fields MUST be in the ORIGINAL LANGUAGE of the email
 - DO NOT translate to English or any other language
 - If the email is in Hungarian, write the task in Hungarian
 - If the email is in German, write the task in German
@@ -1612,6 +1707,17 @@ INSTRUCTIONS FOR THE "context" FIELD:
 - Keep all relevant details, quotes, and information from each message in the thread
 - Make it easy to read by using markdown formatting (bold for names, ## for message headers, etc.)
 
+INSTRUCTIONS FOR THE "taskType" FIELD:
+- "creation" = Request for NEW creative content (new campaign, new banner, new message)
+- "modification" = Request to UPDATE, CHANGE, or FIX existing creative content
+- Look for keywords like: "update", "change", "modify", "fix", "revise", "új" (new), "módosítás" (modification), "javítás" (fix)
+
+INSTRUCTIONS FOR THE "keywords" FIELD:
+- Extract 3-8 keywords that could help find related existing creatives
+- Include: product names, campaign names, audience types, topic references
+- Examples: "személyi kölcsön", "lakáshitel", "REM", "PRO", "Black Friday", "karácsony"
+- Keep in ORIGINAL LANGUAGE
+
 Return your response as a JSON array of tasks with this structure:
 [
   {
@@ -1623,7 +1729,9 @@ Return your response as a JSON array of tasks with this structure:
     "source": "Email subject",
     "from": "Sender name/email",
     "status": "pending",
-    "emailUid": email UID number
+    "emailUid": email UID number,
+    "taskType": "creation|modification",
+    "keywords": ["keyword1", "keyword2", "keyword3"]
   }
 ]
 
@@ -1666,19 +1774,109 @@ ${emailSummaries}`;
     if (jsonMatch) {
       try {
         tasks = JSON.parse(jsonMatch[0]);
-        // Add email UIDs and original email content to tasks
-        tasks = tasks.map((task, idx) => {
+
+        // Load matrix data for MC search
+        let matrixData = null;
+        try {
+          const sheetsService = await import('./services/sheets.js');
+          matrixData = await sheetsService.loadFromSheets();
+        } catch (loadErr) {
+          console.log('Could not load matrix data for MC matching:', loadErr.message);
+        }
+
+        // Add email UIDs, original email content, and search for matching MCs
+        tasks = await Promise.all(tasks.map(async (task, idx) => {
           const originalEmail = emails[idx];
-          return {
+          const enhancedTask = {
             ...task,
             id: `task-${Date.now()}-${idx}`,
             emailUid: originalEmail?.uid || null,
             emailBody: originalEmail?.body || '',
             emailSubject: originalEmail?.subject || '',
             emailDate: originalEmail?.date || null,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            // Set workflow type based on task type
+            workflowType: task.taskType === 'creation' || task.taskType === 'modification' ? 'creative' : 'general',
+            // Ensure keywords is an array
+            keywords: Array.isArray(task.keywords) ? task.keywords : [],
+            suggestedMCs: []
           };
-        });
+
+          // For modification tasks, search for matching MCs
+          if (task.taskType === 'modification' && matrixData && enhancedTask.keywords.length > 0) {
+            try {
+              const keywords = enhancedTask.keywords.join(' ');
+              const messages = matrixData.messages || [];
+              const audiences = matrixData.audiences || [];
+              const topics = matrixData.topics || [];
+
+              // Score each message
+              const searchKeywords = keywords.toLowerCase().split(/[\s,]+/).filter(k => k.length > 1);
+              const scoredMessages = messages.map(msg => {
+                let score = 0;
+                const matchedFields = [];
+
+                const searchableFields = {
+                  name: (msg.name || msg.Name || '').toLowerCase(),
+                  pmmid: (msg.pmmid || msg.PMMID || '').toLowerCase(),
+                  copy1: (msg.copy1 || msg.Copy1 || '').toLowerCase(),
+                  comment: (msg.comment || msg.Comment || '').toLowerCase()
+                };
+
+                const audience = audiences.find(a => a.key === msg.audience);
+                const topic = topics.find(t => t.key === msg.topic);
+                if (audience) searchableFields.audienceName = (audience.name || '').toLowerCase();
+                if (topic) searchableFields.topicName = (topic.name || '').toLowerCase();
+
+                searchKeywords.forEach(kw => {
+                  Object.entries(searchableFields).forEach(([field, value]) => {
+                    if (value && value.includes(kw)) {
+                      const weight = field === 'name' || field === 'pmmid' ? 3 :
+                                    field === 'audienceName' || field === 'topicName' ? 2 : 1;
+                      score += weight;
+                      if (!matchedFields.includes(field)) matchedFields.push(field);
+                    }
+                  });
+                });
+
+                return {
+                  id: msg.id,
+                  pmmid: msg.pmmid || msg.PMMID || `MC${msg.number || msg.id}${msg.variant || ''}`,
+                  name: msg.name || msg.Name || '',
+                  audience: audience?.name || msg.audience,
+                  topic: topic?.name || msg.topic,
+                  status: msg.status,
+                  score,
+                  matchedFields
+                };
+              });
+
+              // Get top 5 matches
+              const results = scoredMessages
+                .filter(m => m.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+              const maxScore = results[0]?.score || 1;
+              enhancedTask.suggestedMCs = results.map(r => ({
+                id: r.id,
+                pmmid: r.pmmid,
+                name: r.name,
+                audience: r.audience,
+                topic: r.topic,
+                status: r.status,
+                matchScore: Math.round((r.score / maxScore) * 100) / 100,
+                matchedFields: r.matchedFields
+              }));
+
+              console.log(`🔍 Found ${enhancedTask.suggestedMCs.length} matching MCs for task: "${task.title}"`);
+            } catch (searchErr) {
+              console.error('Error searching for matching MCs:', searchErr);
+            }
+          }
+
+          return enhancedTask;
+        }));
       } catch (err) {
         console.error('Error parsing tasks JSON:', err);
         return res.status(500).json({ error: 'Failed to parse tasks from Claude response' });
@@ -1734,11 +1932,25 @@ app.get('/api/task-labels', (req, res) => {
 });
 
 // Get all tasks (from SQLite)
+// Optional query params: ?workflow_type=general|creative|all (default: all)
 app.get('/api/tasks', (req, res) => {
   try {
     const sqlite = db.getSqlite();
-    const stmt = sqlite.prepare('SELECT * FROM tasks ORDER BY created_at DESC');
-    const tasks = stmt.all();
+    const { workflow_type } = req.query;
+
+    let query = 'SELECT * FROM tasks';
+    const params = [];
+
+    // Filter by workflow_type if specified (and not 'all')
+    if (workflow_type && workflow_type !== 'all') {
+      query += ' WHERE workflow_type = ?';
+      params.push(workflow_type);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const stmt = sqlite.prepare(query);
+    const tasks = params.length > 0 ? stmt.all(...params) : stmt.all();
 
     // Transform tasks to match frontend naming conventions
     const transformedTasks = tasks.map(task => ({
@@ -1750,6 +1962,7 @@ app.get('/api/tasks', (req, res) => {
       source: task.source,
       from: task.from,
       status: task.status,
+      workflowType: task.workflow_type || 'general',
       emailUid: task.email_uid,
       emailBody: task.email_body,
       emailSubject: task.email_subject,
@@ -1789,13 +2002,14 @@ app.post('/api/tasks', (req, res) => {
       const stmt = sqlite.prepare(`
         INSERT INTO tasks (
           id, title, description, priority, due_date,
-          source, "from", status, email_uid, email_body, email_subject, email_date,
+          source, "from", status, workflow_type, email_uid, email_body, email_subject, email_date,
           context, user_notes, related_content, labels, bucket, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       tasks.forEach(task => {
         console.log(`💾 Saving task ${task.id}:`);
+        console.log(`  - workflowType: ${task.workflowType || 'general'}`);
         console.log(`  - emailBody: ${task.emailBody ? task.emailBody.length + ' chars' : 'null/empty'}`);
         console.log(`  - emailSubject: ${task.emailSubject || 'null/empty'}`);
         console.log(`  - emailDate: ${task.emailDate || 'null/empty'}`);
@@ -1811,6 +2025,7 @@ app.post('/api/tasks', (req, res) => {
           task.source || null,
           task.from || null,
           task.status || 'pending',
+          task.workflowType || 'general',
           task.emailUid || null,
           task.emailBody || null,
           task.emailSubject || null,
@@ -1847,9 +2062,9 @@ app.post('/api/tasks/create', (req, res) => {
     const stmt = sqlite.prepare(`
       INSERT INTO tasks (
         id, title, description, priority, due_date,
-        source, "from", status, email_uid, bucket, created_at,
+        source, "from", status, workflow_type, email_uid, bucket, created_at,
         context, user_notes, related_content, labels
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -1863,6 +2078,7 @@ app.post('/api/tasks/create', (req, res) => {
       task.source || null,
       task.from || null,
       task.status || 'pending',
+      task.workflowType || 'general',
       task.emailUid || null,
       task.bucket || 'backlog',
       task.createdAt || new Date().toISOString(),
@@ -1922,6 +2138,10 @@ app.put('/api/tasks/:id', (req, res) => {
     if (updates.from !== undefined) {
       fields.push('"from" = ?');
       values.push(updates.from);
+    }
+    if (updates.workflowType !== undefined) {
+      fields.push('workflow_type = ?');
+      values.push(updates.workflowType);
     }
 
     fields.push('updated_at = ?');

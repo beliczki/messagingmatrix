@@ -1,25 +1,46 @@
 # Messaging Matrix - Development Tasks
 
-**Project**: Messaging Matrix v2.0.0  
-**Updated**: 2024-12-30
+**Updated**: 2024-12-31
 
 ---
 
-## 🔴 High Priority
+## ✅ Completed - High Priority #1: Creative Library Upgrade
 
-### 1. Creative Library & Assets Upgrade
-- [ ] Better masonry tiles management
-- [ ] Integrated toolbar (similar to Matrix toolbar)
-- [ ] Full screen view option
-- [ ] Consistent UI across Assets and Creative Library
+- [x] MediaToolbar (floating, draggable, collapsible)
+- [x] Filters moved to toolbar
+- [x] Smart 300px column layout
+- [x] Size filter added
+- [x] Selection controls in toolbar
+- [x] Fullscreen layout
 
-### 2. Workflow Management System
-- [ ] Incoming tasks handling
-- [ ] Matrix naming update workflow
-- [ ] Content collection or generation step
-- [ ] Preview step
-- [ ] Approve step
-- [ ] Delivery step
+---
+
+## ✅ Completed - High Priority #2: Workflow System (Phase 1-2)
+
+- [x] 8 workflow statuses (INCOMING → ACTIVE)
+- [x] Status colors configurable in Settings
+- [x] Backward compatibility (PLANNED, INPROGRESS)
+- [x] Task workflow_type field (general/creative)
+- [x] AI-assisted MC matching (email → task)
+- [x] MC search API with keyword scoring
+- [x] Create MC from Task button
+- [x] Task → MC linking via relatedContent
+
+---
+
+## 🔴 In Progress - Workflow System (Phase 3+)
+
+### Testing Needed
+- [ ] Test email → task → MC suggestions flow
+- [ ] Test Create MC from Task
+- [ ] Test modification task + MC linking
+
+### Future: n8n-style Workflow Engine
+- [ ] Node-based visual workflow
+- [ ] Branching paths (not linear)
+- [ ] Trigger types: Email, Manual, Scheduled
+- [ ] AI nodes: Claude for copy, Banana for images
+- [ ] Workflow templates (predefined, expandable)
 
 ---
 
@@ -36,13 +57,11 @@
 - [ ] User management interface
 - [ ] Bulk import/export functionality
 - [ ] Version history and rollback
-- [ ] Collaborative editing
-- [ ] Real-time sync across multiple users
-- [ ] Advanced reporting and insights
 
 ---
 
 ## 🟢 Low Priority
+
 - [ ] API for external integrations
 - [ ] Webhook support for automation
 - [ ] Performance analytics
@@ -52,36 +71,15 @@
 
 ---
 
-## Current Sprint
+## ⚠️ Flagged
 
-**Feature**: Creative Library & Assets Upgrade
-
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| 1 | Analyze current state | ✅ Done | Report complete |
-| 2 | Create MediaToolbar shell | ✅ Done | MediaToolbar.jsx created |
-| 3 | Move filters to toolbar | ✅ Done | Products, Type, Text, View mode |
-| 4 | Add view mode selector | ✅ Done | Included in task 3 |
-| 5 | Add fullscreen toggle | 🏃 Active | Next up |
+- **Workflow.jsx** - Simple Kanban may not be right approach. User wants n8n-style nodes.
 
 ---
 
-## Bugs / Issues
+## Session Log
 
-*None tracked*
-
----
-
-## Completed ✅
-
-- [x] Assets Library with Google Drive integration
-- [x] Creative Library with static and dynamic creatives
-- [x] Virtual scrolling with masonry layout
-- [x] Share gallery system with ZIP downloads
-- [x] Template management with HTML5 support
-- [x] Advanced filtering with AND/OR logic
-- [x] Pattern evaluation for PMMID and trafficking
-- [x] State management dialog
-- [x] MediaLibraryBase refactoring
-- [x] Tree View with hierarchical visualization
-- [x] Tasks/Kanban board system
+| Date | Summary |
+|------|---------|
+| 2024-12-30 | Orchestration setup, Creative Library toolbar, 8 statuses |
+| 2024-12-31 | Email→Task→MC flow, AI matching, Create MC from Task |

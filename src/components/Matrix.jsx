@@ -567,7 +567,7 @@ const Matrix = ({
     const productsArray = Array.from(allProducts).sort();
 
     // Get all available statuses
-    const allStatuses = keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED', 'ERROR'];
+    const allStatuses = keywords.messages?.status || ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
 
     // Only initialize if we have options to select
     if (productsArray.length > 0 || allStatuses.length > 0) {
@@ -758,7 +758,7 @@ const Matrix = ({
     };
 
     return htmlTemplateMessages.map((msg) => {
-      const status = (msg.status || 'PLANNED').toUpperCase();
+      const status = (msg.status || 'INCOMING').toUpperCase();
       const context = {
         ...msg,
         audiences,
@@ -901,13 +901,56 @@ const Matrix = ({
 
     const s = status.toUpperCase();
     switch (s) {
-      case 'ACTIVE':
+      // New workflow statuses
+      case 'INCOMING':
+        return {
+          bg: 'bg-purple-50',
+          text: 'text-purple-700',
+          border: 'border-purple-300',
+          keyBg: 'bg-purple-100',
+          keyText: 'text-purple-600'
+        };
+      case 'NAMING':
+      case 'PLANNED': // Legacy mapping
+        return {
+          bg: 'bg-yellow-50',
+          text: 'text-yellow-700',
+          border: 'border-yellow-300',
+          keyBg: 'bg-yellow-100',
+          keyText: 'text-yellow-600'
+        };
+      case 'CONTENT':
+      case 'INPROGRESS': // Legacy mapping
+        return {
+          bg: 'bg-orange-50',
+          text: 'text-orange-700',
+          border: 'border-orange-300',
+          keyBg: 'bg-orange-100',
+          keyText: 'text-orange-600'
+        };
+      case 'PREVIEW':
+        return {
+          bg: 'bg-blue-50',
+          text: 'text-blue-700',
+          border: 'border-blue-300',
+          keyBg: 'bg-blue-100',
+          keyText: 'text-blue-600'
+        };
+      case 'APPROVED':
         return {
           bg: 'bg-green-50',
           text: 'text-green-700',
           border: 'border-green-300',
           keyBg: 'bg-green-100',
           keyText: 'text-green-600'
+        };
+      case 'ACTIVE':
+        return {
+          bg: 'bg-emerald-50',
+          text: 'text-emerald-700',
+          border: 'border-emerald-300',
+          keyBg: 'bg-emerald-100',
+          keyText: 'text-emerald-600'
         };
       case 'INACTIVE':
         return {
@@ -917,21 +960,13 @@ const Matrix = ({
           keyBg: 'bg-gray-200',
           keyText: 'text-gray-600'
         };
-      case 'INPROGRESS':
+      case 'ERROR':
         return {
-          bg: 'bg-orange-50',
-          text: 'text-orange-700',
-          border: 'border-orange-300',
-          keyBg: 'bg-orange-100',
-          keyText: 'text-orange-600'
-        };
-      case 'PLANNED':
-        return {
-          bg: 'bg-yellow-50',
-          text: 'text-yellow-700',
-          border: 'border-yellow-300',
-          keyBg: 'bg-yellow-100',
-          keyText: 'text-yellow-600'
+          bg: 'bg-red-50',
+          text: 'text-red-700',
+          border: 'border-red-300',
+          keyBg: 'bg-red-100',
+          keyText: 'text-red-600'
         };
       default:
         return { bg: '', text: '', border: '', keyBg: '', keyText: '' };
@@ -1013,7 +1048,7 @@ const Matrix = ({
 
       // Check status filter
       if (statusFilters.length > 0) {
-        const msgStatus = (m.status || 'PLANNED').toUpperCase();
+        const msgStatus = (m.status || 'INCOMING').toUpperCase();
         if (!statusFilters.includes(msgStatus)) return false;
       }
 
@@ -1156,11 +1191,11 @@ const Matrix = ({
     });
   };
 
-  // Handle add message with automatic PLANNED filter
+  // Handle add message with automatic INCOMING filter
   const handleAddMessage = (topicKey, audKey) => {
-    // Ensure PLANNED status is in the filter so the new message is visible
-    if (!statusFilters.includes('PLANNED')) {
-      setStatusFilters([...statusFilters, 'PLANNED']);
+    // Ensure INCOMING status is in the filter so the new message is visible
+    if (!statusFilters.includes('INCOMING')) {
+      setStatusFilters([...statusFilters, 'INCOMING']);
     }
 
     // Calculate the expected new ID (same logic as useMatrix)
@@ -1863,7 +1898,7 @@ const Matrix = ({
         productFilters={productFilters}
         statusFilters={statusFilters}
         allProducts={availableProducts}
-        allStatuses={keywords.messages?.status || ['ACTIVE', 'INACTIVE', 'INPROGRESS', 'PLANNED']}
+        allStatuses={keywords.messages?.status || ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR']}
         onProductFiltersChange={setProductFilters}
         onStatusFiltersChange={setStatusFilters}
         statusColors={settings.getStatusColors?.() || {}}
