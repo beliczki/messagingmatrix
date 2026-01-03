@@ -166,6 +166,8 @@ class SettingsService {
       ACTIVE: '#15803D',
       INACTIVE: '#9CA3AF',
       ERROR: '#EF4444',
+      DEAD: '#64748B',
+      MEMORY: '#06B6D4',
       // Legacy statuses (backward compatibility)
       PLANNED: '#EAB308',
       INPROGRESS: '#F97316'

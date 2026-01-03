@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Loader, ExternalLink, Download, X, RefreshCw, Users, Image, List, Type, Package, Check, Tag, Key, FlaskConical } from 'lucide-react';
+import { Save, Loader, ExternalLink, Download, X, RefreshCw, Users, Image, List, Type, Package, Check, Tag, Key, FlaskConical, ClipboardList } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
 import SaveProgressDialog from './SaveProgressDialog';
@@ -37,6 +37,7 @@ const MatrixStatePanel = ({
   creatives,
   textFormatting,
   feedData,
+  tasks,
   lastSync,
   isSaving,
   saveProgress,
@@ -67,6 +68,17 @@ const MatrixStatePanel = ({
       setIsClosing(false);
     }, 200); // Match animation duration
   };
+
+  // ESC key to close panel
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   // Handle toggle (for bottom panel click)
   const handleToggle = () => {
@@ -130,7 +142,8 @@ const MatrixStatePanel = ({
     { id: 'creatives', label: 'Creatives', icon: Image, count: creatives?.length || 0, changes: getTabChangeCount('creatives') },
     { id: 'feed', label: 'Feed', icon: List, count: feedData?.length || 0, changes: 0 },
     { id: 'keywords', label: 'Keywords', icon: Key, count: keywordsCount, changes: 0 },
-    { id: 'textFormatting', label: 'Formatting', icon: Type, count: textFormatting?.length || 0, changes: getTabChangeCount('textFormatting') }
+    { id: 'textFormatting', label: 'Formatting', icon: Type, count: textFormatting?.length || 0, changes: getTabChangeCount('textFormatting') },
+    { id: 'tasks', label: 'Tasks', icon: ClipboardList, count: tasks?.length || 0, changes: 0 }
   ];
 
   const getActiveTabData = () => {
@@ -143,6 +156,7 @@ const MatrixStatePanel = ({
       case 'feed': return feedData || [];
       case 'keywords': return keywords || {};
       case 'textFormatting': return textFormatting || [];
+      case 'tasks': return tasks || [];
       default: return [];
     }
   };

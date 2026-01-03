@@ -25,6 +25,10 @@ import css970x250 from '../templates/html/970x250.css?raw';
 import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
+  // Read filter from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialFilterFromUrl = urlParams.get('filter_creatives') || '';
+
   const [creatives, setCreatives] = useState([]);
   const [filteredCreatives, setFilteredCreatives] = useState([]);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -869,13 +873,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
-      <div className="matrix-view-container" style={{ backgroundColor: 'transparent' }}>
+      <div className="matrix-view-container" style={{ backgroundColor: bgColor }}>
         <MediaLibraryBase
         items={filteredByFilters}
         lookAndFeel={lookAndFeel}
         currentModuleName={currentModuleName || 'Creative Library'}
         onMenuToggle={onMenuToggle}
         onFilteredItemsChange={setFilteredCreatives}
+        initialFilterText={initialFilterFromUrl}
         getItemId={(creative) => creative.id}
         getItemExtension={(creative) => creative.extension}
         getItemUrl={(creative) => creative.url}

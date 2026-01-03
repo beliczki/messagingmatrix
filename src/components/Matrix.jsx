@@ -243,6 +243,111 @@ const Matrix = ({
     }
   }, [editingMessage]);
 
+  // Handle action=add_message URL parameter (from Tasks Create MC button)
+  const addMessageActionProcessedRef = useRef(false);
+  const pendingOpenMessageIdRef = useRef(null);
+  const pendingLinkTaskIdRef = useRef(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const action = params.get('action');
+
+    if (action === 'add_message' && !addMessageActionProcessedRef.current && matrixData?.messages) {
+      const audienceKey = params.get('audience');
+      const topicKey = params.get('topic');
+      const product = params.get('product');
+      const linkTaskId = params.get('linkTask');
+
+      if (audienceKey && topicKey) {
+        addMessageActionProcessedRef.current = true;
+
+        // Set product filter if provided
+        if (product) {
+          setProductFilters([product]);
+        }
+
+        // Ensure INCOMING status is in the filter so new message is visible
+        if (!statusFilters.includes('INCOMING')) {
+          setStatusFilters([...statusFilters, 'INCOMING']);
+        }
+
+        // Calculate expected new message ID before adding
+        const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
+        pendingOpenMessageIdRef.current = maxId + 1;
+
+        // Store task ID to link after message is created
+        if (linkTaskId) {
+          pendingLinkTaskIdRef.current = linkTaskId;
+        }
+
+        // Add the message
+        addMessage(topicKey, audienceKey);
+
+        // Navigate to clean URL, removing action params
+        navigate('/matrix', { replace: true });
+      }
+    }
+  }, [location.search, matrixData?.messages, addMessage, navigate]);
+
+  // Open editor when pending message is detected in updated messages array
+  useEffect(() => {
+    if (pendingOpenMessageIdRef.current && matrixData?.messages) {
+      const newMessage = matrixData.messages.find(m => parseInt(m.id) === pendingOpenMessageIdRef.current);
+      if (newMessage) {
+        const messageIdToOpen = pendingOpenMessageIdRef.current;
+        const taskIdToLink = pendingLinkTaskIdRef.current;
+        pendingOpenMessageIdRef.current = null;
+        pendingLinkTaskIdRef.current = null;
+
+        // Auto-link task to this MC if we have a task ID
+        if (taskIdToLink) {
+          (async () => {
+            try {
+              const response = await fetch('/api/tasks');
+              if (response.ok) {
+                const data = await response.json();
+                const tasks = data.tasks || [];
+                const taskToLink = tasks.find(t => String(t.id) === String(taskIdToLink));
+
+                if (taskToLink) {
+                  const mcLabel = `MC${newMessage.number || newMessage.id}${newMessage.variant || ''}`;
+                  const newOutputItem = {
+                    id: Date.now(),
+                    reference: mcLabel,
+                    type: 'message',
+                    messageId: newMessage.id
+                  };
+
+                  const updatedTask = {
+                    ...taskToLink,
+                    outputContent: [...(taskToLink.outputContent || []), newOutputItem]
+                  };
+
+                  const updatedTasks = tasks.map(t => t.id === taskToLink.id ? updatedTask : t);
+
+                  await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tasks: updatedTasks })
+                  });
+
+                  console.log(`✅ Auto-linked task ${taskIdToLink} to MC${newMessage.number}${newMessage.variant || ''}`);
+                }
+              }
+            } catch (error) {
+              console.error('Error auto-linking task:', error);
+            }
+          })();
+        }
+
+        const messageId = `${newMessage.number}${newMessage.variant || 'a'}`;
+        navigate(`/matrix/edit/${messageId}`);
+        editorWasOpenedRef.current = true;
+        setEditingMessage(newMessage);
+      }
+    }
+  }, [matrixData?.messages]);
+
   // Helper to open message editor with URL update
   const openMessageEditor = (msg) => {
     const messageId = `${msg.number}${msg.variant || 'a'}`;
@@ -2053,6 +2158,7 @@ const Matrix = ({
         selectedProducts={currentProducts}
         selectedStatuses={currentStatuses}
         creatives={matrixData?.creatives || []}
+        lookAndFeel={lookAndFeel}
       />
 
       {/* Audience Edit Dialog */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AlertCircle, X, Check } from 'lucide-react';
 
 const OrphanedMessagesDialog = ({
@@ -11,6 +11,17 @@ const OrphanedMessagesDialog = ({
   onCorrect,
   onClose
 }) => {
+  // ESC key to close dialog
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && show) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [show, onClose]);
+
   if (!show || orphanedMessages.length === 0) return null;
 
   return (

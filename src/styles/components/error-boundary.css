@@ -83,12 +83,10 @@
 }
 
 .error-boundary .error-actions .btn-secondary {
-  background: transparent;
+  background: var(--white-10);
   color: var(--color-white);
-  border: 1px solid var(--white-40);
 }
 
 .error-boundary .error-actions .btn-secondary:hover {
-  background: var(--white-10);
-  border-color: var(--white-60);
+  background: var(--white-20);
 }

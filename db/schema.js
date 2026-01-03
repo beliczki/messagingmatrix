@@ -160,6 +160,7 @@ export const users = sqliteTable('users', {
 // Tasks table - migrated from tasks.json
 export const tasks = sqliteTable('tasks', {
   id: text('id').primaryKey(),
+  task_number: integer('task_number'),
   title: text('title').notNull(),
   description: text('description'),
   priority: text('priority'), // 'High', 'Medium', 'Low'

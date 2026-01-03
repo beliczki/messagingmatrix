@@ -1,22 +1,23 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid, Tag, Palette, Plus, Edit2, GripVertical } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { RefreshCw, CheckCircle, Circle, Clock, Trash2, Mail, AlertCircle, Filter, List, LayoutGrid, Tag, Palette, Plus, Edit2 } from 'lucide-react';
 import { apiGet, apiPost } from '../utils/api';
 import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
 import TaskToolbar from './TaskToolbar';
+import MatrixStatePanel from './MatrixStatePanel';
 
 const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const claudeChatRef = useRef(null);
   const [tasks, setTasks] = useState([]);
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState(null); // { type: 'error' | 'success', text: string }
   const [filterText, setFilterText] = useState('');
-  const [viewMode, setViewMode] = useState('kanban'); // 'kanban' or 'workflow'
   const [processedEmailUids, setProcessedEmailUids] = useState([]);
   const [draggedTask, setDraggedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
-  const [workflowTypeFilter, setWorkflowTypeFilter] = useState('all'); // 'all', 'general', 'creative'
+  const [labelFilter, setLabelFilter] = useState([]);
 
   // Load tasks from server on mount
   useEffect(() => {
@@ -80,7 +81,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
 
   const handleFetchAndConvert = async () => {
     setLoading(true);
-    setError(null);
+    setFeedbackMessage(null);
 
     try {
       // Fetch emails
@@ -96,13 +97,14 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
       const newEmails = fetchedEmails.filter(email => !processedEmailUids.includes(email.uid));
 
       if (newEmails.length === 0) {
-        setError('No new emails to process (all emails already converted to tasks)');
+        setFeedbackMessage({ type: 'info', text: 'No new emails to process' });
         setLoading(false);
         return;
       }
 
       // Use AI Assistant to process emails (this will open the assistant panel)
       if (claudeChatRef.current && claudeChatRef.current.processEmailsToTasks) {
+        setFeedbackMessage({ type: 'success', text: `Processing ${newEmails.length} email(s)...` });
         claudeChatRef.current.processEmailsToTasks(newEmails, (newTasks) => {
           // Callback to add tasks when user clicks "Create Tasks" button
           setTasks(prev => [...newTasks, ...prev]);
@@ -110,28 +112,22 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
           // Mark these emails as processed
           const emailUidsToMark = newEmails.map(e => e.uid);
           markEmailsAsProcessed(emailUidsToMark);
+
+          setFeedbackMessage({ type: 'success', text: `Created ${newTasks.length} task(s)` });
         });
       } else {
         throw new Error('AI Assistant not available or not configured');
       }
 
     } catch (err) {
-      setError(err.message);
+      setFeedbackMessage({ type: 'error', text: err.message });
       console.error('Error fetching/converting emails:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleTaskStatus = (taskId) => {
-    setTasks(prev =>
-      prev.map(task =>
-        task.id === taskId
-          ? { ...task, status: task.status === 'completed' ? 'pending' : 'completed' }
-          : task
-      )
-    );
-  };
+  // Note: status field removed in v2 schema - bucket determines task state
 
   const moveTaskToBucket = (taskId, newBucket) => {
     setTasks(prev =>
@@ -151,12 +147,9 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
   };
 
-  const buckets = [
-    { id: 'backlog', name: 'Backlog', description: 'All ideas and requests', color: 'bg-gray-100 border-gray-300' },
-    { id: 'planning', name: 'Planning', description: 'Items being scoped/briefed', color: 'bg-blue-50 border-blue-300' },
-    { id: 'production', name: 'In Production', description: 'Active work', color: 'bg-yellow-50 border-yellow-300' },
-    { id: 'review', name: 'Review', description: 'Under review, Approved', color: 'bg-purple-50 border-purple-300' },
-    { id: 'dead', name: 'Dead', description: 'Discontinued tasks', color: 'bg-red-50 border-red-300' }
+  // Bucket names from keywords spreadsheet, fallback to defaults
+  const buckets = matrixData?.keywords?.tasks?.bucket || [
+    'INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'DELIVERED', 'DEAD'
   ];
 
   const getPriorityColor = (priority) => {
@@ -198,35 +191,58 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     return colors[hash % colors.length];
   };
 
-  const getBucketHeaderStyle = (bucketId) => {
-    switch (bucketId) {
-      case 'backlog':
-        return { backgroundColor: '#6B7280' }; // Middle grey
-      case 'dead':
-        return { backgroundColor: '#DC2626' }; // Full red
-      case 'planning':
-        return { backgroundColor: lookAndFeel?.secondaryColor || '#3B82F6' }; // Use secondaryColor
-      case 'production':
-        return { backgroundColor: lookAndFeel?.secondaryColor2 || '#F59E0B' }; // Use secondaryColor2
-      case 'review':
-        return { backgroundColor: lookAndFeel?.secondaryColor3 || '#8B5CF6' }; // Use secondaryColor3
-      default:
-        return { backgroundColor: lookAndFeel?.secondaryColor || '#3B82F6' };
-    }
+  const getBucketHeaderStyle = (bucketName) => {
+    // Use status colors from Settings (lookAndFeel.statusColors)
+    // Bucket names match status color keys (e.g., INCOMING, NAMING, CONTENT)
+    const defaultColors = {
+      INCOMING: '#8B5CF6',
+      NAMING: '#EAB308',
+      CONTENT: '#F97316',
+      PREVIEW: '#3B82F6',
+      APPROVED: '#22C55E',
+      ACTIVE: '#15803D',
+      INACTIVE: '#9CA3AF',
+      ERROR: '#EF4444',
+      DEAD: '#64748B',
+      MEMORY: '#06B6D4'
+    };
+    const statusColors = lookAndFeel?.statusColors || {};
+    const color = statusColors[bucketName] || defaultColors[bucketName] || '#808080';
+    return { backgroundColor: color };
   };
 
   const getBucketContentStyle = () => {
     return { backgroundColor: 'var(--main-ui-color)' };
   };
 
+  // Get available labels from tasks
+  const availableLabels = useMemo(() => {
+    const labels = new Set();
+    tasks.forEach(task => {
+      // Use product as label (labels field removed in v2 schema)
+      if (task.product) {
+        labels.add(task.product);
+      }
+    });
+    return Array.from(labels).sort();
+  }, [tasks]);
+
   const filteredTasks = tasks.filter(task => {
-    // Filter by workflow type first
-    if (workflowTypeFilter !== 'all') {
-      const taskType = task.workflowType || 'general';
-      if (taskType !== workflowTypeFilter) return false;
+    // Apply product filter (replaces old label filter)
+    if (labelFilter.length > 0) {
+      const taskProduct = task.product || '';
+      const hasMatchingProduct = labelFilter.includes(taskProduct);
+      if (!hasMatchingProduct) return false;
     }
 
     if (!filterText.trim()) return true;
+
+    // Include all searchable fields: TC number, product, related content, email info, keywords
+    // Note: relatedContent is now array of strings like ["MC282a", "MC283b"]
+    const relatedMcNames = (task.relatedContent || []).join(' ');
+    const outputMcNames = (task.outputContent || []).join(' ');
+    const keywordsText = Array.isArray(task.keywords) ? task.keywords.join(' ') : '';
+    const tcNumber = task.id ? `TC${task.id}` : '';
 
     const searchableText = [
       task.title,
@@ -234,7 +250,13 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
       task.priority,
       task.from,
       task.source,
-      task.status
+      task.product,
+      task.emailSubject,
+      task.context,
+      keywordsText,
+      tcNumber,
+      relatedMcNames,
+      outputMcNames
     ].filter(Boolean).join(' ').toLowerCase();
 
     const filterLower = filterText.toLowerCase();
@@ -281,111 +303,17 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     setDraggedTask(null);
   };
 
-  // Workflow view - group messages by status
-  const WORKFLOW_STATUSES = [
-    { id: 'INCOMING', name: 'Incoming', description: 'New requests' },
-    { id: 'NAMING', name: 'Naming', description: 'Naming phase' },
-    { id: 'CONTENT', name: 'Content', description: 'Content development' },
-    { id: 'PREVIEW', name: 'Preview', description: 'Ready for review' },
-    { id: 'APPROVED', name: 'Approved', description: 'Approved by stakeholders' },
-    { id: 'ACTIVE', name: 'Active', description: 'Live in ad servers' },
-    { id: 'INACTIVE', name: 'Inactive', description: 'Paused' },
-    { id: 'ERROR', name: 'Error', description: 'Has issues' }
-  ];
-
-  const LEGACY_STATUS_MAP = {
-    'PLANNED': 'NAMING',
-    'INPROGRESS': 'CONTENT'
-  };
-
-  const messages = matrixData?.messages || [];
-  const audiences = matrixData?.audiences || [];
-  const topics = matrixData?.topics || [];
-  const updateMessage = matrixData?.updateMessage || (() => {});
-  const statusColors = lookAndFeel?.statusColors || {};
-
-  const normalizeStatus = (status) => {
-    const normalized = (status || 'INCOMING').toUpperCase();
-    return LEGACY_STATUS_MAP[normalized] || normalized;
-  };
-
-  const getAudienceName = (audienceKey) => {
-    const audience = audiences.find(a => a.key === audienceKey);
-    return audience?.name || audienceKey || 'Unknown';
-  };
-
-  const getTopicName = (topicKey) => {
-    const topic = topics.find(t => t.key === topicKey);
-    return topic?.name || topicKey || 'Unknown';
-  };
-
-  const getStatusColor = (status) => {
-    const normalized = normalizeStatus(status);
-    return statusColors[normalized] || statusColors[status] || '#8B5CF6';
-  };
-
-  const getTextColor = (hexColor) => {
-    if (!hexColor) return '#ffffff';
-    const hex = hexColor.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#1f2937' : '#ffffff';
-  };
-
-  const messagesByStatus = useMemo(() => {
-    const grouped = {};
-    WORKFLOW_STATUSES.forEach(s => {
-      grouped[s.id] = [];
-    });
-
-    messages.forEach(msg => {
-      const status = normalizeStatus(msg.status);
-      if (grouped[status]) {
-        grouped[status].push(msg);
-      } else {
-        grouped['INCOMING'].push(msg);
-      }
-    });
-
-    return grouped;
-  }, [messages]);
-
-  // Workflow drag handlers
-  const [draggedMessage, setDraggedMessage] = useState(null);
-
-  const handleMessageDragStart = (msg) => {
-    setDraggedMessage(msg);
-  };
-
-  const handleMessageDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const handleMessageDrop = (newStatus) => {
-    if (draggedMessage && normalizeStatus(draggedMessage.status) !== newStatus) {
-      updateMessage(draggedMessage.id, { status: newStatus });
-    }
-    setDraggedMessage(null);
-  };
-
-  const handleMessageDragEnd = () => {
-    setDraggedMessage(null);
-  };
-
   // Create task in specific bucket
-  const createTaskInBucket = (bucketId) => {
+  // Note: id will be auto-generated by server, using temp id for frontend
+  const createTaskInBucket = (bucketName) => {
     const newTask = {
-      id: `task-${Date.now()}`,
+      id: `temp-${Date.now()}`,
       title: '',
       description: '',
       priority: 'Medium',
-      status: 'pending',
-      bucket: bucketId,
-      workflowType: 'general',
-      labels: [],
+      bucket: bucketName,
       relatedContent: [],
+      outputContent: [],
       createdAt: new Date().toISOString()
     };
     setTasks(prev => [newTask, ...prev]);
@@ -398,14 +326,15 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
       <TaskToolbar
         filterText={filterText}
         setFilterText={setFilterText}
-        workflowTypeFilter={workflowTypeFilter}
-        setWorkflowTypeFilter={setWorkflowTypeFilter}
+        labelFilter={labelFilter}
+        setLabelFilter={setLabelFilter}
+        availableLabels={availableLabels}
         filteredCount={filteredTasks.length}
         totalCount={tasks.length}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
         onFetchEmails={handleFetchAndConvert}
         loading={loading}
+        feedbackMessage={feedbackMessage}
+        clearFeedback={() => setFeedbackMessage(null)}
       />
 
       {/* Content - Horizontal scroll only with nice scrollbar */}
@@ -413,21 +342,9 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
 
       {/* Main Content */}
       <div className="h-full">
-          {/* Error Display */}
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-              <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
-              <div>
-                <h3 className="font-semibold text-red-900">Error</h3>
-                <p className="text-red-700 text-sm">{error}</p>
-              </div>
-            </div>
-          )}
-
           {/* Kanban View */}
-          {viewMode === 'kanban' && (
-            <>
-              {filteredTasks.length === 0 && tasks.length === 0 ? (
+          <>
+            {filteredTasks.length === 0 && tasks.length === 0 && (
                 <div className="text-center py-12">
                   <Mail className="mx-auto mb-4 text-gray-400" size={48} />
                   <h3 className="text-lg font-semibold text-gray-700 mb-2">No tasks yet</h3>
@@ -435,38 +352,31 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
                     Use the toolbar to fetch emails or add tasks to buckets below
                   </p>
                 </div>
-              ) : filteredTasks.length === 0 ? (
-                <div className="text-center py-12">
-                  <AlertCircle className="mx-auto mb-4 text-gray-400" size={48} />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No tasks match your filter</h3>
-                  <p className="text-gray-500">Try adjusting your search terms</p>
-                </div>
-              ) : null}
+              )}
 
               {/* Kanban Board - inline-flex with min-w-max ensures content determines width */}
               <div className="inline-flex gap-4 py-12 px-12" style={{ minWidth: 'max-content' }}>
                 {buckets.map(bucket => {
                   const bucketTasks = filteredTasks.filter(task =>
-                    (task.bucket || 'backlog') === bucket.id
+                    (task.bucket || 'INCOMING') === bucket
                   );
 
                   return (
-                    <div key={bucket.id} className="flex-shrink-0 w-80 rounded-lg flex flex-col group/bucket self-start" style={{ boxShadow: 'var(--ui-shadow)', maxHeight: 'calc(100vh - 6rem)' }}>
+                    <div key={bucket} className="flex-shrink-0 w-80 rounded-lg flex flex-col group/bucket self-start" style={{ boxShadow: 'var(--ui-shadow)', maxHeight: 'calc(100vh - 6rem)' }}>
                       {/* Bucket Header */}
                       <div
                         className="rounded-t-lg p-3"
-                        style={getBucketHeaderStyle(bucket.id)}
+                        style={getBucketHeaderStyle(bucket)}
                       >
                         <h3 className="font-bold text-white text-sm uppercase tracking-wide text-right">
-                          {bucket.name}
+                          {bucket}
                         </h3>
-                        <p className="text-xs text-white/90 text-right mt-1">{bucket.description}</p>
                         <div className="flex items-center justify-end gap-2 mt-1">
                           <span className="text-xs text-white/80">
                             {bucketTasks.length} {bucketTasks.length === 1 ? 'task' : 'tasks'}
                           </span>
                           <button
-                            onClick={() => createTaskInBucket(bucket.id)}
+                            onClick={() => createTaskInBucket(bucket)}
                             className="p-1 rounded-md text-white/50 hover:text-white hover:bg-white/20 transition-all opacity-0 group-hover/bucket:opacity-100"
                             title="Add new task"
                           >
@@ -480,7 +390,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
                         className="rounded-b-lg p-3 overflow-y-auto flex-1 custom-scrollbar"
                         style={getBucketContentStyle()}
                         onDragOver={handleDragOver}
-                        onDrop={() => handleDrop(bucket.id)}
+                        onDrop={() => handleDrop(bucket)}
                       >
                         <div className="space-y-3">
                           {bucketTasks.map(task => (
@@ -489,10 +399,8 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
                               task={task}
                               onDragStart={() => handleDragStart(task)}
                               onDragEnd={handleDragEnd}
-                              onToggleStatus={toggleTaskStatus}
                               onEdit={setEditingTask}
                               getPriorityColor={getPriorityColor}
-                              getLabelColor={getLabelColor}
                               formatDate={formatDate}
                             />
                           ))}
@@ -507,86 +415,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
                   );
                 })}
               </div>
-            </>
-          )}
-
-          {/* Workflow Flowchart View */}
-          {viewMode === 'workflow' && (
-            <>
-              {messages.length === 0 ? (
-                <div className="text-center py-12">
-                  <AlertCircle className="mx-auto mb-4 text-gray-400" size={48} />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No messages yet</h3>
-                  <p className="text-gray-500">
-                    Create messages in the Matrix view to see them here
-                  </p>
-                </div>
-              ) : (
-                <div className="flex gap-4 overflow-x-auto pb-4">
-                  {WORKFLOW_STATUSES.map(statusDef => {
-                    const statusMessages = messagesByStatus[statusDef.id] || [];
-                    const statusColor = getStatusColor(statusDef.id);
-                    const textColor = getTextColor(statusColor);
-
-                    return (
-                      <div key={statusDef.id} className="flex-shrink-0 w-72 shadow-sm rounded-lg">
-                        {/* Column Header */}
-                        <div
-                          className="rounded-t-lg p-3"
-                          style={{ backgroundColor: statusColor }}
-                        >
-                          <h3
-                            className="font-bold text-sm uppercase tracking-wide"
-                            style={{ color: textColor }}
-                          >
-                            {statusDef.name}
-                          </h3>
-                          <p
-                            className="text-xs mt-1"
-                            style={{ color: textColor, opacity: 0.8 }}
-                          >
-                            {statusDef.description}
-                          </p>
-                          <div
-                            className="text-xs mt-2"
-                            style={{ color: textColor, opacity: 0.7 }}
-                          >
-                            {statusMessages.length} {statusMessages.length === 1 ? 'message' : 'messages'}
-                          </div>
-                        </div>
-
-                        {/* Column Content */}
-                        <div
-                          className="bg-white rounded-b-lg p-3 min-h-[200px] max-h-[calc(100vh-350px)] overflow-y-auto"
-                          onDragOver={handleMessageDragOver}
-                          onDrop={() => handleMessageDrop(statusDef.id)}
-                        >
-                          <div className="space-y-2">
-                            {statusMessages.map(msg => (
-                              <WorkflowMessageCard
-                                key={msg.id}
-                                message={msg}
-                                audienceName={getAudienceName(msg.audience)}
-                                topicName={getTopicName(msg.topic)}
-                                onDragStart={() => handleMessageDragStart(msg)}
-                                onDragEnd={handleMessageDragEnd}
-                                isDragging={draggedMessage?.id === msg.id}
-                              />
-                            ))}
-                            {statusMessages.length === 0 && (
-                              <div className="text-center py-8 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
-                                Drop here
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
+          </>
       </div>
 
       </div>
@@ -599,102 +428,57 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
         onDelete={deleteTask}
         buckets={buckets}
         matrixData={matrixData}
+        lookAndFeel={lookAndFeel}
+        tasks={tasks}
       />
 
-      {/* Bottom Bar */}
-      <div className="bottom-bar">
-        <AIAssistant
-          ref={claudeChatRef}
-          taskContext={{
-            tasks,
-            emails
-          }}
-        />
-      </div>
+      {/* Bottom Bar - Rendered via portal */}
+      {createPortal(
+        <div className="bottom-bar">
+          <MatrixStatePanel
+            audiences={matrixData?.audiences || []}
+            topics={matrixData?.topics || []}
+            messages={matrixData?.messages || []}
+            keywords={matrixData?.keywords || {}}
+            assets={matrixData?.assets || []}
+            creatives={matrixData?.creatives || []}
+            textFormatting={matrixData?.textFormatting || []}
+            feedData={[]}
+            tasks={tasks}
+            lastSync={null}
+            isSaving={false}
+          />
+          <AIAssistant
+            ref={claudeChatRef}
+            taskContext={{
+              tasks,
+              emails
+            }}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
 
-// Workflow Message Card Component
-const WorkflowMessageCard = ({
-  message,
-  audienceName,
-  topicName,
-  onDragStart,
-  onDragEnd,
-  isDragging
-}) => {
-  const displayName = message.name || message.pmmid || `MC${message.number}${message.variant || ''}`;
-  const thumbnail = message.image1;
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-all border border-gray-200 cursor-move ${
-        isDragging ? 'opacity-50 scale-95' : ''
-      }`}
-    >
-      <div className="flex gap-2">
-        {thumbnail && (
-          <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden bg-gray-100">
-            <img
-              src={thumbnail}
-              alt=""
-              className="w-full h-full object-cover"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-gray-900 truncate">
-            {displayName}
-          </h4>
-          <p className="text-xs text-gray-500 truncate mt-1">
-            {audienceName}
-          </p>
-          <p className="text-xs text-gray-400 truncate">
-            {topicName}
-          </p>
-        </div>
-
-        <div className="flex-shrink-0 text-gray-300">
-          <GripVertical size={16} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, getLabelColor, formatDate }) => {
-  const isCompleted = task.status === 'completed';
+const TaskCard = ({ task, onEdit, getPriorityColor, getLabelColor, formatDate }) => {
+  // Note: status field removed in v2 schema - bucket determines task state
+  const isInDead = task.bucket === 'DEAD';
 
   return (
     <div
       onDoubleClick={() => onEdit(task)}
       className={`bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
-        isCompleted ? 'opacity-60' : ''
+        isInDead ? 'opacity-60' : ''
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Checkbox */}
-        <button
-          onClick={() => onToggleStatus(task.id)}
-          className="flex-shrink-0 mt-1"
-        >
-          {isCompleted ? (
-            <CheckCircle className="text-green-600" size={20} />
-          ) : (
-            <Circle className="text-gray-400 hover:text-gray-600" size={20} />
-          )}
-        </button>
-
         {/* Task Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className={`font-semibold text-gray-900 ${isCompleted ? 'line-through' : ''}`}>
+            <h3 className={`font-semibold text-gray-900 ${isInDead ? 'line-through' : ''}`}>
+              {task.id && <span style={{ color: '#6366f1', marginRight: '6px' }}>TC{task.id}</span>}
               {task.title || <span className="text-gray-400 italic">Untitled task</span>}
             </h3>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -718,23 +502,16 @@ const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, getLabelColo
                   {task.priority}
                 </span>
               )}
-              {task.labels && task.labels.length > 0 && (
-                <div className="flex gap-1 overflow-hidden flex-1 min-w-0">
-                  {task.labels.map((label) => (
-                    <span
-                      key={label}
-                      className={`px-2 py-1 text-xs font-medium rounded flex-shrink-0 whitespace-nowrap ${getLabelColor(label)}`}
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
+              {task.product && (
+                <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800 flex-shrink-0 whitespace-nowrap">
+                  {task.product}
+                </span>
               )}
             </div>
           </div>
 
           {task.description && (
-            <p className={`text-sm text-gray-600 mb-2 ${isCompleted ? 'line-through' : ''}`}>
+            <p className={`text-sm text-gray-600 mb-2 ${isInDead ? 'line-through' : ''}`}>
               {task.description}
             </p>
           )}
@@ -764,8 +541,11 @@ const TaskCard = ({ task, onToggleStatus, onEdit, getPriorityColor, getLabelColo
   );
 };
 
-const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onToggleStatus, onEdit, getPriorityColor, getLabelColor, formatDate }) => {
-  const isCompleted = task.status === 'completed';
+const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onEdit, getPriorityColor, formatDate }) => {
+  // Note: status field removed in v2 schema - bucket determines task state
+  const isInDead = task.bucket === 'DEAD';
+  // Show checkmark for "done" buckets
+  const isDone = ['APPROVED', 'ACTIVE', 'INACTIVE', 'DEAD', 'MEMORY'].includes(task.bucket);
 
   return (
     <div
@@ -776,69 +556,52 @@ const KanbanTaskCard = ({ task, onDragStart, onDragEnd, onToggleStatus, onEdit, 
       className="rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow relative group cursor-move"
       style={{ backgroundColor: 'var(--white-10)', border: '1px solid var(--white-15)' }}
     >
-      {/* Card Header - Checkbox, Priority, Edit */}
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleStatus(task.id);
-          }}
-          className="flex-shrink-0"
-        >
-          {isCompleted ? (
-            <CheckCircle className="text-green-400" size={16} />
-          ) : (
-            <Circle size={16} style={{ color: 'var(--white-40)' }} />
-          )}
-        </button>
-
+      {/* Card Header - Task ID on left, Tags aligned right */}
+      <div className="flex items-center gap-1 mb-2">
+        {/* Left group - Checkmark and TC number */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Edit button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(task);
-            }}
-            className="p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
-            style={{ color: 'var(--white-50)' }}
-            title="Edit task"
-          >
-            <Edit2 size={12} />
-          </button>
-          {task.priority && (
+          {isDone ? (
+            <CheckCircle size={14} style={{ color: '#22C55E', flexShrink: 0 }} />
+          ) : (
+            <Circle size={14} style={{ color: 'var(--white-30)', flexShrink: 0 }} />
+          )}
+          {task.id && (
             <span
-              className={`px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 ${getPriorityColor(
-                task.priority
-              )}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(task);
+              }}
+              className="hover:underline"
+              style={{ color: 'white', fontSize: '12px', fontFamily: 'monospace', fontWeight: 600, cursor: 'pointer' }}
+              title="Edit task"
             >
+              TC{task.id}
+            </span>
+          )}
+        </div>
+        {/* Right group - all tags aligned right with wrap */}
+        <div className="flex flex-wrap items-center gap-1 justify-end flex-1">
+          {task.priority && (
+            <span className={`px-1.5 py-0.5 text-xs font-medium rounded whitespace-nowrap ${getPriorityColor(task.priority)}`}>
               {task.priority}
+            </span>
+          )}
+          {task.product && (
+            <span className="px-1.5 py-0.5 text-xs font-medium rounded whitespace-nowrap" style={{ backgroundColor: '#3b82f6', color: 'white' }}>
+              {task.product}
             </span>
           )}
         </div>
       </div>
 
-      {/* Labels - Wrap to multiple lines, aligned right */}
-      {task.labels && task.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2 justify-end">
-          {task.labels.map((label) => (
-            <span
-              key={label}
-              className={`px-1.5 py-0.5 text-xs font-medium rounded ${getLabelColor(label)}`}
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
-
       {/* Title */}
-      <h4 className={`text-sm font-semibold mb-2 ${isCompleted ? 'line-through' : ''}`} style={{ color: 'var(--color-white)' }}>
+      <h4 className={`text-sm font-semibold mb-2 ${isInDead ? 'line-through' : ''}`} style={{ color: 'var(--color-white)' }}>
         {task.title || <span style={{ color: 'var(--white-50)', fontStyle: 'italic' }}>Untitled</span>}
       </h4>
 
       {/* Description */}
       {task.description && (
-        <p className={`text-xs mb-2 line-clamp-2 ${isCompleted ? 'line-through' : ''}`} style={{ color: 'var(--white-70)' }}>
+        <p className={`text-xs mb-2 line-clamp-2 ${isInDead ? 'line-through' : ''}`} style={{ color: 'var(--white-70)' }}>
           {task.description}
         </p>
       )}

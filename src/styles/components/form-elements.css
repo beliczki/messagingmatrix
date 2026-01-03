@@ -428,7 +428,7 @@ input[type="date"]::-webkit-datetime-edit,
   font-family: var(--font-family);
   cursor: pointer;
   transition: all var(--transition-fast);
-  border: 1px solid transparent;
+  border: none;
 }
 
 .btn:disabled {
@@ -439,7 +439,6 @@ input[type="date"]::-webkit-datetime-edit,
 .btn-primary {
   background: var(--color-white);
   color: var(--color-primary);
-  border-color: var(--color-white);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -449,7 +448,6 @@ input[type="date"]::-webkit-datetime-edit,
 .btn-secondary {
   background: var(--white-10);
   color: var(--color-white);
-  border-color: var(--white-20);
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -459,7 +457,6 @@ input[type="date"]::-webkit-datetime-edit,
 .btn-ghost {
   background: transparent;
   color: var(--white-80);
-  border-color: var(--white-20);
 }
 
 .btn-ghost:hover:not(:disabled) {
@@ -468,13 +465,12 @@ input[type="date"]::-webkit-datetime-edit,
 }
 
 .btn-danger {
-  background: transparent;
+  background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
-  border-color: #ef4444;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .btn svg {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { X, RefreshCw, Save, Loader, ExternalLink, Download } from 'lucide-react';
 import settings from '../services/settings';
 import { generatePMMID, generateTraffickingFields } from '../utils/patternEvaluator';
@@ -36,6 +36,18 @@ const StateManagementDialog = ({
   downloadFeedCSV
 }) => {
   const [activeTab, setActiveTab] = useState('audiences');
+
+  // ESC key to close dialog
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showStateDialog) {
+        setShowStateDialog(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showStateDialog, setShowStateDialog]);
+
   // Format last sync time
   const formatSync = (time) => {
     if (!time) return 'Never';

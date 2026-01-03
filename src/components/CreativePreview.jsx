@@ -20,6 +20,17 @@ const CreativePreview = ({
   // Progressive loading: start with thumbnail, upgrade to full res
   const [displayUrl, setDisplayUrl] = useState(creative?.url);
 
+  // ESC key to close preview
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && creative) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [creative, onClose]);
+
   if (!creative) return null;
 
   const isDynamic = creative.isDynamic && creative.extension === 'html';

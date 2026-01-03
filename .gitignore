@@ -50,3 +50,6 @@ tasks/
 
 # Windows special file
 nul
+
+# Auto Claude data directory
+.auto-claude/

@@ -315,7 +315,7 @@ const PublicPreviewView = ({ previewId }) => {
           description: taskDescription,
           priority: 'Medium',
           status: 'pending',
-          bucket: 'backlog',
+          bucket: 'incoming',
           source: `Preview Comment by ${commentAuthor}`,
           from: commentAuthor,
           relatedContent

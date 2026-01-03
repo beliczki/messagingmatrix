@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import settings from '../services/settings';
 
@@ -12,6 +12,17 @@ const AudienceEditorDialog = ({
   keywords,
   messages
 }) => {
+  // ESC key to close dialog
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && editingAudience) {
+        setEditingAudience(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editingAudience, setEditingAudience]);
+
   if (!editingAudience) return null;
 
   // Helper function to get text color based on background luminance

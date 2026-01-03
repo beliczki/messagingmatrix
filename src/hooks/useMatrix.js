@@ -161,9 +161,36 @@ export const useMatrix = (currentUser = null) => {
 
       const data = await sheets.loadAll();
 
+      // Generate keys for topics using pattern
+      const topicKeyPattern = settings.getPattern('topicKey');
+      const topicsWithKeys = (data.topics || []).map((topic, index) => {
+        // Check if topic has a fallback key (like top67) or no key
+        const hasFallbackKey = topic.key && /^top\d+$/.test(topic.key);
+        const needsKeyGeneration = !topic.key || hasFallbackKey;
+
+        if (needsKeyGeneration && topicKeyPattern) {
+          // Generate key from pattern
+          const generatedKey = generateTopicKey(topic, topicKeyPattern);
+          if (generatedKey && generatedKey.trim()) {
+            return { ...topic, key: generatedKey };
+          }
+        }
+
+        // Keep existing key if it's not a fallback, or generate fallback if no pattern
+        if (topic.key && !hasFallbackKey) return topic;
+
+        // Fallback: generate incremental key based on highest existing
+        const existingKeys = (data.topics || [])
+          .map(t => t.key)
+          .filter(k => k && /^top\d+$/.test(k))
+          .map(k => parseInt(k.replace('top', ''), 10));
+        const maxKey = existingKeys.length > 0 ? Math.max(...existingKeys) : 0;
+        return { ...topic, key: `top${maxKey + index + 1}` };
+      });
+
       // Store as current state
       setAudiences(data.audiences);
-      setTopics(data.topics);
+      setTopics(topicsWithKeys);
       setMessages(data.messages);
       setKeywords(data.keywords || {});
       setAssets(data.assets || []);
@@ -174,7 +201,7 @@ export const useMatrix = (currentUser = null) => {
       // Store deep copy as original state (baseline for change tracking)
       setOriginalState({
         audiences: JSON.parse(JSON.stringify(data.audiences || [])),
-        topics: JSON.parse(JSON.stringify(data.topics || [])),
+        topics: JSON.parse(JSON.stringify(topicsWithKeys)),
         messages: JSON.parse(JSON.stringify(data.messages || [])),
         assets: JSON.parse(JSON.stringify(data.assets || [])),
         creatives: JSON.parse(JSON.stringify(data.creatives || [])),

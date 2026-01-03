@@ -222,21 +222,32 @@ class DatabaseService {
       )
     `);
 
-    // Create tasks table
+    // Create tasks table (v2 schema - id is auto-increment integer)
     this.sqlite.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         description TEXT,
         priority TEXT,
         due_date TEXT,
         source TEXT,
         "from" TEXT,
-        status TEXT DEFAULT 'pending',
         email_uid INTEGER,
         bucket TEXT DEFAULT 'backlog',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        product TEXT,
+        audience TEXT,
+        topic TEXT,
+        task_type TEXT,
+        keywords TEXT,
+        email_body TEXT,
+        email_subject TEXT,
+        email_date TEXT,
+        context TEXT,
+        user_notes TEXT,
+        related_content TEXT,
+        output_content TEXT
       )
     `);
 
@@ -314,8 +325,9 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_creatives_product ON creatives(product)',
       'CREATE INDEX IF NOT EXISTS idx_creatives_drive_id ON creatives(file_drive_id)',
       'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_bucket ON tasks(bucket)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_product ON tasks(product)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)',
       'CREATE INDEX IF NOT EXISTS idx_config_category ON config(category)',
       'CREATE INDEX IF NOT EXISTS idx_share_galleries_created_by ON share_galleries(created_by)',
       'CREATE INDEX IF NOT EXISTS idx_processed_emails_uid ON processed_emails(uid)',

@@ -42,6 +42,17 @@ const TopicEditorDialog = ({
     }
   }, [editingTopic?.tag1, editingTopic?.tag2, editingTopic?.tag3, editingTopic?.tag4, editingTopic?.product]);
 
+  // ESC key to close dialog
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && editingTopic) {
+        setEditingTopic(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editingTopic, setEditingTopic]);
+
   if (!editingTopic) return null;
 
   // Helper function to get text color based on background luminance

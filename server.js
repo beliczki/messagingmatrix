@@ -1668,74 +1668,86 @@ app.post('/api/emails/convert-to-tasks', async (req, res) => {
       `Email ${idx + 1}:\nFrom: ${email.fromName} <${email.from}>\nSubject: ${email.subject}\nDate: ${email.date}\nBody:\n${email.body}\n`
     ).join('\n---\n\n');
 
-    const prompt = `You are an intelligent task manager for a creative/advertising workflow system. Analyze the following emails and extract actionable tasks from them. For each email, identify:
-1. What action needs to be taken
-2. The priority level (High, Medium, Low)
-3. A clear, concise task summary (2-3 sentences max - DO NOT copy the entire email)
-4. Any relevant deadline or due date mentioned
-5. The email source (subject and sender)
-6. Extract and structure the COMPLETE conversation context from the ENTIRE email thread
-7. **TASK TYPE**: Determine if this is a NEW creative request or a MODIFICATION to existing creative
-8. **KEYWORDS**: Extract searchable keywords (product names, campaign names, audience segments, etc.)
+    const prompt = `You are an intelligent task manager for a creative/advertising workflow system. Analyze the following emails and extract actionable tasks.
 
-CRITICAL INSTRUCTION - PRESERVE ORIGINAL LANGUAGE:
-- **IMPORTANT**: The "title", "description", "context", and "keywords" fields MUST be in the ORIGINAL LANGUAGE of the email
-- DO NOT translate to English or any other language
-- If the email is in Hungarian, write the task in Hungarian
-- If the email is in German, write the task in German
-- If the email is in English, write the task in English
-- Keep the exact same language as the email for all fields
+## CRITICAL: SPLIT BY PRODUCT
+If an email mentions MULTIPLE PRODUCTS, create a SEPARATE TASK for each product.
 
-INSTRUCTIONS FOR THE "title" FIELD:
-- Brief task title (one line)
-- In the ORIGINAL LANGUAGE of the email
-- Actionable and clear
+Example: "Update rates for SZK and HK campaigns"
+→ Creates 2 tasks: one for SZK, one for HK
 
-INSTRUCTIONS FOR THE "description" FIELD:
-- Concise 2-3 sentence summary of what needs to be done and why
-- In the ORIGINAL LANGUAGE of the email
-- NOT the full email content - just a brief summary
+## PRODUCT CODES (use these exact codes):
+- HK = Lakáshitel (Home Loan)
+- SZK = Személyi Kölcsön (Personal Loan)
+- SZA = Számlavezetés (Account Management)
+- HITEL = General Loans
+- MARKET = Marketplace/General
+- BIZTOS = Biztosítás (Insurance)
+- MEGTAKARITAS = Savings Products
+- KARTYA = Cards
+- GENERAL = If product unclear
 
-INSTRUCTIONS FOR THE "context" FIELD:
-- Extract the COMPLETE email thread - ALL messages, not just the latest 2-3
-- Organize the conversation chronologically showing who said what
-- Use Markdown formatting for structure (headings, bold, lists, etc.)
-- Preserve the ORIGINAL LANGUAGE - DO NOT translate
-- Preserve the original meaning - DO NOT summarize or condense
-- Format it clearly with headings like "## John Doe wrote:" or "### Maria Smith replied:"
-- Include timestamps if available
-- Keep all relevant details, quotes, and information from each message in the thread
-- Make it easy to read by using markdown formatting (bold for names, ## for message headers, etc.)
+## TASK TYPE DETECTION:
+- "creation" = NEW creative (keywords: új, new, create, készíts, kampány indítás)
+- "modification" = UPDATE existing (keywords: módosítás, update, change, fix, javítás, rate change, copy change)
 
-INSTRUCTIONS FOR THE "taskType" FIELD:
-- "creation" = Request for NEW creative content (new campaign, new banner, new message)
-- "modification" = Request to UPDATE, CHANGE, or FIX existing creative content
-- Look for keywords like: "update", "change", "modify", "fix", "revise", "új" (new), "módosítás" (modification), "javítás" (fix)
+## LANGUAGE RULE:
+Keep title, description, context, keywords in the ORIGINAL email language. Do NOT translate.
 
-INSTRUCTIONS FOR THE "keywords" FIELD:
-- Extract 3-8 keywords that could help find related existing creatives
-- Include: product names, campaign names, audience types, topic references
-- Examples: "személyi kölcsön", "lakáshitel", "REM", "PRO", "Black Friday", "karácsony"
-- Keep in ORIGINAL LANGUAGE
+## FIELD INSTRUCTIONS:
 
-Return your response as a JSON array of tasks with this structure:
+**title**: Brief one-line task title (original language)
+
+**description**: 2-3 sentence summary of what needs to be done (original language)
+
+**product**: Use product code from list above (HK, SZK, SZA, etc.)
+
+**taskType**: "creation" or "modification"
+
+**suggestedMCName** (for creation tasks only):
+- Format: "[Product] - [Campaign/Topic] - [Audience]"
+- Example: "SZK - Őszi kampány - REM"
+
+**suggestedRelatedMC** (for modification tasks only):
+- Extract any MC name, PMMID, or creative reference mentioned
+- Examples: "MC123", "PMMID-456", "Lakáshitel_REMAlt_2024"
+- If none mentioned, set to null
+
+**context**: Full email thread in markdown format (original language)
+- Use ## headings for each message
+- Include timestamps
+- Preserve all details
+
+**keywords**: 3-8 searchable terms for finding related MCs
+
+**priority**:
+- "High" = urgent, ASAP, deadline within 2 days
+- "Medium" = normal request
+- "Low" = whenever possible, low priority mentioned
+
+**dueDate**: Extract deadline as ISO date string, or null
+
+## JSON OUTPUT FORMAT:
 [
   {
-    "title": "Brief task title in ORIGINAL LANGUAGE",
-    "description": "Concise 2-3 sentence summary in ORIGINAL LANGUAGE",
-    "context": "Markdown-formatted complete conversation thread in ORIGINAL LANGUAGE",
+    "title": "Brief task title",
+    "description": "Summary of what needs to be done",
+    "context": "Markdown email thread",
     "priority": "High|Medium|Low",
-    "dueDate": "ISO date string or null",
+    "dueDate": "2024-01-15 or null",
     "source": "Email subject",
-    "from": "Sender name/email",
+    "from": "sender@email.com",
     "status": "pending",
-    "emailUid": email UID number,
+    "emailUid": 12345,
     "taskType": "creation|modification",
-    "keywords": ["keyword1", "keyword2", "keyword3"]
+    "keywords": ["keyword1", "keyword2"],
+    "product": "HK|SZK|SZA|HITEL|MARKET|etc",
+    "suggestedMCName": "For creation tasks or null",
+    "suggestedRelatedMC": "For modification tasks or null"
   }
 ]
 
-If an email doesn't contain actionable tasks, you can skip it or note it as informational.
+If email has no actionable tasks, skip it.
 
 Here are the emails:
 
@@ -1799,6 +1811,10 @@ ${emailSummaries}`;
             workflowType: task.taskType === 'creation' || task.taskType === 'modification' ? 'creative' : 'general',
             // Ensure keywords is an array
             keywords: Array.isArray(task.keywords) ? task.keywords : [],
+            // New fields from improved prompt
+            product: task.product || null,
+            suggestedMCName: task.suggestedMCName || null,
+            suggestedRelatedMC: task.suggestedRelatedMC || null,
             suggestedMCs: []
           };
 
@@ -1932,25 +1948,20 @@ app.get('/api/task-labels', (req, res) => {
 });
 
 // Get all tasks (from SQLite)
-// Optional query params: ?workflow_type=general|creative|all (default: all)
+// v2 schema: id is auto-increment integer, no taskNumber/status/workflowType/labels/suggestedMCName/suggestedRelatedMC/suggestedMCs
 app.get('/api/tasks', (req, res) => {
   try {
     const sqlite = db.getSqlite();
-    const { workflow_type } = req.query;
 
-    let query = 'SELECT * FROM tasks';
-    const params = [];
-
-    // Filter by workflow_type if specified (and not 'all')
-    if (workflow_type && workflow_type !== 'all') {
-      query += ' WHERE workflow_type = ?';
-      params.push(workflow_type);
-    }
-
-    query += ' ORDER BY created_at DESC';
-
+    const query = 'SELECT * FROM tasks ORDER BY created_at DESC';
     const stmt = sqlite.prepare(query);
-    const tasks = params.length > 0 ? stmt.all(...params) : stmt.all();
+    const tasks = stmt.all();
+
+    // Helper to parse comma-separated MC references to array
+    const parseCommaSeparated = (str) => {
+      if (!str) return [];
+      return str.split(',').map(s => s.trim()).filter(Boolean);
+    };
 
     // Transform tasks to match frontend naming conventions
     const transformedTasks = tasks.map(task => ({
@@ -1961,19 +1972,22 @@ app.get('/api/tasks', (req, res) => {
       dueDate: task.due_date,
       source: task.source,
       from: task.from,
-      status: task.status,
-      workflowType: task.workflow_type || 'general',
       emailUid: task.email_uid,
       emailBody: task.email_body,
       emailSubject: task.email_subject,
       emailDate: task.email_date,
       context: task.context,
       userNotes: task.user_notes,
-      relatedContent: task.related_content ? JSON.parse(task.related_content) : [],
-      labels: task.labels ? JSON.parse(task.labels) : [],
+      relatedContent: parseCommaSeparated(task.related_content),
+      outputContent: parseCommaSeparated(task.output_content),
       bucket: task.bucket,
       createdAt: task.created_at,
-      updatedAt: task.updated_at
+      updatedAt: task.updated_at,
+      product: task.product,
+      audience: task.audience,
+      topic: task.topic,
+      taskType: task.task_type,
+      keywords: task.keywords ? task.keywords.split(',').map(s => s.trim()).filter(Boolean) : []
     }));
 
     res.json({ tasks: transformedTasks });
@@ -1984,6 +1998,7 @@ app.get('/api/tasks', (req, res) => {
 });
 
 // Save tasks (bulk replace - to SQLite)
+// v2 schema: id is auto-increment, removed: taskNumber, status, workflowType, labels, suggestedMCName, suggestedMCs, suggestedRelatedMC
 app.post('/api/tasks', (req, res) => {
   try {
     const { tasks } = req.body;
@@ -1993,28 +2008,29 @@ app.post('/api/tasks', (req, res) => {
 
     const sqlite = db.getSqlite();
 
+    // Helper to convert array to comma-separated string
+    const arrayToCommaSep = (arr) => {
+      if (!arr || !Array.isArray(arr)) return null;
+      return arr.length > 0 ? arr.join(',') : null;
+    };
+
     // Replace all tasks with transaction
     const transaction = sqlite.transaction(() => {
       // Clear existing tasks
       sqlite.prepare('DELETE FROM tasks').run();
 
-      // Insert new tasks
+      // Insert new tasks - id is explicit to preserve existing IDs
       const stmt = sqlite.prepare(`
         INSERT INTO tasks (
           id, title, description, priority, due_date,
-          source, "from", status, workflow_type, email_uid, email_body, email_subject, email_date,
-          context, user_notes, related_content, labels, bucket, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source, "from", email_uid, email_body, email_subject, email_date,
+          context, user_notes, related_content, output_content, bucket, created_at, updated_at,
+          product, audience, topic, task_type, keywords
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       tasks.forEach(task => {
-        console.log(`💾 Saving task ${task.id}:`);
-        console.log(`  - workflowType: ${task.workflowType || 'general'}`);
-        console.log(`  - emailBody: ${task.emailBody ? task.emailBody.length + ' chars' : 'null/empty'}`);
-        console.log(`  - emailSubject: ${task.emailSubject || 'null/empty'}`);
-        console.log(`  - emailDate: ${task.emailDate || 'null/empty'}`);
-        console.log(`  - context: ${task.context ? task.context.length + ' chars' : 'null/empty'}`);
-        console.log(`  - userNotes: ${task.userNotes ? task.userNotes.length + ' chars' : 'null/empty'}`);
+        console.log(`💾 Saving task TC${task.id}: "${task.title?.substring(0, 30)}..."`);
 
         stmt.run(
           task.id,
@@ -2024,18 +2040,22 @@ app.post('/api/tasks', (req, res) => {
           task.dueDate || null,
           task.source || null,
           task.from || null,
-          task.status || 'pending',
-          task.workflowType || 'general',
           task.emailUid || null,
           task.emailBody || null,
           task.emailSubject || null,
           task.emailDate || null,
           task.context || null,
           task.userNotes || null,
-          task.relatedContent ? JSON.stringify(task.relatedContent) : null,
-          task.labels ? JSON.stringify(task.labels) : null,
-          task.bucket || 'backlog',
-          task.createdAt || new Date().toISOString()
+          arrayToCommaSep(task.relatedContent),
+          arrayToCommaSep(task.outputContent),
+          task.bucket || 'incoming',
+          task.createdAt || new Date().toISOString(),
+          task.updatedAt || new Date().toISOString(),
+          task.product || null,
+          task.audience || null,
+          task.topic || null,
+          task.taskType || null,
+          arrayToCommaSep(task.keywords)
         );
       });
     });
@@ -2050,6 +2070,7 @@ app.post('/api/tasks', (req, res) => {
 });
 
 // Create a single task
+// v2 schema: id is auto-increment integer, no need to generate task_number
 app.post('/api/tasks/create', (req, res) => {
   try {
     const task = req.body;
@@ -2059,36 +2080,54 @@ app.post('/api/tasks/create', (req, res) => {
     }
 
     const sqlite = db.getSqlite();
+
+    // Helper to convert array to comma-separated string
+    const arrayToCommaSep = (arr) => {
+      if (!arr || !Array.isArray(arr)) return null;
+      return arr.length > 0 ? arr.join(',') : null;
+    };
+
     const stmt = sqlite.prepare(`
       INSERT INTO tasks (
-        id, title, description, priority, due_date,
-        source, "from", status, workflow_type, email_uid, bucket, created_at,
-        context, user_notes, related_content, labels
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        title, description, priority, due_date,
+        source, "from", email_uid, bucket, created_at, updated_at,
+        context, user_notes, related_content, output_content,
+        product, audience, topic, task_type, keywords,
+        email_body, email_subject, email_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const now = new Date().toISOString();
 
-    stmt.run(
-      taskId,
+    const result = stmt.run(
       task.title,
       task.description || null,
       task.priority || null,
       task.dueDate || null,
       task.source || null,
       task.from || null,
-      task.status || 'pending',
-      task.workflowType || 'general',
       task.emailUid || null,
-      task.bucket || 'backlog',
-      task.createdAt || new Date().toISOString(),
+      task.bucket || 'incoming',
+      task.createdAt || now,
+      now,
       task.context || null,
       task.userNotes || null,
-      task.relatedContent ? JSON.stringify(task.relatedContent) : null,
-      task.labels ? JSON.stringify(task.labels) : null
+      arrayToCommaSep(task.relatedContent),
+      arrayToCommaSep(task.outputContent),
+      task.product || null,
+      task.audience || null,
+      task.topic || null,
+      task.taskType || null,
+      arrayToCommaSep(task.keywords),
+      task.emailBody || null,
+      task.emailSubject || null,
+      task.emailDate || null
     );
 
-    res.json({ success: true, task: { ...task, id: taskId } });
+    // Get the auto-generated ID
+    const newId = result.lastInsertRowid;
+
+    res.json({ success: true, task: { ...task, id: newId } });
   } catch (error) {
     console.error('Error creating task:', error);
     res.status(500).json({ error: error.message });
@@ -2096,12 +2135,19 @@ app.post('/api/tasks/create', (req, res) => {
 });
 
 // Update a single task
+// v2 schema: removed status, workflowType fields
 app.put('/api/tasks/:id', (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
     const sqlite = db.getSqlite();
+
+    // Helper to convert array to comma-separated string
+    const arrayToCommaSep = (arr) => {
+      if (!arr || !Array.isArray(arr)) return null;
+      return arr.length > 0 ? arr.join(',') : null;
+    };
 
     // Build dynamic update query
     const fields = [];
@@ -2123,10 +2169,6 @@ app.put('/api/tasks/:id', (req, res) => {
       fields.push('due_date = ?');
       values.push(updates.dueDate);
     }
-    if (updates.status !== undefined) {
-      fields.push('status = ?');
-      values.push(updates.status);
-    }
     if (updates.bucket !== undefined) {
       fields.push('bucket = ?');
       values.push(updates.bucket);
@@ -2139,9 +2181,41 @@ app.put('/api/tasks/:id', (req, res) => {
       fields.push('"from" = ?');
       values.push(updates.from);
     }
-    if (updates.workflowType !== undefined) {
-      fields.push('workflow_type = ?');
-      values.push(updates.workflowType);
+    if (updates.product !== undefined) {
+      fields.push('product = ?');
+      values.push(updates.product);
+    }
+    if (updates.audience !== undefined) {
+      fields.push('audience = ?');
+      values.push(updates.audience);
+    }
+    if (updates.topic !== undefined) {
+      fields.push('topic = ?');
+      values.push(updates.topic);
+    }
+    if (updates.taskType !== undefined) {
+      fields.push('task_type = ?');
+      values.push(updates.taskType);
+    }
+    if (updates.context !== undefined) {
+      fields.push('context = ?');
+      values.push(updates.context);
+    }
+    if (updates.userNotes !== undefined) {
+      fields.push('user_notes = ?');
+      values.push(updates.userNotes);
+    }
+    if (updates.relatedContent !== undefined) {
+      fields.push('related_content = ?');
+      values.push(arrayToCommaSep(updates.relatedContent));
+    }
+    if (updates.outputContent !== undefined) {
+      fields.push('output_content = ?');
+      values.push(arrayToCommaSep(updates.outputContent));
+    }
+    if (updates.keywords !== undefined) {
+      fields.push('keywords = ?');
+      values.push(arrayToCommaSep(updates.keywords));
     }
 
     fields.push('updated_at = ?');

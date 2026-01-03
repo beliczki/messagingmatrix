@@ -50,6 +50,7 @@ const MediaLibraryBase = ({
 
   // Configuration
   initialViewMode = 'grid',
+  initialFilterText = '',
   loadChunkSize = 16,
   columnWidthPx = 300, // Fixed column width for grid view
   viewModes = [
@@ -59,7 +60,7 @@ const MediaLibraryBase = ({
 }) => {
   // View state
   const [viewMode, setViewMode] = useState(initialViewMode);
-  const [filterText, setFilterText] = useState('');
+  const [filterText, setFilterText] = useState(initialFilterText);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [containerWidth, setContainerWidth] = useState(1200);

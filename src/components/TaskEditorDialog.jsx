@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Trash2, Mail, Clock, Plus, Search, Tag, Palette, ArrowRight, Check, Link2, FileText, FileText as SummaryIcon, MessageSquare, Paperclip, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Trash2, Mail, Clock, Plus, Search, Tag, ArrowRight, Check, Link2, Unlink, FileText, FileText as SummaryIcon, MessageSquare, Paperclip, ChevronDown, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { apiGet } from '../utils/api';
 
@@ -9,12 +9,108 @@ const TaskEditorDialog = ({
   onSave,
   onDelete,
   buckets,
-  matrixData
+  matrixData,
+  lookAndFeel,
+  tasks = []
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
+
+  // Keyboard shortcuts: ESC to close, Ctrl/Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && editingTask) {
+        setEditingTask(null);
+      }
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && editingTask) {
+        e.preventDefault();
+        onSave(editingTask);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editingTask, setEditingTask, onSave]);
+  // Source section state
   const [creativeSearch, setCreativeSearch] = useState('');
+  const [mcDropdownOpen, setMcDropdownOpen] = useState(false);
+  const [selectedMcIds, setSelectedMcIds] = useState(new Set());
+  const mcDropdownRef = useRef(null);
+
+  // Output section state
+  const [outputSearch, setOutputSearch] = useState('');
+  const [outputDropdownOpen, setOutputDropdownOpen] = useState(false);
+  const [selectedOutputMcIds, setSelectedOutputMcIds] = useState(new Set());
+  const outputDropdownRef = useRef(null);
+
   const [availableLabels, setAvailableLabels] = useState({ products: [], topics: [], all: [] });
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+
+  // Custom dropdown states
+  const [priorityDropdownOpen, setPriorityDropdownOpen] = useState(false);
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
+  const [audienceDropdownOpen, setAudienceDropdownOpen] = useState(false);
+  const [topicDropdownOpen, setTopicDropdownOpen] = useState(false);
+
+  // Refs for custom dropdowns
+  const priorityDropdownRef = useRef(null);
+  const productDropdownRef = useRef(null);
+  const taskTypeDropdownRef = useRef(null);
+  const audienceDropdownRef = useRef(null);
+  const topicDropdownRef = useRef(null);
+
+  // Task type dropdown state
+  const [taskTypeDropdownOpen, setTaskTypeDropdownOpen] = useState(false);
+
+  // Close MC dropdown on click outside (Source)
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (mcDropdownRef.current && !mcDropdownRef.current.contains(e.target)) {
+        setMcDropdownOpen(false);
+      }
+    };
+    if (mcDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [mcDropdownOpen]);
+
+  // Close MC dropdown on click outside (Output)
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (outputDropdownRef.current && !outputDropdownRef.current.contains(e.target)) {
+        setOutputDropdownOpen(false);
+      }
+    };
+    if (outputDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [outputDropdownOpen]);
+
+  // Close custom dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(e.target)) {
+        setPriorityDropdownOpen(false);
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(e.target)) {
+        setProductDropdownOpen(false);
+      }
+      if (taskTypeDropdownRef.current && !taskTypeDropdownRef.current.contains(e.target)) {
+        setTaskTypeDropdownOpen(false);
+      }
+      if (audienceDropdownRef.current && !audienceDropdownRef.current.contains(e.target)) {
+        setAudienceDropdownOpen(false);
+      }
+      if (topicDropdownRef.current && !topicDropdownRef.current.contains(e.target)) {
+        setTopicDropdownOpen(false);
+      }
+    };
+    if (priorityDropdownOpen || productDropdownOpen || taskTypeDropdownOpen || audienceDropdownOpen || topicDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [priorityDropdownOpen, productDropdownOpen, taskTypeDropdownOpen, audienceDropdownOpen, topicDropdownOpen]);
 
   // Create MC modal state
   const [showCreateMcModal, setShowCreateMcModal] = useState(false);
@@ -28,7 +124,71 @@ const TaskEditorDialog = ({
   const audiences = matrixData?.audiences || [];
   const topics = matrixData?.topics || [];
   const messages = matrixData?.messages || [];
+  const keywords = matrixData?.keywords || {};
   const addMessage = matrixData?.addMessage;
+
+  // Task types from keywords spreadsheet, fallback to defaults
+  const taskTypes = keywords.tasks?.type || ['Update', 'Create'];
+
+  // Helper to resolve MC label (e.g., "MC282a") to message data
+  // v2 schema: relatedContent/outputContent are arrays of MC labels like ["MC282a", "MC283b"]
+  const resolveMcLabel = (mcLabel) => {
+    if (!mcLabel || typeof mcLabel !== 'string') return null;
+
+    // Parse MC label: "MC282a" -> number=282, variant="a"
+    const match = mcLabel.match(/^MC(\d+)([a-z]?)$/i);
+    if (!match) return null;
+
+    const number = parseInt(match[1], 10);
+    const variant = match[2] || '';
+
+    // Find matching message
+    const msg = messages.find(m =>
+      String(m.number) === String(number) && (m.variant || '') === variant
+    );
+
+    if (!msg) {
+      // Return placeholder if message not found
+      return {
+        mcLabel,
+        number: String(number),
+        variant,
+        name: null,
+        topic: null,
+        topicName: null,
+        audience: null,
+        audienceName: null,
+        status: null,
+        found: false
+      };
+    }
+
+    const topic = topics.find(t => t.key === msg.topic);
+    const audience = audiences.find(a => a.key === msg.audience);
+
+    return {
+      mcLabel,
+      id: msg.id,
+      number: String(msg.number),
+      variant: msg.variant || '',
+      name: msg.name || msg.Name || '',
+      topic: msg.topic,
+      topicName: topic?.name || msg.topic,
+      audience: msg.audience,
+      audienceName: audience?.name || msg.audience,
+      status: msg.status,
+      found: true
+    };
+  };
+
+  // Resolve all MC labels in an array to message data
+  const resolvedRelatedContent = useMemo(() => {
+    return (editingTask?.relatedContent || []).map(mcLabel => resolveMcLabel(mcLabel)).filter(Boolean);
+  }, [editingTask?.relatedContent, messages, topics, audiences]);
+
+  const resolvedOutputContent = useMemo(() => {
+    return (editingTask?.outputContent || []).map(mcLabel => resolveMcLabel(mcLabel)).filter(Boolean);
+  }, [editingTask?.outputContent, messages, topics, audiences]);
 
   // Get unique products from audiences and topics
   const availableProducts = useMemo(() => {
@@ -37,6 +197,33 @@ const TaskEditorDialog = ({
     topics.forEach(t => { if (t.product) products.add(t.product); });
     return Array.from(products).sort();
   }, [audiences, topics]);
+
+  // Pre-select default Audience (INCOMING) and Topic (WIP) for creation tasks
+  useEffect(() => {
+    if (editingTask?.taskType === 'Create' && editingTask.product) {
+      const productAudiences = audiences.filter(a => a.product === editingTask.product);
+      const productTopics = topics.filter(t => t.product === editingTask.product);
+
+      // Find audience containing "INCOMING" (case-insensitive)
+      const incomingAudience = productAudiences.find(a =>
+        a.name?.toUpperCase().includes('INCOMING') || a.key?.toUpperCase().includes('INCOMING')
+      );
+
+      // Find topic containing "WIP" (case-insensitive)
+      const wipTopic = productTopics.find(t =>
+        t.name?.toUpperCase().includes('WIP') || t.key?.toUpperCase().includes('WIP')
+      );
+
+      // Only update if we found defaults and current values are empty
+      if ((incomingAudience && !editingTask.audience) || (wipTopic && !editingTask.topic)) {
+        setEditingTask(prev => ({
+          ...prev,
+          audience: prev.audience || (incomingAudience?.key || ''),
+          topic: prev.topic || (wipTopic?.key || '')
+        }));
+      }
+    }
+  }, [editingTask?.taskType, editingTask?.product, audiences, topics]);
 
   // Filter audiences by selected product
   const filteredAudiences = useMemo(() => {
@@ -50,34 +237,50 @@ const TaskEditorDialog = ({
     return topics.filter(t => t.product === selectedProduct);
   }, [topics, selectedProduct]);
 
-  // Search messages for Related Content tab
+  // Search messages for Related Content panel
+  // v2 schema: relatedContent is array of MC labels like ["MC282a", "MC283b"]
   const searchResults = useMemo(() => {
     if (!creativeSearch.trim() || creativeSearch.length < 2) return [];
 
     const searchLower = creativeSearch.toLowerCase();
-    const alreadyLinked = new Set((editingTask?.relatedContent || []).map(r => r.messageId).filter(Boolean));
+    // Already linked MC labels (strings)
+    const alreadyLinked = new Set(editingTask?.relatedContent || []);
+    const justNumber = searchLower.replace(/^mc/i, '');
 
+    // Filter out deleted messages and search
     return messages
       .filter(msg => {
-        // Don't show already linked messages
-        if (alreadyLinked.has(msg.id) || alreadyLinked.has(String(msg.id))) return false;
+        // Skip deleted messages
+        if (msg.status === 'deleted') return false;
 
-        // Search in various fields
-        const pmmid = (msg.pmmid || `MC${msg.number || msg.id}${msg.variant || ''}`).toLowerCase();
+        // Build MC label for this message
+        const msgNumber = msg.number !== undefined && msg.number !== null ? String(msg.number) : '';
+        const mcLabel = `MC${msgNumber}${msg.variant || ''}`;
+
+        // Don't show already linked messages
+        if (alreadyLinked.has(mcLabel)) return false;
+
+        // Build searchable pmmid
+        const pmmid = (msg.pmmid || mcLabel).toLowerCase();
         const name = (msg.name || msg.Name || '').toLowerCase();
         const copy1 = (msg.copy1 || msg.Copy1 || '').toLowerCase();
 
         return pmmid.includes(searchLower) ||
+               msgNumber.includes(justNumber) ||
                name.includes(searchLower) ||
                copy1.includes(searchLower);
       })
-      .slice(0, 8) // Limit results
+      .slice(0, 12) // Increased limit
       .map(msg => {
         const audience = audiences.find(a => a.key === msg.audience);
         const topic = topics.find(t => t.key === msg.topic);
+        const msgNumber = msg.number !== undefined && msg.number !== null ? String(msg.number) : '';
         return {
           id: msg.id,
-          pmmid: msg.pmmid || `MC${msg.number || msg.id}${msg.variant || ''}`,
+          number: msgNumber,
+          variant: msg.variant || '',
+          mcLabel: `MC${msgNumber}${msg.variant || ''}`,
+          pmmid: msg.pmmid || `MC${msgNumber}${msg.variant || ''}`,
           name: msg.name || msg.Name || 'Untitled',
           audience: audience?.name || msg.audience,
           topic: topic?.name || msg.topic,
@@ -85,6 +288,53 @@ const TaskEditorDialog = ({
         };
       });
   }, [creativeSearch, messages, audiences, topics, editingTask?.relatedContent]);
+
+  // Search messages for Output panel
+  // v2 schema: outputContent is array of MC labels like ["MC282a", "MC283b"]
+  const outputSearchResults = useMemo(() => {
+    if (!outputSearch.trim() || outputSearch.length < 2) return [];
+
+    const searchLower = outputSearch.toLowerCase();
+    // Already linked MC labels (strings)
+    const alreadyLinked = new Set(editingTask?.outputContent || []);
+    const justNumber = searchLower.replace(/^mc/i, '');
+
+    return messages
+      .filter(msg => {
+        if (msg.status === 'deleted') return false;
+
+        const msgNumber = msg.number !== undefined && msg.number !== null ? String(msg.number) : '';
+        const mcLabel = `MC${msgNumber}${msg.variant || ''}`;
+
+        if (alreadyLinked.has(mcLabel)) return false;
+
+        const pmmid = (msg.pmmid || mcLabel).toLowerCase();
+        const name = (msg.name || msg.Name || '').toLowerCase();
+        const copy1 = (msg.copy1 || msg.Copy1 || '').toLowerCase();
+
+        return pmmid.includes(searchLower) ||
+               msgNumber.includes(justNumber) ||
+               name.includes(searchLower) ||
+               copy1.includes(searchLower);
+      })
+      .slice(0, 12)
+      .map(msg => {
+        const audience = audiences.find(a => a.key === msg.audience);
+        const topic = topics.find(t => t.key === msg.topic);
+        const msgNumber = msg.number !== undefined && msg.number !== null ? String(msg.number) : '';
+        return {
+          id: msg.id,
+          number: msgNumber,
+          variant: msg.variant || '',
+          mcLabel: `MC${msgNumber}${msg.variant || ''}`,
+          pmmid: msg.pmmid || `MC${msgNumber}${msg.variant || ''}`,
+          name: msg.name || msg.Name || 'Untitled',
+          audience: audience?.name || msg.audience,
+          topic: topic?.name || msg.topic,
+          status: msg.status
+        };
+      });
+  }, [outputSearch, messages, audiences, topics, editingTask?.outputContent]);
 
   // Reset selections when modal opens
   useEffect(() => {
@@ -118,7 +368,72 @@ const TaskEditorDialog = ({
       .catch(err => console.error('Error fetching labels:', err));
   }, []);
 
+  // Navigation: undone tasks only
+  const undoneTasks = useMemo(() => {
+    return tasks.filter(t => t.status !== 'completed');
+  }, [tasks]);
+
+  const currentTaskIndex = useMemo(() => {
+    if (!editingTask) return -1;
+    return undoneTasks.findIndex(t => t.id === editingTask.id);
+  }, [undoneTasks, editingTask]);
+
+  const hasPreviousTask = currentTaskIndex > 0;
+  const hasNextTask = currentTaskIndex < undoneTasks.length - 1 && currentTaskIndex >= 0;
+
+  const goToPreviousTask = () => {
+    if (hasPreviousTask) {
+      setEditingTask(undoneTasks[currentTaskIndex - 1]);
+    } else if (undoneTasks.length > 0) {
+      setEditingTask(undoneTasks[undoneTasks.length - 1]); // Loop to end
+    }
+  };
+
+  const goToNextTask = () => {
+    if (hasNextTask) {
+      setEditingTask(undoneTasks[currentTaskIndex + 1]);
+    } else if (undoneTasks.length > 0) {
+      setEditingTask(undoneTasks[0]); // Loop to start
+    }
+  };
+
   if (!editingTask) return null;
+
+  // Helper: Get text color based on background luminance
+  const getTextColor = (hexColor) => {
+    if (!hexColor) return '#ffffff';
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
+
+  // Helper: Get bucket color from lookAndFeel statusColors
+  const getBucketColor = (bucketId) => {
+    const statusColors = lookAndFeel?.statusColors || {};
+    const colorMap = {
+      incoming: statusColors.INCOMING || '#8B5CF6',    // Purple
+      naming: statusColors.NAMING || '#EAB308',        // Yellow
+      content: statusColors.CONTENT || '#F97316',      // Orange
+      preview: statusColors.PREVIEW || '#3B82F6',      // Blue
+      approved: statusColors.APPROVED || '#22C55E',    // Green
+      delivered: statusColors.ACTIVE || '#15803D',     // Dark Green
+      dead: statusColors.INACTIVE || '#9CA3AF'         // Gray
+    };
+    return colorMap[bucketId] || '#8B5CF6';
+  };
+
+  // Current bucket color
+  const currentBucketColor = getBucketColor(editingTask.bucket || 'incoming');
+
+  // Helper: Get MC status color from lookAndFeel statusColors
+  const getMcStatusColor = (status) => {
+    const statusColors = lookAndFeel?.statusColors || {};
+    const statusUpper = (status || '').toUpperCase();
+    return statusColors[statusUpper] || statusColors.INACTIVE || '#9CA3AF';
+  };
 
   const handleSave = () => {
     onSave(editingTask);
@@ -142,22 +457,49 @@ const TaskEditorDialog = ({
     setCreateMcStatus('creating');
 
     try {
-      // Calculate next message ID
+      // Calculate next MC number (same logic as useMatrix.js addMessage)
+      // Check if cell already has messages
+      const cellMessages = messages.filter(m =>
+        m.topic === selectedTopic &&
+        m.audience === selectedAudience &&
+        m.status !== 'deleted'
+      );
+
+      let mcNumber;
+      let variant;
+
+      if (cellMessages.length > 0) {
+        // Cell has messages - use same number, calculate next variant
+        mcNumber = cellMessages[0].number;
+        const variants = cellMessages.map(m => m.variant || 'a');
+        const maxVariant = variants.sort().pop();
+        variant = String.fromCharCode(maxVariant.charCodeAt(0) + 1);
+      } else {
+        // Cell is empty - use global next highest number
+        const allActiveMessages = messages.filter(m => m.status !== 'deleted');
+        const maxNumber = allActiveMessages.length > 0
+          ? Math.max(...allActiveMessages.map(m => m.number || 0))
+          : 0;
+        mcNumber = maxNumber + 1;
+        variant = 'a';
+      }
+
+      // Calculate next message ID for linking
       const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
       const newId = maxId + 1;
 
       // Create message with task data
-      // addMessage(topicKey, audienceKey) creates a new message
-      // We need to call it and then update the message with our data
       addMessage(selectedTopic, selectedAudience);
 
-      // The message is created with default values
-      // We'll update relatedContent to link to this new message
+      // Format MC reference (e.g., MC15a, MC16a)
+      const mcReference = `MC${mcNumber}${variant}`;
+
+      // Update relatedContent to link to this new message
       const newRelatedContent = [
         ...(editingTask.relatedContent || []),
         {
           id: Date.now(),
-          reference: `MC${newId}`,
+          reference: mcReference,
           type: 'message',
           messageId: String(newId)
         }
@@ -171,7 +513,7 @@ const TaskEditorDialog = ({
       setEditingTask(updatedTask);
 
       // Set success state
-      setCreatedMcInfo({ id: newId, pmmid: `MC${newId}` });
+      setCreatedMcInfo({ id: newId, pmmid: mcReference, number: mcNumber, variant });
       setCreateMcStatus('success');
 
       // Auto-close modal after 2 seconds
@@ -237,22 +579,50 @@ const TaskEditorDialog = ({
   };
 
   // Add related content (creative)
+  // v2 schema: relatedContent is array of MC labels like ["MC282a", "MC283b"]
   const handleAddRelatedContent = (creative) => {
     const relatedContent = editingTask.relatedContent || [];
-    if (!relatedContent.find(c => c.id === creative.id)) {
+    const mcLabel = creative.mcLabel || `MC${creative.number}${creative.variant || ''}`;
+
+    if (!relatedContent.includes(mcLabel)) {
       setEditingTask({
         ...editingTask,
-        relatedContent: [...relatedContent, creative]
+        relatedContent: [...relatedContent, mcLabel]
       });
     }
     setCreativeSearch('');
   };
 
   // Remove related content
-  const handleRemoveRelatedContent = (creativeId) => {
+  // v2 schema: remove MC label string from array
+  const handleRemoveRelatedContent = (mcLabel) => {
     setEditingTask({
       ...editingTask,
-      relatedContent: (editingTask.relatedContent || []).filter(c => c.id !== creativeId)
+      relatedContent: (editingTask.relatedContent || []).filter(label => label !== mcLabel)
+    });
+  };
+
+  // Add output content (creative)
+  // v2 schema: outputContent is array of MC labels like ["MC282a", "MC283b"]
+  const handleAddOutputContent = (creative) => {
+    const outputContent = editingTask.outputContent || [];
+    const mcLabel = creative.mcLabel || `MC${creative.number}${creative.variant || ''}`;
+
+    if (!outputContent.includes(mcLabel)) {
+      setEditingTask({
+        ...editingTask,
+        outputContent: [...outputContent, mcLabel]
+      });
+    }
+    setOutputSearch('');
+  };
+
+  // Remove output content
+  // v2 schema: remove MC label string from array
+  const handleRemoveOutputContent = (mcLabel) => {
+    setEditingTask({
+      ...editingTask,
+      outputContent: (editingTask.outputContent || []).filter(label => label !== mcLabel)
     });
   };
 
@@ -305,11 +675,10 @@ const TaskEditorDialog = ({
     return topicColors[label] || 'bg-gray-100 text-gray-700 border-gray-300';
   };
 
-  // Tab definitions
+  // Tab definitions (only 2 tabs now - Related Content moved to right panel)
   const tabs = [
     { id: 'summary', label: 'Summary', icon: SummaryIcon },
-    { id: 'context', label: 'Context', icon: MessageSquare },
-    { id: 'related', label: 'Related', icon: Paperclip, badge: editingTask.relatedContent?.length || 0 }
+    { id: 'history', label: 'History', icon: MessageSquare }
   ];
 
   // Get bucket name for display
@@ -323,18 +692,76 @@ const TaskEditorDialog = ({
           <div className="dialog-sidebar">
             <h2 className="dialog-title">Edit Task</h2>
 
-            {/* Status indicator */}
+            {/* Task Navigation Stepper */}
             <div className="dialog-nav">
+              <button
+                onClick={goToPreviousTask}
+                className="dialog-nav-btn"
+                title="Previous undone task"
+                disabled={undoneTasks.length <= 1}
+              >
+                <ChevronLeft size={16} />
+              </button>
               <div
                 className="dialog-nav-indicator"
                 style={{
-                  backgroundColor: editingTask.status === 'completed' ? '#22c55e' : 'var(--white-15)',
+                  backgroundColor: currentBucketColor,
+                  color: getTextColor(currentBucketColor),
                   borderRadius: '6px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  paddingTop: '3px'
                 }}
               >
-                {editingTask.status === 'completed' ? 'Completed' : currentBucket?.name || 'Backlog'}
+                {editingTask.id && !String(editingTask.id).startsWith('temp') ? `TC${editingTask.id}` : (currentBucket?.name || 'New Task')}
               </div>
+              <button
+                onClick={goToNextTask}
+                className="dialog-nav-btn"
+                title="Next undone task"
+                disabled={undoneTasks.length <= 1}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            {/* Priority and Due Date */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+              <div className={`dropdown ${priorityDropdownOpen ? 'open' : ''}`} ref={priorityDropdownRef}>
+                <button
+                  className="dropdown-trigger"
+                  onClick={() => setPriorityDropdownOpen(!priorityDropdownOpen)}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  <span>{editingTask.priority || 'Medium'} Priority</span>
+                  <ChevronDown size={16} />
+                </button>
+                <div className="dropdown-menu">
+                  {['Low', 'Medium', 'High'].map(priority => (
+                    <div
+                      key={priority}
+                      className={`dropdown-item ${editingTask.priority === priority ? 'selected' : ''}`}
+                      onClick={() => {
+                        setEditingTask({ ...editingTask, priority });
+                        setPriorityDropdownOpen(false);
+                      }}
+                    >
+                      {priority} Priority
+                      {editingTask.priority === priority && <Check size={14} />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="date"
+                value={editingTask.dueDate || ''}
+                onChange={(e) => setEditingTask({ ...editingTask, dueDate: e.target.value })}
+                className="form-input"
+                style={{
+                  fontSize: '12px',
+                  padding: '6px 10px',
+                  textAlign: 'center'
+                }}
+              />
             </div>
 
             {/* Vertical Tabs */}
@@ -365,14 +792,22 @@ const TaskEditorDialog = ({
 
             {/* Actions */}
             <div className="dialog-actions">
-              {/* Create MC button - only for creative workflow tasks */}
-              {editingTask.workflowType === 'creative' && addMessage && (
+              {/* Create MC button - only show here if task type is creation and there's already output content */}
+              {addMessage && editingTask.taskType === 'Create' && editingTask.outputContent?.length > 0 && (
                 <button
-                  onClick={() => setShowCreateMcModal(true)}
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    params.set('action', 'add_message');
+                    if (editingTask.audience) params.set('audience', editingTask.audience);
+                    if (editingTask.topic) params.set('topic', editingTask.topic);
+                    if (editingTask.product) params.set('product', editingTask.product);
+                    if (editingTask.id) params.set('linkTask', editingTask.id);
+                    window.open(`/matrix?${params.toString()}`, '_blank');
+                  }}
                   className="btn btn-primary"
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
                 >
-                  <ArrowRight size={16} />
+                  <ExternalLink size={16} />
                   Create MC
                 </button>
               )}
@@ -525,6 +960,89 @@ const TaskEditorDialog = ({
                     </div>
                   </div>
 
+                  {/* Product and Task Type Dropdowns */}
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    {/* Product Dropdown */}
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Product</label>
+                      <div className={`dropdown ${productDropdownOpen ? 'open' : ''}`} ref={productDropdownRef}>
+                        <button
+                          className="dropdown-trigger"
+                          onClick={() => setProductDropdownOpen(!productDropdownOpen)}
+                          style={{ width: '100%' }}
+                        >
+                          <span>{editingTask.product || 'Select product...'}</span>
+                          <ChevronDown size={16} />
+                        </button>
+                        <div className="dropdown-menu">
+                          <div
+                            className={`dropdown-item ${!editingTask.product ? 'selected' : ''}`}
+                            onClick={() => {
+                              setEditingTask({ ...editingTask, product: '' });
+                              setProductDropdownOpen(false);
+                            }}
+                          >
+                            Select product...
+                            {!editingTask.product && <Check size={14} />}
+                          </div>
+                          {availableProducts.map(product => (
+                            <div
+                              key={product}
+                              className={`dropdown-item ${editingTask.product === product ? 'selected' : ''}`}
+                              onClick={() => {
+                                setEditingTask({ ...editingTask, product });
+                                setProductDropdownOpen(false);
+                              }}
+                            >
+                              {product}
+                              {editingTask.product === product && <Check size={14} />}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Task Type Dropdown */}
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Task Type</label>
+                      <div className={`dropdown ${taskTypeDropdownOpen ? 'open' : ''}`} ref={taskTypeDropdownRef}>
+                        <button
+                          className="dropdown-trigger"
+                          onClick={() => setTaskTypeDropdownOpen(!taskTypeDropdownOpen)}
+                          style={{ width: '100%' }}
+                        >
+                          <span>{editingTask.taskType || 'Select type...'}</span>
+                          <ChevronDown size={16} />
+                        </button>
+                        <div className="dropdown-menu">
+                          <div
+                            className={`dropdown-item ${!editingTask.taskType ? 'selected' : ''}`}
+                            onClick={() => {
+                              setEditingTask({ ...editingTask, taskType: '' });
+                              setTaskTypeDropdownOpen(false);
+                            }}
+                          >
+                            Select type...
+                            {!editingTask.taskType && <Check size={14} />}
+                          </div>
+                          {taskTypes.map(type => (
+                            <div
+                              key={type}
+                              className={`dropdown-item ${editingTask.taskType === type ? 'selected' : ''}`}
+                              onClick={() => {
+                                setEditingTask({ ...editingTask, taskType: type });
+                                setTaskTypeDropdownOpen(false);
+                              }}
+                            >
+                              {type}
+                              {editingTask.taskType === type && <Check size={14} />}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Title */}
                   <div className="form-group">
                     <label className="form-label">Title</label>
@@ -549,6 +1067,35 @@ const TaskEditorDialog = ({
                     />
                   </div>
 
+                  {/* Suggested Related MC (from AI for modification tasks) */}
+                  {editingTask.suggestedRelatedMC && (
+                    <div style={{
+                      background: 'rgba(249, 115, 22, 0.15)',
+                      border: '1px solid rgba(249, 115, 22, 0.3)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '11px', color: 'var(--white-60)', marginBottom: '4px' }}>
+                          AI Suggested MC to Modify
+                        </div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '14px', fontWeight: 600, color: '#fdba74' }}>
+                          {editingTask.suggestedRelatedMC}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCreativeSearch(editingTask.suggestedRelatedMC)}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '12px', padding: '6px 12px' }}
+                      >
+                        Search
+                      </button>
+                    </div>
+                  )}
+
                   {/* Suggested MCs for modification tasks */}
                   {editingTask.suggestedMCs && editingTask.suggestedMCs.length > 0 && (
                     <div style={{
@@ -561,7 +1108,7 @@ const TaskEditorDialog = ({
                         <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-white)' }}>
                           AI Suggested MCs ({editingTask.suggestedMCs.length})
                         </span>
-                        {editingTask.taskType === 'modification' && (
+                        {editingTask.taskType === 'Update' && (
                           <span style={{
                             padding: '2px 8px',
                             background: 'var(--white-15)',
@@ -632,83 +1179,38 @@ const TaskEditorDialog = ({
                     </div>
                   )}
 
-                  {/* Task Type Badge (for creative tasks) */}
-                  {editingTask.taskType && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--white-60)' }}>Task Type:</span>
-                      <span style={{
-                        padding: '4px 10px',
-                        fontSize: '12px',
-                        borderRadius: '6px',
-                        fontWeight: 500,
-                        background: editingTask.taskType === 'creation' ? '#22c55e' : editingTask.taskType === 'modification' ? '#f97316' : 'var(--white-15)',
-                        color: 'white'
-                      }}>
-                        {editingTask.taskType === 'creation' ? 'New Creative' :
-                         editingTask.taskType === 'modification' ? 'Modification' : editingTask.taskType}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Priority, Bucket, Workflow Type */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                    <div className="form-group">
-                      <label className="form-label">Priority</label>
-                      <select
-                        value={editingTask.priority || 'Medium'}
-                        onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
-                        className="form-input"
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <option value="Low">Low</option>
-                        <option value="Medium">Medium</option>
-                        <option value="High">High</option>
-                      </select>
-                    </div>
-
+                  {/* Bucket and Created */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div className="form-group">
                       <label className="form-label">Bucket</label>
                       <select
-                        value={editingTask.bucket || 'backlog'}
+                        value={editingTask.bucket || 'incoming'}
                         onChange={(e) => setEditingTask({ ...editingTask, bucket: e.target.value })}
                         className="form-input"
-                        style={{ cursor: 'pointer' }}
+                        style={{
+                          cursor: 'pointer',
+                          backgroundColor: currentBucketColor,
+                          borderColor: currentBucketColor,
+                          color: getTextColor(currentBucketColor),
+                          fontWeight: 600
+                        }}
                       >
-                        {buckets.map(bucket => (
-                          <option key={bucket.id} value={bucket.id}>
-                            {bucket.name}
-                          </option>
-                        ))}
+                        {buckets.map(bucket => {
+                          const bucketColor = getBucketColor(bucket.id);
+                          return (
+                            <option
+                              key={bucket.id}
+                              value={bucket.id}
+                              style={{
+                                backgroundColor: bucketColor,
+                                color: getTextColor(bucketColor)
+                              }}
+                            >
+                              {bucket.name}
+                            </option>
+                          );
+                        })}
                       </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Palette size={14} />
-                        Workflow Type
-                      </label>
-                      <select
-                        value={editingTask.workflowType || 'general'}
-                        onChange={(e) => setEditingTask({ ...editingTask, workflowType: e.target.value })}
-                        className="form-input"
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <option value="general">General</option>
-                        <option value="creative">Creative Workflow</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Due Date and Created */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div className="form-group">
-                      <label className="form-label">Due Date</label>
-                      <input
-                        type="date"
-                        value={editingTask.dueDate || ''}
-                        onChange={(e) => setEditingTask({ ...editingTask, dueDate: e.target.value })}
-                        className="form-input"
-                      />
                     </div>
 
                     {editingTask.createdAt && (
@@ -763,8 +1265,8 @@ const TaskEditorDialog = ({
                 </div>
               )}
 
-              {/* Context Tab */}
-              {activeTab === 'context' && (
+              {/* History Tab */}
+              {activeTab === 'history' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   {/* AI-Extracted Conversation Context (Read-only Markdown) */}
                   {editingTask.context && (
@@ -805,189 +1307,848 @@ const TaskEditorDialog = ({
                 </div>
               )}
 
-              {/* Related Content Tab */}
-              {activeTab === 'related' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div>
-                    <label className="form-label">Related MCs & Creatives</label>
-                    <p style={{ fontSize: '12px', color: 'var(--white-60)', marginTop: '4px' }}>
-                      Search Matrix messages or add text references
-                    </p>
+            </div>
+
+            {/* RELATED CONTENT PANEL (Third Section) */}
+            <div className="dialog-preview custom-scrollbar" style={{ overflowY: 'auto' }}>
+              {/* SOURCE SECTION */}
+              <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--white-15)' }}>
+                <div className="preview-header" style={{ justifyContent: 'flex-start' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)' }}>Related Content Source</h3>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="custom-scrollbar">
+                {/* MC Search Combo Box */}
+                <div ref={mcDropdownRef} className={`dropdown ${mcDropdownOpen ? 'open' : ''}`} style={{ position: 'relative' }}>
+                  {/* Combo Box Trigger */}
+                  <div
+                    className="dropdown-trigger"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: 'var(--white-10)',
+                      border: '1px solid var(--white-20)',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setMcDropdownOpen(!mcDropdownOpen)}
+                  >
+                    <Search size={14} style={{ color: 'var(--white-50)', flexShrink: 0 }} />
+                    <input
+                      type="text"
+                      value={creativeSearch}
+                      onChange={(e) => {
+                        setCreativeSearch(e.target.value);
+                        if (!mcDropdownOpen && e.target.value.length >= 2) {
+                          setMcDropdownOpen(true);
+                        }
+                      }}
+                      onFocus={() => creativeSearch.length >= 2 && setMcDropdownOpen(true)}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="Search MCs..."
+                      style={{
+                        flex: 1,
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        fontSize: '12px',
+                        color: 'var(--color-white)'
+                      }}
+                    />
+                    <ChevronDown size={14} style={{ color: 'var(--white-50)', flexShrink: 0, transform: mcDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                   </div>
 
-                  {/* Search Section */}
-                  <div style={{
-                    background: 'var(--white-10)',
-                    border: '1px solid var(--white-20)',
-                    borderRadius: '12px',
-                    padding: '16px'
-                  }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <div style={{ flex: 1, position: 'relative' }}>
-                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--white-50)' }} />
-                        <input
-                          type="text"
-                          value={creativeSearch}
-                          onChange={(e) => setCreativeSearch(e.target.value)}
-                          placeholder="Search MCs by name, number, or content..."
-                          className="form-input"
-                          style={{ paddingLeft: '40px' }}
-                        />
-                      </div>
+                  {/* Dropdown Menu */}
+                  {mcDropdownOpen && (
+                    <div
+                      className="dropdown-menu"
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '4px',
+                        background: 'var(--main-ui-color)',
+                        border: '1px solid var(--white-20)',
+                        borderRadius: '8px',
+                        boxShadow: 'var(--ui-shadow)',
+                        zIndex: 100,
+                        maxHeight: '250px',
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}
+                    >
+                      {searchResults.length > 0 ? (
+                        <>
+                          {/* Header with Select All / Deselect All */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 10px',
+                            borderBottom: '1px solid var(--white-15)',
+                            fontSize: '10px',
+                            color: 'var(--white-60)'
+                          }}>
+                            <span>Found {searchResults.length} • Selected {selectedMcIds.size}</span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedMcIds(new Set(searchResults.map(mc => mc.id)));
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '2px 6px',
+                                  fontSize: '10px',
+                                  color: 'var(--white-70)',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--white-15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                All
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedMcIds(new Set());
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '2px 6px',
+                                  fontSize: '10px',
+                                  color: 'var(--white-70)',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--white-15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                None
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Results List */}
+                          <div style={{ overflowY: 'auto', flex: 1 }} className="custom-scrollbar">
+                            {searchResults.map((mc) => {
+                              const statusColor = getMcStatusColor(mc.status);
+                              const isSelected = selectedMcIds.has(mc.id);
+                              return (
+                                <div
+                                  key={mc.id}
+                                  className={`dropdown-item ${isSelected ? 'selected' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMcIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(mc.id)) {
+                                        next.delete(mc.id);
+                                      } else {
+                                        next.add(mc.id);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '6px 10px',
+                                    cursor: 'pointer',
+                                    background: isSelected ? 'var(--white-10)' : 'transparent'
+                                  }}
+                                >
+                                  {/* Checkbox */}
+                                  <div style={{
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '4px',
+                                    border: isSelected ? 'none' : '1px solid var(--white-30)',
+                                    background: isSelected ? '#3b82f6' : 'transparent',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {isSelected && <Check size={12} style={{ color: 'white' }} />}
+                                  </div>
+                                  {/* MC Label */}
+                                  <span style={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: getTextColor(statusColor),
+                                    backgroundColor: statusColor,
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    flexShrink: 0
+                                  }}>
+                                    {mc.mcLabel}
+                                  </span>
+                                  {/* Name */}
+                                  <span style={{
+                                    fontSize: '11px',
+                                    color: 'var(--white-80)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    flex: 1
+                                  }}>
+                                    {mc.name}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Add Selected Button */}
+                          {selectedMcIds.size > 0 && (
+                            <div style={{ padding: '8px 10px', borderTop: '1px solid var(--white-15)' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Add all selected MCs in one batch
+                                  const newItems = searchResults
+                                    .filter(mc => selectedMcIds.has(mc.id))
+                                    .map((mc, idx) => ({
+                                      id: Date.now() + idx,
+                                      reference: mc.mcLabel,
+                                      type: 'message',
+                                      messageId: mc.id
+                                    }));
+                                  const existingContent = editingTask.relatedContent || [];
+                                  const existingIds = new Set(existingContent.map(c => c.messageId));
+                                  const filteredNew = newItems.filter(item => !existingIds.has(item.messageId));
+                                  setEditingTask({
+                                    ...editingTask,
+                                    relatedContent: [...existingContent, ...filteredNew]
+                                  });
+                                  setSelectedMcIds(new Set());
+                                  setMcDropdownOpen(false);
+                                  setCreativeSearch('');
+                                }}
+                                className="btn btn-primary"
+                                style={{ width: '100%', fontSize: '11px', padding: '6px 12px' }}
+                              >
+                                Add {selectedMcIds.size} Selected
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : creativeSearch.length >= 2 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', fontSize: '11px', color: 'var(--white-60)' }}>
+                          No MCs found
+                        </div>
+                      ) : (
+                        <div style={{ padding: '16px', textAlign: 'center', fontSize: '11px', color: 'var(--white-60)' }}>
+                          Type 2+ characters to search
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Related Content List */}
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)' }}>
+                      Linked ({editingTask.relatedContent?.length || 0})
+                    </div>
+                    {editingTask.relatedContent && editingTask.relatedContent.length > 0 && (
                       <button
                         onClick={() => {
-                          if (creativeSearch.trim()) {
-                            handleAddRelatedContent({
-                              id: Date.now(),
-                              reference: creativeSearch.trim(),
-                              type: 'text'
-                            });
+                          // Get all linked MC codes and open Creative Library filtered to them
+                          // v2 schema: relatedContent is array of MC labels like ["MC282a", "MC283b"]
+                          const mcCodes = (editingTask.relatedContent || [])
+                            .map(mcLabel => {
+                              // Insert underscore between number and variant (MC282a → MC282_a)
+                              return mcLabel.replace(/^(MC\d+)([a-zA-Z].*)$/, '$1_$2');
+                            })
+                            .join(' OR ');
+                          if (mcCodes) {
+                            window.open(`/creative-library?filter_creatives=${encodeURIComponent(mcCodes)}`, '_blank');
                           }
                         }}
                         className="btn btn-secondary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                        title="Add as text reference (not linked to Matrix)"
+                        style={{ padding: '4px 8px', fontSize: '10px', gap: '4px' }}
+                        title="Open in Creative Library"
                       >
-                        <FileText size={16} />
-                        Add Text
+                        <ExternalLink size={12} />
+                        Show in Creative Library
                       </button>
-                    </div>
-
-                    {/* Search Results */}
-                    {searchResults.length > 0 && (
-                      <div style={{ marginTop: '12px', borderTop: '1px solid var(--white-15)', paddingTop: '12px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--white-60)', marginBottom: '8px' }}>
-                          Matrix Messages ({searchResults.length})
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }} className="custom-scrollbar">
-                          {searchResults.map((mc) => (
-                            <div
-                              key={mc.id}
-                              style={{
-                                background: 'var(--white-10)',
-                                border: '1px solid var(--white-20)',
-                                borderRadius: '8px',
-                                padding: '10px 12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between'
-                              }}
-                            >
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 600, color: 'var(--color-white)' }}>{mc.pmmid}</span>
-                                  {mc.status && (
-                                    <span style={{ fontSize: '10px', padding: '2px 6px', background: 'var(--white-15)', color: 'var(--white-80)', borderRadius: '4px' }}>
-                                      {mc.status}
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: '13px', color: 'var(--white-80)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mc.name}</div>
-                                <div style={{ fontSize: '11px', color: 'var(--white-60)' }}>{mc.audience} / {mc.topic}</div>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  handleAddRelatedContent({
-                                    id: Date.now(),
-                                    reference: mc.pmmid,
-                                    type: 'message',
-                                    messageId: mc.id
-                                  });
-                                }}
-                                className="btn btn-primary"
-                                style={{ fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                              >
-                                <Link2 size={14} />
-                                Link
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* No results message */}
-                    {creativeSearch.length >= 2 && searchResults.length === 0 && (
-                      <div style={{ marginTop: '12px', textAlign: 'center', padding: '12px', fontSize: '13px', color: 'var(--white-60)' }}>
-                        No Matrix messages found. Use "Add Text" to add a text reference.
-                      </div>
                     )}
                   </div>
+                  {resolvedRelatedContent && resolvedRelatedContent.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1rem' }}>
+                      {resolvedRelatedContent.map((item) => {
+                        // v2 schema: item is resolved MC data with mcLabel, name, topicName, status
+                        const statusColor = item.found ? getMcStatusColor(item.status) : '#6b7280';
 
-                  {/* Related Content List */}
-                  {editingTask.relatedContent && editingTask.relatedContent.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--white-80)' }}>
-                        Linked Items ({editingTask.relatedContent.length})
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        {editingTask.relatedContent.map((item) => (
+                        return (
                           <div
-                            key={item.id}
+                            key={item.mcLabel}
                             style={{
-                              borderRadius: '8px',
-                              padding: '12px',
+                              padding: '2px 0px',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'space-between',
-                              background: item.messageId ? 'rgba(59, 130, 246, 0.15)' : 'var(--white-10)',
-                              border: `1px solid ${item.messageId ? 'rgba(59, 130, 246, 0.3)' : 'var(--white-20)'}`
+                              gap: '8px'
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              {item.messageId ? (
-                                <Link2 size={16} style={{ color: '#60a5fa', flexShrink: 0 }} />
+                            {/* MC Label with status color */}
+                            <span style={{
+                              fontFamily: 'monospace',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: getTextColor(statusColor),
+                              backgroundColor: statusColor,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              flexShrink: 0
+                            }}>
+                              {item.mcLabel}
+                            </span>
+                            {/* MC Name and Topic */}
+                            <span style={{
+                              fontSize: '11px',
+                              color: item.found ? 'var(--white-80)' : 'var(--white-50)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flex: 1,
+                              fontStyle: item.found ? 'normal' : 'italic'
+                            }}>
+                              {item.found ? (
+                                <>{item.name}{item.topicName ? ` | ${item.topicName}` : ''}</>
                               ) : (
-                                <FileText size={16} style={{ color: 'var(--white-50)', flexShrink: 0 }} />
+                                'Not found in matrix'
                               )}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{
-                                  fontWeight: 500,
-                                  fontSize: '13px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  color: item.messageId ? '#93c5fd' : 'var(--white-80)'
-                                }}>
-                                  {item.reference}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--white-50)' }}>
-                                  {item.messageId ? 'Linked to Matrix' : 'Text reference'}
-                                </div>
-                              </div>
-                            </div>
+                            </span>
+                            {/* Unlink button */}
                             <button
-                              onClick={() => handleRemoveRelatedContent(item.id)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                padding: '4px',
-                                cursor: 'pointer',
-                                color: 'var(--white-50)',
-                                borderRadius: '4px',
-                                flexShrink: 0
-                              }}
+                              onClick={() => handleRemoveRelatedContent(item.mcLabel)}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px', flexShrink: 0 }}
+                              title="Unlink"
                             >
-                              <X size={16} />
+                              <Unlink size={12} />
                             </button>
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div style={{
                       textAlign: 'center',
-                      padding: '32px',
+                      padding: '24px 12px',
                       color: 'var(--white-50)',
                       border: '1px dashed var(--white-20)',
-                      borderRadius: '12px'
+                      borderRadius: '8px',
+                      fontSize: '12px'
                     }}>
-                      <p style={{ fontSize: '13px' }}>No related content linked yet</p>
-                      <p style={{ fontSize: '11px', marginTop: '4px' }}>Use the search above to add creatives</p>
+                      No linked content
                     </div>
                   )}
                 </div>
-              )}
+                </div>
+              </div>
+
+              {/* OUTPUT SECTION */}
+              <div style={{ display: 'flex', flexDirection: 'column', paddingTop: '1rem' }}>
+                <div className="preview-header" style={{ justifyContent: 'flex-start' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)' }}>Related Content Output</h3>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="custom-scrollbar">
+                  {/* Update Task Type - Increment Version UI */}
+                  {editingTask.taskType === 'Update' ? (
+                    <div style={{
+                      padding: '16px',
+                      border: '1px dashed var(--white-20)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      <p style={{
+                        fontSize: '12px',
+                        color: 'var(--white-70)',
+                        lineHeight: '1.5',
+                        margin: 0
+                      }}>
+                        For update tasks, the output MCs and variants remain the same as the source.
+                        Versions are not saved automatically. When you increment the version,
+                        you can update or upload the updated content.
+                      </p>
+                      <button
+                        onClick={() => {
+                          // TODO: Implement version increment logic
+                          alert('Version increment functionality coming soon');
+                        }}
+                        className="btn btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                      >
+                        <Plus size={16} />
+                        Increment Version
+                      </button>
+                    </div>
+                  ) : (
+                  <>
+                  {/* MC Search Combo Box for Output */}
+                  <div ref={outputDropdownRef} className={`dropdown ${outputDropdownOpen ? 'open' : ''}`} style={{ position: 'relative' }}>
+                    {/* Combo Box Trigger */}
+                    <div
+                      className="dropdown-trigger"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 12px',
+                        background: 'var(--white-10)',
+                        border: '1px solid var(--white-20)',
+                        borderRadius: '8px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => setOutputDropdownOpen(!outputDropdownOpen)}
+                    >
+                      <Search size={14} style={{ color: 'var(--white-50)', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        value={outputSearch}
+                        onChange={(e) => {
+                          setOutputSearch(e.target.value);
+                          if (!outputDropdownOpen && e.target.value.length >= 2) {
+                            setOutputDropdownOpen(true);
+                          }
+                        }}
+                        onFocus={() => outputSearch.length >= 2 && setOutputDropdownOpen(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Search MCs..."
+                        style={{
+                          flex: 1,
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          fontSize: '12px',
+                          color: 'var(--color-white)'
+                        }}
+                      />
+                      <ChevronDown size={14} style={{ color: 'var(--white-50)', flexShrink: 0, transform: outputDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </div>
+
+                    {/* Dropdown Menu */}
+                    {outputDropdownOpen && (
+                      <div
+                        className="dropdown-menu"
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          marginTop: '4px',
+                          background: 'var(--main-ui-color)',
+                          border: '1px solid var(--white-20)',
+                          borderRadius: '8px',
+                          boxShadow: 'var(--ui-shadow)',
+                          zIndex: 100,
+                          maxHeight: '250px',
+                          display: 'flex',
+                          flexDirection: 'column'
+                        }}
+                      >
+                        {outputSearchResults.length > 0 ? (
+                          <>
+                            {/* Header with Select All / Deselect All */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 10px',
+                              borderBottom: '1px solid var(--white-15)',
+                              fontSize: '10px',
+                              color: 'var(--white-60)'
+                            }}>
+                              <span>Found {outputSearchResults.length} • Selected {selectedOutputMcIds.size}</span>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOutputMcIds(new Set(outputSearchResults.map(mc => mc.id)));
+                                  }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    padding: '2px 6px',
+                                    fontSize: '10px',
+                                    color: 'var(--white-70)',
+                                    cursor: 'pointer',
+                                    borderRadius: '4px'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--white-15)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  All
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOutputMcIds(new Set());
+                                  }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    padding: '2px 6px',
+                                    fontSize: '10px',
+                                    color: 'var(--white-70)',
+                                    cursor: 'pointer',
+                                    borderRadius: '4px'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--white-15)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  None
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Results List */}
+                            <div style={{ overflowY: 'auto', flex: 1 }} className="custom-scrollbar">
+                              {outputSearchResults.map((mc) => {
+                                const statusColor = getMcStatusColor(mc.status);
+                                const isSelected = selectedOutputMcIds.has(mc.id);
+                                return (
+                                  <div
+                                    key={mc.id}
+                                    className={`dropdown-item ${isSelected ? 'selected' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedOutputMcIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(mc.id)) {
+                                          next.delete(mc.id);
+                                        } else {
+                                          next.add(mc.id);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      padding: '6px 10px',
+                                      cursor: 'pointer',
+                                      background: isSelected ? 'var(--white-10)' : 'transparent'
+                                    }}
+                                  >
+                                    {/* Checkbox */}
+                                    <div style={{
+                                      width: '16px',
+                                      height: '16px',
+                                      borderRadius: '4px',
+                                      border: isSelected ? 'none' : '1px solid var(--white-30)',
+                                      background: isSelected ? '#3b82f6' : 'transparent',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0
+                                    }}>
+                                      {isSelected && <Check size={12} style={{ color: 'white' }} />}
+                                    </div>
+                                    {/* MC Label */}
+                                    <span style={{
+                                      fontFamily: 'monospace',
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      color: getTextColor(statusColor),
+                                      backgroundColor: statusColor,
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      flexShrink: 0
+                                    }}>
+                                      {mc.mcLabel}
+                                    </span>
+                                    {/* Name */}
+                                    <span style={{
+                                      fontSize: '11px',
+                                      color: 'var(--white-80)',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      flex: 1
+                                    }}>
+                                      {mc.name}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Add Selected Button */}
+                            {selectedOutputMcIds.size > 0 && (
+                              <div style={{ padding: '8px 10px', borderTop: '1px solid var(--white-15)' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newItems = outputSearchResults
+                                      .filter(mc => selectedOutputMcIds.has(mc.id))
+                                      .map((mc, idx) => ({
+                                        id: Date.now() + idx,
+                                        reference: mc.mcLabel,
+                                        type: 'message',
+                                        messageId: mc.id
+                                      }));
+                                    const existingContent = editingTask.outputContent || [];
+                                    const existingIds = new Set(existingContent.map(c => c.messageId));
+                                    const filteredNew = newItems.filter(item => !existingIds.has(item.messageId));
+                                    setEditingTask({
+                                      ...editingTask,
+                                      outputContent: [...existingContent, ...filteredNew]
+                                    });
+                                    setSelectedOutputMcIds(new Set());
+                                    setOutputDropdownOpen(false);
+                                    setOutputSearch('');
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ width: '100%', fontSize: '11px', padding: '6px 12px' }}
+                                >
+                                  Add {selectedOutputMcIds.size} Selected
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : outputSearch.length >= 2 ? (
+                          <div style={{ padding: '16px', textAlign: 'center', fontSize: '11px', color: 'var(--white-60)' }}>
+                            No MCs found
+                          </div>
+                        ) : (
+                          <div style={{ padding: '16px', textAlign: 'center', fontSize: '11px', color: 'var(--white-60)' }}>
+                            Type 2+ characters to search
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Output Content List */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)' }}>
+                        Linked ({editingTask.outputContent?.length || 0})
+                      </div>
+                      {editingTask.outputContent && editingTask.outputContent.length > 0 && (
+                        <button
+                          onClick={() => {
+                            // v2 schema: outputContent is array of MC labels like ["MC282a", "MC283b"]
+                            const mcCodes = (editingTask.outputContent || [])
+                              .map(mcLabel => {
+                                // Insert underscore between number and variant (MC282a → MC282_a)
+                                return mcLabel.replace(/^(MC\d+)([a-zA-Z].*)$/, '$1_$2');
+                              })
+                              .join(' OR ');
+                            if (mcCodes) {
+                              window.open(`/creative-library?filter_creatives=${encodeURIComponent(mcCodes)}`, '_blank');
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '4px 8px', fontSize: '10px', gap: '4px' }}
+                          title="Open in Creative Library"
+                        >
+                          <ExternalLink size={12} />
+                          Show in Creative Library
+                        </button>
+                      )}
+                    </div>
+                    {resolvedOutputContent && resolvedOutputContent.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1rem' }}>
+                        {resolvedOutputContent.map((item) => {
+                          // v2 schema: item is resolved MC data with mcLabel, name, topicName, status
+                          const statusColor = item.found ? getMcStatusColor(item.status) : '#6b7280';
+
+                          return (
+                            <div
+                              key={item.mcLabel}
+                              style={{
+                                padding: '2px 0px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              {/* MC Label with status color */}
+                              <span style={{
+                                fontFamily: 'monospace',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: getTextColor(statusColor),
+                                backgroundColor: statusColor,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                flexShrink: 0
+                              }}>
+                                {item.mcLabel}
+                              </span>
+                              {/* MC Name and Topic */}
+                              <span style={{
+                                fontSize: '11px',
+                                color: item.found ? 'var(--white-80)' : 'var(--white-50)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1
+                              }}>
+                                {item.found ? `${item.name || ''}${item.topicName ? ` | ${item.topicName}` : ''}` : '(not found)'}
+                              </span>
+                              <button
+                                onClick={() => handleRemoveOutputContent(item.mcLabel)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px', flexShrink: 0 }}
+                                title="Unlink"
+                              >
+                                <Unlink size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '16px 12px',
+                        color: 'var(--white-50)',
+                        border: '1px dashed var(--white-20)',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        textAlign: 'center'
+                      }}>
+                        No linked output
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Create New Messages Box */}
+                  {addMessage && (
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)', marginBottom: '8px' }}>
+                        Create New Messages
+                      </div>
+                      <div style={{
+                        padding: '12px',
+                        border: '1px dashed var(--white-20)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}>
+                        {/* Audience and Topic Dropdowns */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Audience Dropdown */}
+                          <label style={{ fontSize: '12px', color: 'var(--white-60)', marginBottom: '-4px' }}>Audience</label>
+                          <div className={`dropdown ${audienceDropdownOpen ? 'open' : ''}`} ref={audienceDropdownRef}>
+                            <button
+                              className="dropdown-trigger"
+                              onClick={() => setAudienceDropdownOpen(!audienceDropdownOpen)}
+                              style={{ width: '100%' }}
+                            >
+                              <span>{audiences.find(a => a.key === editingTask.audience)?.name || 'Audience...'}</span>
+                              <ChevronDown size={14} />
+                            </button>
+                            <div className="dropdown-menu">
+                              <div
+                                className={`dropdown-item ${!editingTask.audience ? 'selected' : ''}`}
+                                onClick={() => {
+                                  setEditingTask({ ...editingTask, audience: '' });
+                                  setAudienceDropdownOpen(false);
+                                }}
+                              >
+                                Audience...
+                                {!editingTask.audience && <Check size={14} />}
+                              </div>
+                              {audiences
+                                .filter(a => !editingTask.product || a.product === editingTask.product)
+                                .map(audience => (
+                                  <div
+                                    key={audience.key}
+                                    className={`dropdown-item ${editingTask.audience === audience.key ? 'selected' : ''}`}
+                                    onClick={() => {
+                                      setEditingTask({ ...editingTask, audience: audience.key });
+                                      setAudienceDropdownOpen(false);
+                                    }}
+                                  >
+                                    {audience.name}
+                                    {editingTask.audience === audience.key && <Check size={14} />}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+
+                          {/* Topic Dropdown */}
+                          <label style={{ fontSize: '12px', color: 'var(--white-60)', marginBottom: '-4px' }}>Topic</label>
+                          <div className={`dropdown ${topicDropdownOpen ? 'open' : ''}`} ref={topicDropdownRef}>
+                            <button
+                              className="dropdown-trigger"
+                              onClick={() => setTopicDropdownOpen(!topicDropdownOpen)}
+                              style={{ width: '100%' }}
+                            >
+                              <span>{topics.find(t => t.key === editingTask.topic)?.name || 'Topic...'}</span>
+                              <ChevronDown size={14} />
+                            </button>
+                            <div className="dropdown-menu">
+                              <div
+                                className={`dropdown-item ${!editingTask.topic ? 'selected' : ''}`}
+                                onClick={() => {
+                                  setEditingTask({ ...editingTask, topic: '' });
+                                  setTopicDropdownOpen(false);
+                                }}
+                              >
+                                Topic...
+                                {!editingTask.topic && <Check size={14} />}
+                              </div>
+                              {topics
+                                .filter(t => !editingTask.product || t.product === editingTask.product)
+                                .map(topic => (
+                                  <div
+                                    key={topic.key}
+                                    className={`dropdown-item ${editingTask.topic === topic.key ? 'selected' : ''}`}
+                                    onClick={() => {
+                                      setEditingTask({ ...editingTask, topic: topic.key });
+                                      setTopicDropdownOpen(false);
+                                    }}
+                                  >
+                                    {topic.name}
+                                    {editingTask.topic === topic.key && <Check size={14} />}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const params = new URLSearchParams();
+                            params.set('action', 'add_message');
+                            if (editingTask.audience) params.set('audience', editingTask.audience);
+                            if (editingTask.topic) params.set('topic', editingTask.topic);
+                            if (editingTask.product) params.set('product', editingTask.product);
+                            if (editingTask.id) params.set('linkTask', editingTask.id);
+                            window.open(`/matrix?${params.toString()}`, '_blank');
+                          }}
+                          className="btn btn-primary"
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                        >
+                          <ExternalLink size={16} />
+                          Create MC
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1077,6 +2238,16 @@ const TaskEditorDialog = ({
                   }}>
                     <p style={{ fontSize: '13px', color: 'var(--white-60)', marginBottom: '4px' }}>Creating MC from:</p>
                     <p style={{ fontWeight: 500, color: 'var(--color-white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editingTask.title}</p>
+                    {editingTask.suggestedMCName && (
+                      <p style={{ fontSize: '13px', color: 'var(--white-80)', marginTop: '8px' }}>
+                        Suggested name: <span style={{ fontWeight: 500, color: '#22c55e' }}>{editingTask.suggestedMCName}</span>
+                      </p>
+                    )}
+                    {editingTask.product && (
+                      <p style={{ fontSize: '12px', color: 'var(--white-60)', marginTop: '4px' }}>
+                        Product: {editingTask.product}
+                      </p>
+                    )}
                   </div>
 
                   {/* Product Selection */}

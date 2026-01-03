@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Upload, X, Check } from 'lucide-react';
 
 const CreativeLibraryUploadDialogs = ({
@@ -15,6 +15,21 @@ const CreativeLibraryUploadDialogs = ({
   handleConfirmUploads,
   handleCancelUploads
 }) => {
+  // ESC key to close dialogs
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (showMetadataDialog) {
+          handleCancelUploads();
+        } else if (showUploadDialog) {
+          setShowUploadDialog(false);
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showUploadDialog, showMetadataDialog, setShowUploadDialog, handleCancelUploads]);
+
   return (
     <>
       {/* Upload Dialog */}
