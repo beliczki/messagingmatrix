@@ -124,13 +124,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   }, []);
 
   // Auto-sync with Drive on mount if enabled (only once)
+  // Only sync when matrix data is actually loaded (has audiences, topics, or messages)
+  const hasMatrixData = matrixData && (
+    (matrixData.audiences?.length > 0) ||
+    (matrixData.topics?.length > 0) ||
+    (matrixData.messages?.length > 0)
+  );
+
   useEffect(() => {
-    if (driveEnabled && matrixData && !hasAutoSynced) {
+    if (driveEnabled && hasMatrixData && !hasAutoSynced) {
       setHasAutoSynced(true);
       syncWithDrive();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driveEnabled, matrixData, hasAutoSynced]);
+  }, [driveEnabled, hasMatrixData, hasAutoSynced]);
 
   // Sync with Google Drive
   const syncWithDrive = async () => {
@@ -238,15 +245,25 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         updatedCreatives = [...updatedCreatives, ...parsedNewCreatives];
       }
 
-      // Update spreadsheet
+      // Update local state
       matrixData.setCreatives(updatedCreatives);
 
-      // Save to spreadsheet
-      await matrixData.save(null, null, null, updatedCreatives);
+      // Check if matrix data is loaded before saving to spreadsheet
+      const canSave = (matrixData.audiences?.length > 0) ||
+                      (matrixData.topics?.length > 0) ||
+                      (matrixData.messages?.length > 0);
 
+      if (canSave) {
+        // Save to spreadsheet
+        await matrixData.save(null, null, null, updatedCreatives);
+      } else {
+        console.warn('⚠️ Matrix data not loaded - creatives updated locally but not saved to spreadsheet');
+      }
+
+      const savedNote = canSave ? '' : '\n\n⚠️ Note: Changes not saved to spreadsheet (no matrix data loaded)';
       setSyncProgress({
         type: 'success',
-        message: `Successfully synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives`
+        message: `Successfully synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives${savedNote}`
       });
 
       // Auto-dismiss after 3 seconds

@@ -686,6 +686,28 @@ const Matrix = ({
     }
   }, [audiences, topics, keywords, statusFilters.length, productFilters.length]);
 
+  // Clean up stale product filters (products that no longer exist in data)
+  useEffect(() => {
+    if (audiences.length === 0 && topics.length === 0) return;
+    if (productFilters.length === 0) return;
+
+    // Get all available products from current data
+    const allProducts = new Set();
+    audiences.forEach(aud => {
+      if (aud.product) allProducts.add(aud.product);
+    });
+    topics.forEach(topic => {
+      if (topic.product) allProducts.add(topic.product);
+    });
+
+    // Filter out any selected products that no longer exist
+    const validFilters = productFilters.filter(p => allProducts.has(p));
+    if (validFilters.length !== productFilters.length) {
+      console.log('🧹 Cleaning up stale product filters:', productFilters.filter(p => !allProducts.has(p)));
+      setProductFilters(validFilters);
+    }
+  }, [audiences, topics]);
+
   // Sync feedPatterns with feedStructure - ensure all columns have patterns
   useEffect(() => {
     // Only sync if feedStructure exists - feedPatterns being empty is OK now due to smart fallback
@@ -1114,7 +1136,7 @@ const Matrix = ({
     console.log('🟣 filteredAudiences RECOMPUTING (module-level cache miss)');
     persistentMatrixRefs.cachedFilteredAudiences = audiences.filter(aud => {
       const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || '') + ' ' + (aud.lineitem_id || ''), audienceFilter);
-      const matchesProduct = productFilters.length === 0 || (aud.product && productFilters.includes(aud.product));
+      const matchesProduct = productFilters.length === 0 || !aud.product || productFilters.includes(aud.product);
       return matchesText && matchesProduct;
     });
     persistentMatrixRefs.cachedFilteredAudiencesDeps = { audiences, audienceFilter, productFilters };
@@ -1127,7 +1149,7 @@ const Matrix = ({
     console.log('🟣 filteredTopics RECOMPUTING (module-level cache miss)');
     persistentMatrixRefs.cachedFilteredTopics = topics.filter(topic => {
       const matchesText = matchesFilter(topic.name + ' ' + topic.key, topicFilter);
-      const matchesProduct = productFilters.length === 0 || (topic.product && productFilters.includes(topic.product));
+      const matchesProduct = productFilters.length === 0 || !topic.product || productFilters.includes(topic.product);
       return matchesText && matchesProduct;
     });
     persistentMatrixRefs.cachedFilteredTopicsDeps = { topics, topicFilter, productFilters };

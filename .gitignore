@@ -42,6 +42,10 @@ db/*.db-wal
 cache/drive/*
 !cache/drive/.gitkeep
 
+# Local creatives (loaded dynamically)
+src/creatives/*
+!src/creatives/.gitkeep
+
 # Server config
 nginx-*.conf
 
