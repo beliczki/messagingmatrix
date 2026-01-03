@@ -4,16 +4,16 @@
    ======================================== */
 
 :root {
-  /* Primary Colors */
-  --color-primary: #2870ed;
-  --color-primary-dark: #1e5bc7;
-  --color-primary-light: #4a8ef5;
+  /* Primary Colors - set dynamically by App.jsx from config */
+  --color-primary: transparent;
+  --color-primary-dark: transparent;
+  --color-primary-light: transparent;
 
-  /* Main UI Color - hamburger, menu, panels */
-  --main-ui-color: #2870ed;
+  /* Main UI Color - hamburger, menu, panels - set dynamically */
+  --main-ui-color: transparent;
 
-  /* Toolbar Color */
-  --toolbar-color: #02a3a4;
+  /* Toolbar Color - set dynamically */
+  --toolbar-color: transparent;
 
   /* Status Colors */
   --status-planned-bg: #ffff00;

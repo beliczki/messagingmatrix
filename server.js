@@ -1399,8 +1399,25 @@ app.get('/api/templates', (req, res) => {
       return res.json([]);
     }
 
+    // Get visible templates config
+    const sqlite = db.getSqlite();
+    const visibleTemplatesRow = sqlite.prepare('SELECT value FROM config WHERE key = ?').get('visibleTemplates');
+    let visibleTemplates = null;
+    if (visibleTemplatesRow?.value) {
+      try {
+        visibleTemplates = JSON.parse(visibleTemplatesRow.value);
+      } catch (e) {
+        console.warn('Failed to parse visibleTemplates config');
+      }
+    }
+
     const templates = fs.readdirSync(templatesDir, { withFileTypes: true })
       .filter(dirent => dirent.isDirectory())
+      .filter(dirent => {
+        // If visibleTemplates is not set or empty, show all
+        if (!visibleTemplates || visibleTemplates.length === 0) return true;
+        return visibleTemplates.includes(dirent.name);
+      })
       .map(dirent => {
         const templatePath = path.join(templatesDir, dirent.name);
         const templateJsonPath = path.join(templatePath, 'template.json');
@@ -1464,6 +1481,34 @@ app.get('/api/templates', (req, res) => {
   } catch (error) {
     console.error('Error listing templates:', error);
     res.status(500).json({ error: 'Failed to list templates' });
+  }
+});
+
+// Get all available template folders (for settings, unfiltered)
+app.get('/api/templates/folders', (req, res) => {
+  try {
+    console.log('📁 Template folders endpoint called');
+    console.log('📁 Templates directory:', templatesDir);
+    console.log('📁 Directory exists:', fs.existsSync(templatesDir));
+
+    if (!fs.existsSync(templatesDir)) {
+      console.log('📁 Templates directory does not exist');
+      return res.json({ folders: [] });
+    }
+
+    const entries = fs.readdirSync(templatesDir, { withFileTypes: true });
+    console.log('📁 Directory entries:', entries.map(e => ({ name: e.name, isDir: e.isDirectory() })));
+
+    const folders = entries
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name)
+      .sort();
+
+    console.log('📁 Found folders:', folders);
+    res.json({ folders });
+  } catch (error) {
+    console.error('Error listing template folders:', error);
+    res.status(500).json({ error: 'Failed to list template folders' });
   }
 });
 

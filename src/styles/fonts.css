@@ -1,0 +1,138 @@
+/* Local Webfonts */
+
+/* BC Novatica */
+@font-face {
+  font-family: 'BC Novatica';
+  src: url('./Fonts/bc-novatica-regular-webfont.woff2') format('woff2'),
+       url('./Fonts/bc-novatica-regular-webfont.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BC Novatica';
+  src: url('./Fonts/bc-novatica-italic-webfont.woff2') format('woff2'),
+       url('./Fonts/bc-novatica-italic-webfont.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BC Novatica';
+  src: url('./Fonts/bc-novatica-semibold-webfont.woff2') format('woff2'),
+       url('./Fonts/bc-novatica-semibold-webfont.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* TeleNeo */
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-Thin.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-Thin.woff') format('woff');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-ThinItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-ThinItalic.woff') format('woff');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-Regular.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-RegularItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-RegularItalic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-Medium.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-MediumItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-MediumItalic.woff') format('woff');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-Bold.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-BoldItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-BoldItalic.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-ExtraBold.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-ExtraBold.woff') format('woff');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-ExtraBoldItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-ExtraBoldItalic.woff') format('woff');
+  font-weight: 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-Ultra.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-Ultra.woff') format('woff');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TeleNeo';
+  src: url('./Fonts/TeleNeoWeb-UltraItalic.woff2') format('woff2'),
+       url('./Fonts/TeleNeoWeb-UltraItalic.woff') format('woff');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}

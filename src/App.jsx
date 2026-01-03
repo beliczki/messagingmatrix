@@ -17,9 +17,9 @@ const Settings = lazy(() => import('./components/Settings'));
 const Login = lazy(() => import('./components/Login'));
 const PreviewView = lazy(() => import('./components/PreviewView'));
 
-// Loading component
+// Loading component - uses CSS variable for main color
 const LoadingFallback = () => (
-  <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#2870ed' }}>
+  <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary)' }}>
     <div className="text-white text-lg">Loading...</div>
   </div>
 );
@@ -38,8 +38,8 @@ const modules = [
   { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
   { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
   { id: 'tasks', name: 'Tasks', icon: CheckSquare, component: Tasks, color: 'indigo' },
-  { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple' },
-  { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray' }
+  { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple', adminOnly: true },
+  { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray', adminOnly: true }
 ];
 
 // Authenticated layout component with menu
@@ -51,17 +51,32 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
   const menuContentRef = useRef(null);
   const selectorRef = useRef(null);
 
+  // Filter modules based on user role - only show adminOnly modules to admins
+  const isAdmin = currentUser?.role === 'admin';
+  const visibleModules = modules.filter(m => !m.adminOnly || isAdmin);
+
   // Get current module from URL path (handle nested paths like /templates/edit/html)
   const pathParts = location.pathname.slice(1).split('/');
   const currentModule = pathParts[0] || 'matrix';
-  const CurrentModuleComponent = modules.find(m => m.id === currentModule)?.component || Matrix;
-  const currentModuleName = modules.find(m => m.id === currentModule)?.name || 'Messaging Matrix';
+  const currentModuleConfig = modules.find(m => m.id === currentModule);
 
-  // Update active index when module changes
+  // Check if user has access to current module
+  const hasAccess = !currentModuleConfig?.adminOnly || isAdmin;
+  const CurrentModuleComponent = hasAccess ? (currentModuleConfig?.component || Matrix) : Matrix;
+  const currentModuleName = hasAccess ? (currentModuleConfig?.name || 'Messaging Matrix') : 'Messaging Matrix';
+
+  // Redirect non-admins away from admin-only routes
   useEffect(() => {
-    const index = modules.findIndex(m => m.id === currentModule);
+    if (currentModuleConfig?.adminOnly && !isAdmin) {
+      navigate('/matrix', { replace: true });
+    }
+  }, [currentModule, isAdmin, navigate, currentModuleConfig]);
+
+  // Update active index when module changes (using filtered modules)
+  useEffect(() => {
+    const index = visibleModules.findIndex(m => m.id === currentModule);
     if (index >= 0) setActiveIndex(index);
-  }, [currentModule]);
+  }, [currentModule, visibleModules]);
 
   // Position selector on active item
   useEffect(() => {
@@ -132,26 +147,39 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
             }
           }}
         >
-          {/* Logo */}
-          <svg className="menu-logo" viewBox="0 0 800 800" fill="white">
-            <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766 297.22773 561.72334"/>
-            <polygon points="372.33197 238.27666 288.79499 238.27661 355.46653 561.72334 439.00351 561.72339 372.33197 238.27666"/>
-            <polygon points="514.8137 238.27666 431.27672 238.27661 497.94825 561.72334 581.48524 561.72339 514.8137 238.27666"/>
-            <polygon points="530.95895 238.27666 447.42197 238.27661 514.0935 561.72334 597.63048 561.72339 530.95895 238.27666"/>
-            <rect x="88.60344" y="87.13551" width="27.34135" height="610.59038"/>
-            <rect x="124.98303" y="50.75592" width="30.27721" height="103.03638" transform="translate(242.39574 -37.84752) rotate(90)"/>
-            <rect x="124.98303" y="646.20769" width="30.27721" height="103.03638" transform="translate(837.84752 557.60426) rotate(90)"/>
-            <rect x="684.05521" y="87.13551" width="27.34135" height="610.59038" transform="translate(1395.45177 784.8614) rotate(-180)"/>
-            <rect x="644.73977" y="50.75592" width="30.27721" height="103.03638" transform="translate(762.15248 -557.60426) rotate(90)"/>
-            <rect x="644.73977" y="646.20769" width="30.27721" height="103.03638" transform="translate(1357.60426 37.84752) rotate(90)"/>
-          </svg>
+          {/* Logo Container */}
+          <div className="menu-logo-container">
+            <svg className="menu-logo" viewBox="0 0 800 800" fill="white">
+              <polygon points="297.22773 561.72334 213.69075 561.7234 280.36225 238.27666 363.89923 238.2766 297.22773 561.72334"/>
+              <polygon points="372.33197 238.27666 288.79499 238.27661 355.46653 561.72334 439.00351 561.72339 372.33197 238.27666"/>
+              <polygon points="514.8137 238.27666 431.27672 238.27661 497.94825 561.72334 581.48524 561.72339 514.8137 238.27666"/>
+              <polygon points="530.95895 238.27666 447.42197 238.27661 514.0935 561.72334 597.63048 561.72339 530.95895 238.27666"/>
+              <rect x="88.60344" y="87.13551" width="27.34135" height="610.59038"/>
+              <rect x="124.98303" y="50.75592" width="30.27721" height="103.03638" transform="translate(242.39574 -37.84752) rotate(90)"/>
+              <rect x="124.98303" y="646.20769" width="30.27721" height="103.03638" transform="translate(837.84752 557.60426) rotate(90)"/>
+              <rect x="684.05521" y="87.13551" width="27.34135" height="610.59038" transform="translate(1395.45177 784.8614) rotate(-180)"/>
+              <rect x="644.73977" y="50.75592" width="30.27721" height="103.03638" transform="translate(762.15248 -557.60426) rotate(90)"/>
+              <rect x="644.73977" y="646.20769" width="30.27721" height="103.03638" transform="translate(1357.60426 37.84752) rotate(90)"/>
+            </svg>
+            {/* Cobranding Logo */}
+            {lookAndFeel?.cobranding?.enabled && lookAndFeel?.cobranding?.logoUrl && (
+              <>
+                <span className="cobranding-separator">×</span>
+                <img
+                  src={lookAndFeel.cobranding.logoUrl}
+                  alt="Cobranding"
+                  className="cobranding-logo"
+                />
+              </>
+            )}
+          </div>
 
           {/* Selector highlight */}
           <div className="menu-selector" ref={selectorRef}></div>
 
           {/* Navigation Menu */}
           <nav className="nav-menu">
-            {modules.map((module, index) => {
+            {visibleModules.map((module, index) => {
               const Icon = module.icon;
               return (
                 <button
@@ -166,7 +194,6 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
                         const menuRect = menuContentRef.current.getBoundingClientRect();
                         const itemRect = allItems[index].getBoundingClientRect();
                         const newY = itemRect.top - menuRect.top;
-                        console.log(`[menu-selector] ENTER item ${index} (${module.name}): translateY(${newY}px)`);
                         selectorRef.current.style.transform = `translateY(${newY}px)`;
                       }
                     }
@@ -256,16 +283,8 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
 
 const App = () => {
   const { currentUser, loading, logout } = useAuth();
-  const [lookAndFeel, setLookAndFeel] = useState({
-    logo: 'https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg',
-    headerColor: '#2870ed',
-    logoStyle: 'height: 25px; margin-top: -6px;',
-    buttonColor: '#ff6130',
-    buttonStyle: 'border: 1px solid white;',
-    secondaryColor1: '#eb4c79',
-    secondaryColor2: '#02a3a4',
-    secondaryColor3: '#711c7a'
-  });
+  // Initialize with null - colors will be set from config, no hardcoded defaults
+  const [lookAndFeel, setLookAndFeel] = useState(null);
 
   // Load matrix data once at app level to share across all components
   // Only load if user is authenticated to avoid API errors on login page
@@ -339,10 +358,27 @@ const App = () => {
     }
   }, [lookAndFeel?.headerColor, lookAndFeel?.secondaryColor1]);
 
+  // Update page title
+  useEffect(() => {
+    document.title = lookAndFeel?.pageTitle || 'Matrix 1.0';
+  }, [lookAndFeel?.pageTitle]);
+
+  // Update font family
+  useEffect(() => {
+    const fontFamily = lookAndFeel?.fontFamily || 'Inter';
+    const fontMap = {
+      'Inter': "'Inter', system-ui, sans-serif",
+      'Poppins': "'Poppins', system-ui, sans-serif",
+      'Novatica': "'BC Novatica', system-ui, sans-serif",
+      'TeleNeo': "'TeleNeo', system-ui, sans-serif"
+    };
+    document.documentElement.style.setProperty('--font-family', fontMap[fontFamily] || fontMap['Inter']);
+  }, [lookAndFeel?.fontFamily]);
+
   // Show loading state while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#2870ed' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary)' }}>
         <div className="text-white text-lg">Loading...</div>
       </div>
     );

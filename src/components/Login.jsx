@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Mail, AlertCircle, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../utils/api';
 
 // Messaging Matrix Logo Component
 const MessagingMatrixLogo = ({ className = "", color = "#2870ed" }) => (
@@ -106,29 +105,52 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [lookAndFeel, setLookAndFeel] = useState(null);
   const { login } = useAuth();
 
-  // Fetch public config for design colors
+  // Get colors from CSS variables (set by App.jsx from config)
+  const [colors, setColors] = useState({
+    mainColor: '',
+    secondaryColor1: '',
+    secondaryColor2: '',
+    secondaryColor3: ''
+  });
+
   useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await api.get('/api/config-basic');
-        if (response.data?.lookAndFeel) {
-          setLookAndFeel(response.data.lookAndFeel);
-        }
-      } catch (err) {
-        console.log('Could not fetch design config, using defaults');
+    // Read CSS variables after they're set by App.jsx
+    const readColors = () => {
+      const root = document.documentElement;
+      const computedStyle = getComputedStyle(root);
+      const mainColor = computedStyle.getPropertyValue('--color-primary').trim();
+      const toolbarColor = computedStyle.getPropertyValue('--toolbar-color').trim();
+      if (mainColor) {
+        setColors({
+          mainColor,
+          secondaryColor1: toolbarColor,
+          secondaryColor2: '',
+          secondaryColor3: ''
+        });
+        return true;
       }
+      return false;
     };
-    fetchConfig();
+
+    // Try immediately, then retry a few times if CSS variables aren't set yet
+    if (!readColors()) {
+      const retryInterval = setInterval(() => {
+        if (readColors()) {
+          clearInterval(retryInterval);
+        }
+      }, 100);
+      // Stop retrying after 2 seconds
+      setTimeout(() => clearInterval(retryInterval), 2000);
+      return () => clearInterval(retryInterval);
+    }
   }, []);
 
-  const headerColor = lookAndFeel?.headerColor || '#2870ed';
-  const buttonColor = lookAndFeel?.buttonColor || '#ff6130';
-  const secondaryColor1 = lookAndFeel?.secondaryColor1 || '#eb4c79';
-  const secondaryColor2 = lookAndFeel?.secondaryColor2 || '#02a3a4';
-  const secondaryColor3 = lookAndFeel?.secondaryColor3 || '#711c7a';
+  const mainColor = colors.mainColor;
+  const secondaryColor1 = colors.secondaryColor1;
+  const secondaryColor2 = colors.secondaryColor2;
+  const secondaryColor3 = colors.secondaryColor3;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -144,23 +166,23 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 overflow-hidden relative" style={{ backgroundColor: headerColor }}>
+    <div className="min-h-screen flex items-center justify-center p-4 overflow-hidden relative" style={{ backgroundColor: mainColor }}>
       {/* Overlapping solid color blobs - clustered around login card */}
       <GradientBlob color={secondaryColor1} size="450px" top="20%" left="calc(50% - 400px)" opacity={0.8} />
       <GradientBlob color={secondaryColor3} size="400px" top="15%" left="calc(50% - 100px)" opacity={0.75} />
-      <GradientBlob color={headerColor} size="420px" top="25%" left="calc(50% + 150px)" opacity={0.7} />
+      <GradientBlob color={mainColor} size="420px" top="25%" left="calc(50% + 150px)" opacity={0.7} />
       <GradientBlob color={secondaryColor2} size="380px" top="45%" left="calc(50% - 300px)" opacity={0.8} />
-      <GradientBlob color={buttonColor} size="350px" top="45%" left="calc(50% - 50px)" opacity={0.75} />
+      <GradientBlob color={mainColor} size="350px" top="45%" left="calc(50% - 50px)" opacity={0.75} />
 
       {/* Additional blue blobs */}
-      <GradientBlob color={headerColor} size="380px" top="10%" left="calc(50% - 250px)" opacity={0.7} />
-      <GradientBlob color={headerColor} size="320px" top="50%" left="calc(50% + 100px)" opacity={0.65} />
-      <GradientBlob color={headerColor} size="280px" top="35%" left="calc(50% - 50px)" opacity={0.6} />
+      <GradientBlob color={mainColor} size="380px" top="10%" left="calc(50% - 250px)" opacity={0.7} />
+      <GradientBlob color={mainColor} size="320px" top="50%" left="calc(50% + 100px)" opacity={0.65} />
+      <GradientBlob color={mainColor} size="280px" top="35%" left="calc(50% - 50px)" opacity={0.6} />
 
       {/* Blue accent blobs with blend modes */}
-      <GradientBlob color={headerColor} size="320px" top="30%" left="calc(50% - 160px)" opacity={0.6} blendMode="color-dodge" />
-      <GradientBlob color={headerColor} size="280px" top="40%" left="calc(50% + 50px)" opacity={0.5} blendMode="color-dodge" />
-      <GradientBlob color={headerColor} size="260px" top="20%" left="calc(50% - 250px)" opacity={0.55} blendMode="color-burn" />
+      <GradientBlob color={mainColor} size="320px" top="30%" left="calc(50% - 160px)" opacity={0.6} blendMode="color-dodge" />
+      <GradientBlob color={mainColor} size="280px" top="40%" left="calc(50% + 50px)" opacity={0.5} blendMode="color-dodge" />
+      <GradientBlob color={mainColor} size="260px" top="20%" left="calc(50% - 250px)" opacity={0.55} blendMode="color-burn" />
 
       {/* Glassmorphism card */}
       <div
@@ -200,11 +222,7 @@ const Login = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
-            {lookAndFeel?.logo ? (
-              <img src={lookAndFeel.logo} alt="Logo" className="max-w-full max-h-full object-contain" />
-            ) : (
-              <MessagingMatrixLogo className="w-full h-full" color="#ffffff" />
-            )}
+            <MessagingMatrixLogo className="w-full h-full" color="#ffffff" />
           </div>
           <h1 className="text-5xl font-bold text-white leading-tight">Messaging<br/>Matrix</h1>
         </div>
@@ -243,7 +261,7 @@ const Login = () => {
                 }}
                 onFocus={(e) => {
                   e.target.style.background = 'rgba(255, 255, 255, 0.25)';
-                  e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
+                  e.target.style.boxShadow = `0 0 0 3px ${mainColor}40`;
                 }}
                 onBlur={(e) => {
                   e.target.style.background = 'rgba(255, 255, 255, 0.15)';
@@ -275,7 +293,7 @@ const Login = () => {
                 }}
                 onFocus={(e) => {
                   e.target.style.background = 'rgba(255, 255, 255, 0.25)';
-                  e.target.style.boxShadow = `0 0 0 3px ${headerColor}40`;
+                  e.target.style.boxShadow = `0 0 0 3px ${mainColor}40`;
                 }}
                 onBlur={(e) => {
                   e.target.style.background = 'rgba(255, 255, 255, 0.15)';
@@ -295,19 +313,19 @@ const Login = () => {
             disabled={loading}
             className="w-full flex items-center justify-center gap-2 px-4 py-3.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
             style={{
-              background: headerColor,
+              background: mainColor,
               color: '#ffffff',
-              boxShadow: `0 4px 15px ${headerColor}50`,
+              boxShadow: `0 4px 15px ${mainColor}50`,
             }}
             onMouseEnter={(e) => {
               e.target.style.background = '#ffffff';
-              e.target.style.color = headerColor;
+              e.target.style.color = mainColor;
               e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = headerColor;
+              e.target.style.background = mainColor;
               e.target.style.color = '#ffffff';
-              e.target.style.boxShadow = `0 4px 15px ${headerColor}50`;
+              e.target.style.boxShadow = `0 4px 15px ${mainColor}50`;
             }}
           >
             {loading ? (

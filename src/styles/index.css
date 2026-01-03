@@ -3,6 +3,9 @@
    Main Style Entry Point
    ======================================== */
 
+/* Local Webfonts */
+@import './fonts.css';
+
 /* Design Tokens (CSS Variables) */
 @import './design-tokens.css';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles, FileCode } from 'lucide-react';
 import settings from '../services/settings';
 import AIAssistant from './AIAssistant';
 import { callClaudeAPI } from '../api/claude-proxy';
@@ -112,12 +112,29 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [messagesStructure, setMessagesStructure] = useState('');
   const [creativeStructure, setCreativeStructure] = useState('');
   const [creativeParsingRules, setCreativeParsingRules] = useState({});
+  const [availableTemplateFolders, setAvailableTemplateFolders] = useState([]);
 
   useEffect(() => {
     loadConfig();
     loadAiPrompts();
     loadContextDocuments();
+    loadTemplateFolders();
   }, []);
+
+  const loadTemplateFolders = async () => {
+    try {
+      const response = await apiGet('/api/templates/folders');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📁 Template folders loaded:', data.folders);
+        setAvailableTemplateFolders(data.folders || []);
+      } else {
+        console.error('Failed to load template folders:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading template folders:', error);
+    }
+  };
 
   const loadContextDocuments = async () => {
     try {
@@ -241,7 +258,8 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         topicStructure,
         messagesStructure,
         creativeStructure,
-        creativeParsingRules
+        creativeParsingRules,
+        visibleTemplates: config.visibleTemplates || []
       });
 
       if (!sqliteConfigResponse.ok) {
@@ -416,7 +434,7 @@ Guidelines for creating instructions:
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
-      <div className="matrix-view-container" style={{ overflow: 'auto' }}>
+      <div className="matrix-view-container custom-scrollbar" style={{ overflow: 'auto' }}>
         <div className="p-8 pb-24">
         <div className="max-w-5xl mx-auto space-y-6">
           {/* Message */}
@@ -701,6 +719,84 @@ Guidelines for creating instructions:
               Look and Feel
             </h2>
 
+            {/* Page Title and Font */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pb-6 border-b border-gray-200">
+              {/* Page Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Page Title
+                </label>
+                <input
+                  type="text"
+                  value={config.lookAndFeel?.pageTitle || 'Matrix 1.0'}
+                  onChange={(e) => handleInputChange('lookAndFeel.pageTitle', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Matrix 1.0"
+                />
+                <p className="text-xs text-gray-500 mt-1">Browser tab title</p>
+              </div>
+
+              {/* Font Family */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Font Family
+                </label>
+                <select
+                  value={config.lookAndFeel?.fontFamily || 'Inter'}
+                  onChange={(e) => handleInputChange('lookAndFeel.fontFamily', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="Inter">Inter (Google)</option>
+                  <option value="Poppins">Poppins (Google)</option>
+                  <option value="Novatica">Novatica (Local)</option>
+                  <option value="TeleNeo">TeleNeo (Local)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">App-wide font</p>
+              </div>
+            </div>
+
+            {/* Cobranding */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pb-6 border-b border-gray-200">
+              {/* Cobranding Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cobranding Logo
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange('lookAndFeel.cobranding.enabled', !config.lookAndFeel?.cobranding?.enabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                      config.lookAndFeel?.cobranding?.enabled ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        config.lookAndFeel?.cobranding?.enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-600">Show secondary logo in menu</span>
+                </div>
+              </div>
+
+              {/* Logo URL */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Logo URL
+                </label>
+                <input
+                  type="text"
+                  value={config.lookAndFeel?.cobranding?.logoUrl || ''}
+                  onChange={(e) => handleInputChange('lookAndFeel.cobranding.logoUrl', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="/T.svg"
+                  disabled={!config.lookAndFeel?.cobranding?.enabled}
+                />
+                <p className="text-xs text-gray-500 mt-1">Relative path (e.g., /T.svg) or full URL</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Main Color */}
               <div>
@@ -865,6 +961,85 @@ Guidelines for creating instructions:
                 </div>
               );
             })()}
+          </div>
+
+          {/* Template Visibility */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <FileCode size={20} className="text-orange-500" />
+              Template Visibility
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Toggle which template folders are visible in the app
+            </p>
+            <div className="space-y-2">
+              {availableTemplateFolders.map(folder => {
+                const isVisible = !config.visibleTemplates || config.visibleTemplates.length === 0 || config.visibleTemplates.includes(folder);
+                return (
+                  <div
+                    key={folder}
+                    className={`flex items-center justify-between p-4 rounded-xl transition-all ${
+                      isVisible
+                        ? 'bg-blue-50'
+                        : 'bg-gray-50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        isVisible ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-500'
+                      }`}>
+                        <FileCode size={20} />
+                      </div>
+                      <div>
+                        <span className={`font-medium ${isVisible ? 'text-gray-800' : 'text-gray-500'}`}>
+                          {folder}
+                        </span>
+                        <p className="text-xs text-gray-500">Template folder</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentVisible = config.visibleTemplates || [];
+                        let newVisible;
+                        if (isVisible) {
+                          // Remove from visible
+                          if (currentVisible.length === 0) {
+                            newVisible = availableTemplateFolders.filter(f => f !== folder);
+                          } else {
+                            newVisible = currentVisible.filter(f => f !== folder);
+                          }
+                        } else {
+                          // Add to visible
+                          if (currentVisible.length === 0) {
+                            newVisible = [...availableTemplateFolders];
+                          } else {
+                            newVisible = [...currentVisible, folder];
+                          }
+                        }
+                        handleInputChange('visibleTemplates', newVisible);
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        isVisible ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
+                          isVisible ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+              {availableTemplateFolders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <FileCode size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No template folders found</p>
+                  <p className="text-xs mt-1">Add folders to src/templates/</p>
+                </div>
+              )}
+            </div>
           </div>
             </>
           )}

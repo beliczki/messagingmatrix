@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Users as UsersIcon, Key, X, Check, AlertCircle, UserPlus } from 'lucide-react';
+import { Users as UsersIcon, Key, X, Check, AlertCircle, UserPlus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AIAssistant from './AIAssistant';
 
 const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
-  const { getAllUsers, changePassword, createUser } = useAuth();
+  const { getAllUsers, changePassword, createUser, deleteUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [changingPasswordFor, setChangingPasswordFor] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(null);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
@@ -125,6 +126,22 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
     setSuccess('');
   };
 
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+
+    setError('');
+    const result = await deleteUser(deletingUser.id);
+
+    if (result.success) {
+      setSuccess(`User ${deletingUser.email} deleted successfully`);
+      setDeletingUser(null);
+      loadUsers();
+      setTimeout(() => setSuccess(''), 2000);
+    } else {
+      setError(result.error || 'Failed to delete user');
+    }
+  };
+
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Content */}
@@ -183,13 +200,24 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
                         {new Date(user.createdAt).toLocaleDateString()}
                       </td>
                       <td className="py-3 px-4">
-                        <button
-                          onClick={() => handleChangePasswordClick(user)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors text-sm"
-                        >
-                          <Key size={16} />
-                          Change Password
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleChangePasswordClick(user)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors text-sm"
+                          >
+                            <Key size={16} />
+                            Change Password
+                          </button>
+                          {user.role !== 'admin' && (
+                            <button
+                              onClick={() => setDeletingUser(user)}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors text-sm"
+                              title="Delete user"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -419,6 +447,59 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
               >
                 <Key size={16} />
                 Change Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Dialog */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Dialog Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Delete User</h3>
+                <p className="text-sm text-gray-600 mt-1">{deletingUser.email}</p>
+              </div>
+              <button
+                onClick={() => setDeletingUser(null)}
+                className="p-2 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Dialog Body */}
+            <div className="p-6">
+              {/* Error Message */}
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 mb-4">
+                  <AlertCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-red-800 text-sm">{error}</p>
+                </div>
+              )}
+
+              <p className="text-gray-700">
+                Are you sure you want to delete this user? This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Dialog Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => setDeletingUser(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+              >
+                <Trash2 size={16} />
+                Delete User
               </button>
             </div>
           </div>

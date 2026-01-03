@@ -206,6 +206,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const deleteUser = async (userId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'User deletion failed');
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
   const value = {
     currentUser,
     login,
@@ -213,6 +232,7 @@ export const AuthProvider = ({ children }) => {
     getAllUsers,
     changePassword,
     createUser,
+    deleteUser,
     loading,
     hashPassword,
     getAuthHeaders
