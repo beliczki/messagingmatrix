@@ -25,7 +25,7 @@ dotenv.config();
 
 // Server version - increment this whenever server.js is modified
 // Format: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for small changes)
-const SERVER_VERSION = '1.0.1';
+const SERVER_VERSION = '1.0.2';
 
 // Initialize SQLite database
 console.log('🔄 Initializing SQLite cache database...');
@@ -115,7 +115,9 @@ const allowedOrigins = [
   'https://messagingmatrix.ai',
   'http://messagingmatrix.ai',
   'https://erste.messagingmatrix.ai',
-  'http://erste.messagingmatrix.ai'
+  'http://erste.messagingmatrix.ai',
+  'https://telekom.messagingmatrix.ai',
+  'http://telekom.messagingmatrix.ai'
 ];
 
 // Add development origins
@@ -3447,6 +3449,26 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     res.status(500).json({ error: 'Failed to proxy Drive file' });
   }
 });
+
+// Serve static files from dist folder in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, 'dist');
+
+  // Check if dist folder exists
+  if (fs.existsSync(distPath)) {
+    console.log('✓ Serving static files from:', distPath);
+
+    // Serve static assets
+    app.use(express.static(distPath));
+
+    // Handle SPA routing - serve index.html for all non-API routes
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    console.warn('⚠ Production mode but dist folder not found. Run "npm run build" first.');
+  }
+}
 
 const server = app.listen(PORT, () => {
   console.log(`\n✓ Server v${SERVER_VERSION} running on http://localhost:${PORT}`);
