@@ -220,6 +220,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       setMessage({ type: '', text: '' });
 
       // Save config to config.json via API
+      // Include structure fields so they're preserved in settings service memory
       const success = await settings.save({
         spreadsheetId: config.spreadsheetId,
         googleDrive: config.googleDrive,
@@ -228,7 +229,13 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         treeStructure: config.treeStructure,
         sankeyStructure: config.sankeyStructure,
         feedStructure: config.feedStructure,
-        lookAndFeel: config.lookAndFeel
+        lookAndFeel: config.lookAndFeel,
+        audienceStructure,
+        topicStructure,
+        messagesStructure,
+        creativeStructure,
+        creativeParsingRules,
+        visibleTemplates: config.visibleTemplates || []
       });
 
       if (!success) {
