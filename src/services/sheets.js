@@ -262,6 +262,9 @@ class SheetsService {
     }
     console.log(`💾 [sheets.saveAll] Saving: ${audiences?.length || 0} audiences, ${topics?.length || 0} topics, ${messages?.length || 0} messages`);
 
+    // Ensure settings are initialized before accessing structure config
+    await settings.ensureInitialized();
+
     // Get audience structure from settings (comma-separated column names)
     const audienceStructure = settings.getAudienceStructure();
 
