@@ -1,0 +1,73 @@
+/* ----------------------- */
+/* main */
+/* ----------------------- */
+:root {
+  
+  --pink: 235, 76, 121;
+
+}
+
+html {
+  font-family: 'Teleneo', sans-serif;
+  color:white;
+}
+
+body {
+  padding: 0px;
+  margin: 0px;
+}
+
+#adContainer {
+  background-color: #efefef;
+  position: relative;
+  transition: all 0.5s;
+}
+
+main,
+#backgroundContainer,
+#logoContainer,
+#frameContainer,
+#imageWrapper,
+#imageWrapper,
+#videoWrapper,
+#objecWrapper {
+  position: absolute;
+  box-sizing: border-box;
+  top: 0;
+  left: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  transition: all 0.5s;
+}
+
+#adContainer,
+#backgroundContainer,
+#frameContainer,
+#imageWrapper,
+#imageWrapper>div,
+#videoWrapper {
+  height: 100%;
+  overflow: hidden;
+}
+
+
+
+
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+
+.sizebr { display: none;}
+
+span[class^="text-"] {display: none;}
+body #adContainer .text-allSizes {display: inline;}
+
+
+
+
+
+
+
+
