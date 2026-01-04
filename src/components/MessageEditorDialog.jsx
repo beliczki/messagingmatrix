@@ -1683,6 +1683,7 @@ const MessageEditorDialog = ({
             <div className="dialog-nav">
               <button
                 onClick={() => {
+                  if (uniqueVariants.length === 0) return;
                   if (hasPrevious) {
                     setEditingMessage(uniqueVariants[currentIndex - 1]);
                   } else {
@@ -1731,6 +1732,7 @@ const MessageEditorDialog = ({
               </div>
               <button
                 onClick={() => {
+                  if (uniqueVariants.length === 0) return;
                   if (hasNext) {
                     setEditingMessage(uniqueVariants[currentIndex + 1]);
                   } else {
