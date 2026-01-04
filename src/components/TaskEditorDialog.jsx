@@ -1196,17 +1196,20 @@ const TaskEditorDialog = ({
                         }}
                       >
                         {buckets.map(bucket => {
-                          const bucketColor = getBucketColor(bucket.id);
+                          // buckets is array of strings like ['INCOMING', 'NAMING', ...]
+                          const bucketId = typeof bucket === 'string' ? bucket : bucket.id;
+                          const bucketName = typeof bucket === 'string' ? bucket : bucket.name;
+                          const bucketColor = getBucketColor(bucketId);
                           return (
                             <option
-                              key={bucket.id}
-                              value={bucket.id}
+                              key={bucketId}
+                              value={bucketId}
                               style={{
                                 backgroundColor: bucketColor,
                                 color: getTextColor(bucketColor)
                               }}
                             >
-                              {bucket.name}
+                              {bucketName}
                             </option>
                           );
                         })}
