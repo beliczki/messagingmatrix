@@ -171,6 +171,11 @@ const MatrixGridView = ({
     table.querySelectorAll('.cell-highlight, .row-highlight, .col-highlight').forEach(el => {
       el.classList.remove('cell-highlight', 'row-highlight', 'col-highlight');
     });
+    // Reset header highlights (they use inline style instead of class)
+    table.querySelectorAll('[data-highlighted="true"]').forEach(el => {
+      el.dataset.highlighted = '';
+      el.style.backgroundColor = 'var(--color-primary)';
+    });
 
     if (topicIndex === null || audienceIndex === null) {
       hoveredCellRef.current = null;
@@ -184,13 +189,19 @@ const MatrixGridView = ({
     const currentCell = table.querySelector(`[data-cell="${topicIndex}-${audienceIndex}"]`);
     if (currentCell) currentCell.classList.add('cell-highlight');
 
-    // Highlight row header
+    // Highlight row header with color-mix (preserves opaque background for clipping)
     const rowHeader = table.querySelector(`[data-row="${topicIndex}"]`);
-    if (rowHeader) rowHeader.classList.add('row-highlight');
+    if (rowHeader) {
+      rowHeader.dataset.highlighted = 'true';
+      rowHeader.style.backgroundColor = 'color-mix(in srgb, var(--color-primary) 90%, white 10%)';
+    }
 
-    // Highlight column header
+    // Highlight column header with color-mix (preserves opaque background for clipping)
     const colHeader = table.querySelector(`[data-col="${audienceIndex}"]`);
-    if (colHeader) colHeader.classList.add('col-highlight');
+    if (colHeader) {
+      colHeader.dataset.highlighted = 'true';
+      colHeader.style.backgroundColor = 'color-mix(in srgb, var(--color-primary) 90%, white 10%)';
+    }
 
     // Highlight cells in the path (same row to the left, same column above)
     for (let i = 0; i < audienceIndex; i++) {
@@ -392,7 +403,7 @@ const MatrixGridView = ({
       onMouseDown={onPanStart}
       onMouseMove={onPanMove}
       onMouseUp={onPanEnd}
-      onMouseLeave={onPanEnd}
+      onMouseLeave={() => { onPanEnd(); updateHoverHighlight(null, null); }}
     >
       {/* Use CSS zoom instead of transform - this preserves sticky behavior */}
       <div style={{ zoom: matrixZoom }}>
@@ -409,10 +420,14 @@ const MatrixGridView = ({
                   width: firstColWidth,
                   minWidth: firstColWidth,
                   backgroundColor: 'var(--color-primary)',
+                  opacity: 0.85,
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
                   boxShadow: cornerShadow,
                   clipPath: cornerClip,
                   transition: 'box-shadow 0.2s ease-in-out'
                 }}
+                onMouseEnter={() => updateHoverHighlight(null, null)}
               >
                 {/* Empty corner - filters are in toolbar */}
               </th>
@@ -439,6 +454,9 @@ const MatrixGridView = ({
                       minWidth: cellWidth,
                       height: '8.5rem',
                       backgroundColor: 'var(--color-primary)',
+                      opacity: 0.85,
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
                       borderBottom: `3px solid ${productBorderColor}`,
                       borderRadius: '0 0 8px 8px',
                       boxShadow: headerShadow,
@@ -447,6 +465,7 @@ const MatrixGridView = ({
                       padding: '12px',
                       verticalAlign: 'bottom'
                     }}
+                    onMouseEnter={() => updateHoverHighlight(null, null)}
                   >
                     <div className="group relative">
                       {/* Product tag on top */}
@@ -587,6 +606,9 @@ const MatrixGridView = ({
                       minWidth: firstColWidth,
                       maxWidth: firstColWidth,
                       backgroundColor: 'var(--color-primary)',
+                      opacity: 0.85,
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
                       borderRight: '3px solid white',
                       borderRadius: '0 8px 8px 0',
                       padding: '12px',
@@ -594,6 +616,7 @@ const MatrixGridView = ({
                       textAlign: 'right',
                       transition: 'background 0.15s ease'
                     }}
+                    onMouseEnter={() => updateHoverHighlight(null, null)}
                   >
                     <div className="group relative">
                       {/* Product tag on top - right aligned */}

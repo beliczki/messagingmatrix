@@ -1033,8 +1033,9 @@ const MessageEditorDialog = ({
       const audience = audiences.find(a => a.key === m.audience);
 
       // Filter by product if products are selected
+      // Messages with no product (empty/undefined) pass through all product filters
       if (selectedProducts.length > 0 && audience) {
-        if (!selectedProducts.includes(audience.product)) {
+        if (audience.product && !selectedProducts.includes(audience.product)) {
           return false;
         }
       }
@@ -1689,11 +1690,8 @@ const MessageEditorDialog = ({
               <button
                 onClick={() => {
                   if (uniqueVariants.length === 0) return;
-                  if (hasPrevious) {
-                    setEditingMessage(uniqueVariants[currentIndex - 1]);
-                  } else {
-                    setEditingMessage(uniqueVariants[uniqueVariants.length - 1]);
-                  }
+                  const targetIndex = hasPrevious ? currentIndex - 1 : uniqueVariants.length - 1;
+                  setEditingMessage(uniqueVariants[targetIndex]);
                 }}
                 className="dialog-nav-btn"
                 title="Previous variant"
@@ -1738,11 +1736,8 @@ const MessageEditorDialog = ({
               <button
                 onClick={() => {
                   if (uniqueVariants.length === 0) return;
-                  if (hasNext) {
-                    setEditingMessage(uniqueVariants[currentIndex + 1]);
-                  } else {
-                    setEditingMessage(uniqueVariants[0]);
-                  }
+                  const targetIndex = hasNext ? currentIndex + 1 : 0;
+                  setEditingMessage(uniqueVariants[targetIndex]);
                 }}
                 className="dialog-nav-btn"
                 title="Next variant"
