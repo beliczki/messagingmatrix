@@ -6,6 +6,7 @@ import AIAssistant from './AIAssistant';
 import TaskEditorDialog from './TaskEditorDialog';
 import TaskToolbar from './TaskToolbar';
 import MatrixStatePanel from './MatrixStatePanel';
+import { clearAndReloadApp } from '../utils/clearAndReload';
 
 const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const claudeChatRef = useRef(null);
@@ -447,6 +448,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
             tasks={tasks}
             lastSync={null}
             isSaving={false}
+            onClearReload={clearAndReloadApp}
           />
           <AIAssistant
             ref={claudeChatRef}
