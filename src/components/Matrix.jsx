@@ -2181,6 +2181,7 @@ const Matrix = ({
         selectedStatuses={currentStatuses}
         creatives={matrixData?.creatives || []}
         lookAndFeel={lookAndFeel}
+        assets={assets}
       />
 
       {/* Audience Edit Dialog */}

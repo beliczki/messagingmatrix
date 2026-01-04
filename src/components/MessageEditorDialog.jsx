@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2 } from 'lucide-react';
+import AssetAutocomplete from './AssetAutocomplete';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -32,7 +33,8 @@ const MessageEditorDialog = ({
   selectedProducts = [],
   selectedStatuses = [],
   creatives = [],
-  lookAndFeel
+  lookAndFeel,
+  assets = []
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -2230,21 +2232,21 @@ const MessageEditorDialog = ({
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label className="form-label">Image 1</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image1 || ''}
-                          onChange={(e) => updateField('image1', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image1 || 'empty.png'}
+                          onChange={(val) => updateField('image1', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Image URL or path"
                         />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Image 2</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image2 || ''}
-                          onChange={(e) => updateField('image2', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image2 || 'empty.png'}
+                          onChange={(val) => updateField('image2', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Image URL or path"
                         />
                       </div>
@@ -2253,21 +2255,21 @@ const MessageEditorDialog = ({
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label className="form-label">Image 3</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image3 || ''}
-                          onChange={(e) => updateField('image3', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image3 || 'empty.png'}
+                          onChange={(val) => updateField('image3', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Image URL or path"
                         />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Image 4</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image4 || ''}
-                          onChange={(e) => updateField('image4', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image4 || 'empty.png'}
+                          onChange={(val) => updateField('image4', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Image URL or path"
                         />
                       </div>
@@ -2276,21 +2278,21 @@ const MessageEditorDialog = ({
                     <div className="form-grid-2">
                       <div className="form-group">
                         <label className="form-label">Image 5 (Logo)</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image5 || ''}
-                          onChange={(e) => updateField('image5', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image5 || 'empty.png'}
+                          onChange={(val) => updateField('image5', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Logo image URL or path"
                         />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Image 6 (Sticker)</label>
-                        <input
-                          type="text"
-                          value={editingMessage.image6 || ''}
-                          onChange={(e) => updateField('image6', e.target.value)}
-                          className="form-input"
+                        <AssetAutocomplete
+                          value={editingMessage.image6 || 'empty.png'}
+                          onChange={(val) => updateField('image6', val)}
+                          assets={assets}
+                          filterType="image"
                           placeholder="Sticker image URL or path"
                         />
                       </div>
@@ -2298,11 +2300,11 @@ const MessageEditorDialog = ({
 
                     <div className="form-group">
                       <label className="form-label">Video 1 (Background)</label>
-                      <input
-                        type="text"
-                        value={editingMessage.video1 || ''}
-                        onChange={(e) => updateField('video1', e.target.value)}
-                        className="form-input"
+                      <AssetAutocomplete
+                        value={editingMessage.video1 || 'emptyvideo.mp4'}
+                        onChange={(val) => updateField('video1', val)}
+                        assets={assets}
+                        filterType="video"
                         placeholder="Video URL or path"
                       />
                     </div>
