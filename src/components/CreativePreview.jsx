@@ -181,8 +181,10 @@ const CreativePreview = ({
     // Inject CSS inline into the HTML
     let htmlWithCss = templateHtml;
 
-    if (templateCss.main && templateCss[sizeKey]) {
-      const combinedCss = `${templateCss.main}\n${templateCss[sizeKey]}`;
+    if (templateCss.main || templateCss[sizeKey]) {
+      const mainCss = templateCss.main || '';
+      const sizeCss = templateCss[sizeKey] || '';
+      const combinedCss = `${mainCss}\n${sizeCss}`;
       htmlWithCss = htmlWithCss.replace(
         /<link rel="stylesheet" href="main.css".*?>/,
         `<style>${combinedCss}</style>`

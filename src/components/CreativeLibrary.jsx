@@ -15,14 +15,7 @@ import { processAssets } from '../utils/assetUtils';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
 import settings from '../services/settings';
-import templateHtmlRaw from '../templates/html/index.html?raw';
-import templateConfigUrl from '../templates/html/template.json?url';
-import mainCss from '../templates/html/main.css?raw';
-import css300x250 from '../templates/html/300x250.css?raw';
-import css300x600 from '../templates/html/300x600.css?raw';
-import css640x360 from '../templates/html/640x360.css?raw';
-import css970x250 from '../templates/html/970x250.css?raw';
-import css1080x1080 from '../templates/html/1080x1080.css?raw';
+import { apiGet } from '../utils/api';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   // Read filter from URL params
@@ -47,9 +40,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     const saved = localStorage.getItem('creativeLibrary_bgColor');
     return saved || lookAndFeel?.headerColor || '#2870ed';
   });
-  const [templateHtml, setTemplateHtml] = useState('');
-  const [templateConfig, setTemplateConfig] = useState(null);
-  const [templateCss, setTemplateCss] = useState(null);
+  // Templates cache: Map<templateName, { html, config, css }>
+  const [templatesCache, setTemplatesCache] = useState({});
   const [driveEnabled, setDriveEnabled] = useState(false);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [creativesFolderId, setCreativesFolderId] = useState(null);
@@ -69,44 +61,122 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     return saved ? JSON.parse(saved) : [];
   });
 
-  // MC Template supported banner sizes (from src/templates/html/*.css)
-  const bannerSizes = [
+  // Default banner sizes (fallback if template doesn't specify sizes)
+  const defaultBannerSizes = [
     { width: 300, height: 250, name: 'Medium Rectangle' },
-    { width: 300, height: 600, name: 'Half Page' },
-    { width: 970, height: 250, name: 'Billboard' },
-    { width: 1080, height: 1080, name: 'Social Square' },
-    { width: 640, height: 360, name: 'Social Video' }
+    { width: 300, height: 600, name: 'Half Page' }
   ];
 
-  // Load template HTML and config
-  useEffect(() => {
-    const loadTemplate = async () => {
+  // Get sizes for a specific template from cache
+  const getTemplateSizes = useCallback((templateName) => {
+    const templateData = templatesCache[templateName];
+    if (templateData?.config?.sizes && templateData.config.sizes.length > 0) {
+      return templateData.config.sizes;
+    }
+    return defaultBannerSizes;
+  }, [templatesCache]);
+
+  // Load a single template by name
+  const loadTemplate = useCallback(async (templateName) => {
+    if (templatesCache[templateName]) return templatesCache[templateName];
+
+    try {
+      // Load template HTML
+      const htmlResponse = await apiGet(`/api/templates/${templateName}/index.html`);
+      let html = '';
+      if (htmlResponse.ok) {
+        const htmlData = await htmlResponse.json();
+        html = htmlData.content || htmlData;
+      }
+
+      // Load template config
+      let config = null;
       try {
-        // HTML is already loaded as raw string via import
-        setTemplateHtml(templateHtmlRaw);
+        const configResponse = await apiGet(`/api/templates/${templateName}/template.json`);
+        if (configResponse.ok) {
+          const configData = await configResponse.json();
+          // API returns {content: "..."} wrapper, need to parse the content
+          if (configData.content) {
+            config = JSON.parse(configData.content);
+          } else {
+            config = configData;
+          }
+        }
+      } catch (e) {
+        console.warn(`No template.json for ${templateName}:`, e);
+      }
 
-        // Set up CSS map
-        const cssMap = {
-          main: mainCss,
-          '300x250': css300x250,
-          '300x600': css300x600,
-          '640x360': css640x360,
-          '970x250': css970x250,
-          '1080x1080': css1080x1080
-        };
-        setTemplateCss(cssMap);
+      // Load CSS files
+      const cssMap = { main: '' };
+      const mainCssResponse = await apiGet(`/api/templates/${templateName}/main.css`);
+      if (mainCssResponse.ok) {
+        const mainCssData = await mainCssResponse.json();
+        cssMap.main = mainCssData.content || '';
+      }
 
-        // Only need to fetch the JSON config
-        const configResponse = await fetch(templateConfigUrl);
-        const config = await configResponse.json();
-        setTemplateConfig(config);
-      } catch (error) {
-        console.error('Failed to load template:', error);
+      // Get sizes from config or use defaults
+      const sizesToLoad = config?.sizes || defaultBannerSizes;
+
+      // Load size-specific CSS files (silently skip missing ones)
+      for (const size of sizesToLoad) {
+        const sizeKey = `${size.width}x${size.height}`;
+        try {
+          const sizeCssResponse = await apiGet(`/api/templates/${templateName}/${sizeKey}.css`);
+          if (sizeCssResponse.ok) {
+            const sizeCssData = await sizeCssResponse.json();
+            const cssText = sizeCssData.content || '';
+            // Only add if it's actual CSS content
+            if (cssText && !cssText.includes('<!DOCTYPE') && !cssText.includes('<html')) {
+              cssMap[sizeKey] = cssText;
+            }
+          }
+        } catch (e) {
+          // Size CSS is optional - silently ignore
+        }
+      }
+
+      const templateData = { html, config, css: cssMap };
+      setTemplatesCache(prev => ({ ...prev, [templateName]: templateData }));
+      return templateData;
+    } catch (error) {
+      console.error(`Failed to load template ${templateName}:`, error);
+      return null;
+    }
+  }, [templatesCache]);
+
+  // Load templates for all unique message templates
+  useEffect(() => {
+    const loadTemplatesForMessages = async () => {
+      if (!matrixData?.messages) return;
+
+      // Get unique templates from messages (default to 'html')
+      const templates = new Set();
+      matrixData.messages.forEach(msg => {
+        const templateName = msg.template || 'html';
+        // Only load HTML-based templates
+        const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
+        if (!nonHtmlTemplates.includes(templateName)) {
+          templates.add(templateName);
+        }
+      });
+
+      // Load each unique template
+      for (const templateName of templates) {
+        if (!templatesCache[templateName]) {
+          await loadTemplate(templateName);
+        }
       }
     };
 
-    loadTemplate();
-  }, []);
+    loadTemplatesForMessages();
+  }, [matrixData?.messages, matrixData?.keywords, loadTemplate, templatesCache]);
+
+  // Helper to get template data for a creative
+  const getTemplateForCreative = useCallback((creative) => {
+    if (!creative?.isDynamic) return { html: '', config: null, css: null };
+    const templateName = creative.messageData?.template || 'html';
+    return templatesCache[templateName] || { html: '', config: null, css: null };
+  }, [templatesCache]);
 
   // Check Drive on mount and load folder IDs
   useEffect(() => {
@@ -559,7 +629,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
           const product = audience?.product || message.name || `Message ${message.number}`;
 
-          const messageCreatives = bannerSizes.map((size) => ({
+          // Get template-specific sizes for this message
+          const templateName = message.template || 'html';
+          const templateSizes = getTemplateSizes(templateName);
+
+          const messageCreatives = templateSizes.map((size) => ({
             id: `mc${message.number}-${message.variant}-${size.width}x${size.height}`,
             filename: `MC${message.number}_${message.variant}_${size.width}x${size.height}.html`,
             extension: 'html',
@@ -584,7 +658,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
 
     setCreatives([...spreadsheetCreatives, ...creativeList]);
-  }, [matrixData]);
+  }, [matrixData, getTemplateSizes]);
 
   useEffect(() => {
     loadCreatives();
@@ -982,9 +1056,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             loadingImageRef={loadingImageRef}
             handleImageLoaded={handleImageLoaded}
             setNextItemIndex={setNextItemIndex}
-            templateHtml={templateHtml}
-            templateConfig={templateConfig}
-            templateCss={templateCss}
+            templatesCache={templatesCache}
+            getTemplateForCreative={getTemplateForCreative}
             textFormatting={matrixData?.textFormatting || []}
             audiences={matrixData?.audiences || []}
           />
@@ -1007,7 +1080,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
           // Get thumbnail for dynamic HTML - use first non-empty background image with template config path
           const getThumbnailUrl = () => {
-            if (!isDynamic || !creative.messageData || !templateConfig) return creative.url;
+            const templateData = getTemplateForCreative(creative);
+            if (!isDynamic || !creative.messageData || !templateData.config) return creative.url;
 
             const msg = creative.messageData;
 
@@ -1023,7 +1097,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
               // Skip empty values and empty.png
               if (img.value && img.value.toLowerCase() !== 'empty.png') {
                 // Get path from template config
-                const placeholder = templateConfig.placeholders?.[img.placeholderName];
+                const placeholder = templateData.config.placeholders?.[img.placeholderName];
                 const pathPrefix = placeholder?.['path-messagingmatrix'] || '';
 
                 // Build full URL
@@ -1108,19 +1182,22 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         }}
 
         // Custom preview using CreativePreview
-        renderPreview={(selectedCreative, onClose, allFilteredCreatives, onNavigate) => (
-          <CreativePreview
-            creative={selectedCreative}
-            onClose={onClose}
-            templateHtml={templateHtml}
-            templateConfig={templateConfig}
-            templateCss={templateCss}
-            allCreatives={allFilteredCreatives}
-            onNavigate={onNavigate}
-            textFormatting={matrixData?.textFormatting || []}
-            audiences={matrixData?.audiences || []}
-          />
-        )}
+        renderPreview={(selectedCreative, onClose, allFilteredCreatives, onNavigate) => {
+          const templateData = getTemplateForCreative(selectedCreative);
+          return (
+            <CreativePreview
+              creative={selectedCreative}
+              onClose={onClose}
+              templateHtml={templateData.html}
+              templateConfig={templateData.config}
+              templateCss={templateData.css}
+              allCreatives={allFilteredCreatives}
+              onNavigate={onNavigate}
+              textFormatting={matrixData?.textFormatting || []}
+              audiences={matrixData?.audiences || []}
+            />
+          );
+        }}
 
         // Custom floating actions
         renderFloatingActions={({ showDebugInfo, setShowDebugInfo, debugInfo }) => (
@@ -1214,10 +1291,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         copiedUrl={copiedUrl}
         setCopiedUrl={setCopiedUrl}
         lookAndFeel={lookAndFeel}
-        templateHtml={templateHtml}
-        templateConfig={templateConfig}
-        templateCss={templateCss}
-        templateName="html"
+        templatesCache={templatesCache}
+        getTemplateForCreative={getTemplateForCreative}
         textFormatting={matrixData?.textFormatting || []}
         />
       </div>
