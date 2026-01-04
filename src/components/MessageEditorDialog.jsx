@@ -6,12 +6,6 @@ import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
 import { apiGet } from '../utils/api';
-import mainCss from '../templates/html/main.css?raw';
-import css300x250 from '../templates/html/300x250.css?raw';
-import css300x600 from '../templates/html/300x600.css?raw';
-import css640x360 from '../templates/html/640x360.css?raw';
-import css970x250 from '../templates/html/970x250.css?raw';
-import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 const MessageEditorDialog = ({
   editingMessage,
@@ -58,6 +52,8 @@ const MessageEditorDialog = ({
   const [templates, setTemplates] = useState([]);
   const [templateConfig, setTemplateConfig] = useState(null);
   const [templateHtml, setTemplateHtml] = useState('');
+  const [templateMainCss, setTemplateMainCss] = useState('');
+  const [templateSizeCss, setTemplateSizeCss] = useState('');
   const [variantClassOptions, setVariantClassOptions] = useState([]);
   const [availableDimensions, setAvailableDimensions] = useState([]);
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
@@ -699,6 +695,56 @@ const MessageEditorDialog = ({
     loadTemplateHtml();
   }, [editingMessage?.template]);
 
+  // Load template CSS (main.css) when template changes
+  useEffect(() => {
+    const loadTemplateCss = async () => {
+      if (!editingMessage?.template) {
+        setTemplateMainCss('');
+        return;
+      }
+
+      try {
+        const response = await apiGet(`/api/templates/${editingMessage.template}/main.css`);
+        if (response.ok) {
+          const data = await response.json();
+          setTemplateMainCss(data.content);
+        } else {
+          setTemplateMainCss('');
+        }
+      } catch (error) {
+        console.error('Error loading template main CSS:', error);
+        setTemplateMainCss('');
+      }
+    };
+
+    loadTemplateCss();
+  }, [editingMessage?.template]);
+
+  // Load size-specific CSS when template or size changes
+  useEffect(() => {
+    const loadSizeCss = async () => {
+      if (!editingMessage?.template || !previewSize) {
+        setTemplateSizeCss('');
+        return;
+      }
+
+      try {
+        const response = await apiGet(`/api/templates/${editingMessage.template}/${previewSize}.css`);
+        if (response.ok) {
+          const data = await response.json();
+          setTemplateSizeCss(data.content);
+        } else {
+          setTemplateSizeCss('');
+        }
+      } catch (error) {
+        console.error('Error loading template size CSS:', error);
+        setTemplateSizeCss('');
+      }
+    };
+
+    loadSizeCss();
+  }, [editingMessage?.template, previewSize]);
+
   // Load available dimensions when template changes
   useEffect(() => {
     if (!editingMessage?.template) {
@@ -854,24 +900,13 @@ const MessageEditorDialog = ({
       return '<html><body><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#999;">Loading template...</div></body></html>';
     }
 
-    // CSS map for different sizes
-    const cssMap = {
-      '300x250': css300x250,
-      '300x600': css300x600,
-      '640x360': css640x360,
-      '970x250': css970x250,
-      '1080x1080': css1080x1080
-    };
-
-    // Get the size-specific CSS
-    const sizeCss = cssMap[previewSize] || '';
-
     // Start with the loaded template HTML
     let html = templateHtml;
 
     // Inject CSS by replacing <link> tags with <style> tags
-    if (mainCss && sizeCss) {
-      const combinedCss = `${mainCss}\n${sizeCss}`;
+    // Use dynamically loaded CSS from the selected template
+    if (templateMainCss || templateSizeCss) {
+      const combinedCss = `${templateMainCss}\n${templateSizeCss}`;
 
       // Replace main.css link
       html = html.replace(
