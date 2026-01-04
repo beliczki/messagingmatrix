@@ -16,10 +16,8 @@ const CreativeShare = ({
   copiedUrl,
   setCopiedUrl,
   lookAndFeel,
-  templateHtml = '',
-  templateConfig = null,
-  templateCss = null,
-  templateName = 'html',
+  templatesCache = {},
+  getTemplateForCreative,
   textFormatting = []
 }) => {
   const [isCreating, setIsCreating] = useState(false);
@@ -53,10 +51,8 @@ const CreativeShare = ({
           shareTitle,
           selectedBaseColor,
           {
-            templateHtml,
-            templateConfig,
-            templateCss,
-            templateName
+            templatesCache,
+            getTemplateForCreative
           },
           textFormatting
         );

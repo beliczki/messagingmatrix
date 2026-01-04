@@ -18,9 +18,8 @@ const CreativeLibraryMasonryView = ({
   loadingImageRef,
   handleImageLoaded,
   setNextItemIndex,
-  templateHtml,
-  templateConfig,
-  templateCss,
+  templatesCache = {},
+  getTemplateForCreative,
   textFormatting = [],
   audiences = []
 }) => {
@@ -44,6 +43,7 @@ const CreativeLibraryMasonryView = ({
               const isOutsideRange = creative.originalIndex < loadedStart || creative.originalIndex >= loadedEnd;
               const savedHeight = itemPositions.current.get(creative.id)?.height || 300;
 
+              const templateData = getTemplateForCreative ? getTemplateForCreative(creative) : { html: '', config: null, css: null };
               return (
                 <CreativeLibraryItem
                   key={creative.id}
@@ -54,9 +54,9 @@ const CreativeLibraryMasonryView = ({
                   onSelect={onSelectCreative}
                   isOutsideRange={isOutsideRange}
                   savedHeight={savedHeight}
-                  templateHtml={templateHtml}
-                  templateConfig={templateConfig}
-                  templateCss={templateCss}
+                  templateHtml={templateData.html}
+                  templateConfig={templateData.config}
+                  templateCss={templateData.css}
                   textFormatting={textFormatting}
                   audiences={audiences}
                 />
