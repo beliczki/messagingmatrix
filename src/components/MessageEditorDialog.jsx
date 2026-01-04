@@ -1059,6 +1059,12 @@ const MessageEditorDialog = ({
     }
   });
 
+  // Always include the current editing message so navigation works even when filtered out
+  const currentVariantKey = `${editingMessage.number}-${editingMessage.variant || 'a'}`;
+  if (!variantMap.has(currentVariantKey)) {
+    variantMap.set(currentVariantKey, editingMessage);
+  }
+
   // Get unique variants sorted by number and variant
   const uniqueVariants = Array.from(variantMap.values())
     .sort((a, b) => {
@@ -1068,7 +1074,6 @@ const MessageEditorDialog = ({
     });
 
   // Find current variant
-  const currentVariantKey = `${editingMessage.number}-${editingMessage.variant || 'a'}`;
   const currentIndex = uniqueVariants.findIndex(m =>
     `${m.number}-${m.variant || 'a'}` === currentVariantKey
   );
