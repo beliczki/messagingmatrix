@@ -5,6 +5,43 @@ import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, I
 import { callClaudeAPI } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
 
+// AI Provider configurations
+const AI_PROVIDERS = {
+  claude: {
+    id: 'claude',
+    name: 'Claude',
+    icon: '🟣',
+    models: [
+      { id: 'claude-sonnet-4-5-20250929', name: 'Claude 4.5 Sonnet', isDefault: true },
+      { id: 'claude-opus-4-5-20251101', name: 'Claude 4.5 Opus' },
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' }
+    ],
+    available: true
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Gemini',
+    icon: '🔵',
+    models: [
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', isDefault: true },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+    ],
+    available: false,
+    comingSoon: true
+  },
+  grok: {
+    id: 'grok',
+    name: 'Grok',
+    icon: '⚫',
+    models: [
+      { id: 'grok-3', name: 'Grok 3', isDefault: true },
+      { id: 'grok-3-mini', name: 'Grok 3 Mini' }
+    ],
+    available: false,
+    comingSoon: true
+  }
+};
+
 const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl }, ref) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -27,9 +64,22 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
     return saved ? parseInt(saved) : window.innerHeight * 0.6; // Default 60% of viewport height
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState(() => {
+    return localStorage.getItem('ai_assistant_provider') || 'claude';
+  });
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = localStorage.getItem('ai_assistant_model');
+    if (saved) return saved;
+    // Default to first model of default provider
+    const provider = AI_PROVIDERS[localStorage.getItem('ai_assistant_provider') || 'claude'];
+    const defaultModel = provider?.models.find(m => m.isDefault) || provider?.models[0];
+    return defaultModel?.id || 'claude-sonnet-4-5-20250929';
+  });
   const messagesEndRef = useRef(null);
   const resizeStartY = useRef(0);
   const resizeStartHeight = useRef(0);
+  const modelDropdownRef = useRef(null);
 
   // Handle close with animation
   const handleClose = () => {
@@ -208,7 +258,8 @@ ${emailSummaries}`;
 
       try {
         // Call Claude API with higher max_tokens for long email threads
-        const data = await callClaudeAPI(apiKey, [userMessage], 'claude-sonnet-4-5-20250929', 16384);
+        // Use selected model for email-to-task (higher token limit)
+        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 16384);
         const responseText = data.content[0].text;
 
         // Add assistant response to chat
@@ -407,8 +458,8 @@ Make sure the content is:
       setIsLoading(true);
 
       try {
-        // Call Claude API
-        const data = await callClaudeAPI(apiKey, [userMessage], 'claude-3-5-sonnet-20241022', 2048);
+        // Call Claude API with selected model
+        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 2048);
         const responseText = data.content[0].text;
 
         // Add assistant response to chat
@@ -521,6 +572,44 @@ Make sure the content is:
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizing, height]);
+
+  // Handle model selection
+  const handleSelectModel = (providerId, modelId) => {
+    const provider = AI_PROVIDERS[providerId];
+    if (!provider?.available) {
+      // Show coming soon message
+      return;
+    }
+    setSelectedProvider(providerId);
+    setSelectedModel(modelId);
+    localStorage.setItem('ai_assistant_provider', providerId);
+    localStorage.setItem('ai_assistant_model', modelId);
+    setShowModelDropdown(false);
+  };
+
+  // Get current provider and model display info
+  const getCurrentProviderInfo = () => {
+    const provider = AI_PROVIDERS[selectedProvider] || AI_PROVIDERS.claude;
+    const model = provider.models.find(m => m.id === selectedModel) || provider.models[0];
+    return { provider, model };
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target)) {
+        setShowModelDropdown(false);
+      }
+    };
+
+    if (showModelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showModelDropdown]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -792,8 +881,8 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
         cleanMessage(userMessage)
       ];
 
-      // Call Claude API directly
-      const data = await callClaudeAPI(apiKey, apiMessages, 'claude-3-5-sonnet-20241022', 4096);
+      // Call Claude API with selected model
+      const data = await callClaudeAPI(apiKey, apiMessages, selectedModel, 4096);
 
       const responseText = data.content[0].text;
 
@@ -1208,9 +1297,129 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={clearChat}
+            {/* Model Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div ref={modelDropdownRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowModelDropdown(!showModelDropdown)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    minWidth: '160px',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{getCurrentProviderInfo().provider.icon}</span>
+                    <span>{getCurrentProviderInfo().model.name}</span>
+                  </span>
+                  <ChevronDown size={14} style={{
+                    opacity: 0.7,
+                    transform: showModelDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s'
+                  }} />
+                </button>
+
+                {/* Model Dropdown Menu */}
+                {showModelDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    minWidth: '220px',
+                    background: 'rgba(30, 30, 35, 0.98)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '8px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    zIndex: 1000,
+                    overflow: 'hidden'
+                  }}>
+                    {Object.values(AI_PROVIDERS).map((provider) => (
+                      <div key={provider.id}>
+                        {/* Provider Header */}
+                        <div style={{
+                          padding: '10px 14px 6px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'rgba(255,255,255,0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          borderTop: provider.id !== 'claude' ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                        }}>
+                          <span>{provider.icon}</span>
+                          <span>{provider.name}</span>
+                          {provider.comingSoon && (
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '2px 6px',
+                              background: 'rgba(255,255,255,0.1)',
+                              borderRadius: '4px',
+                              color: 'rgba(255,255,255,0.6)'
+                            }}>
+                              Coming Soon
+                            </span>
+                          )}
+                        </div>
+                        {/* Provider Models */}
+                        {provider.models.map((model) => (
+                          <button
+                            key={model.id}
+                            onClick={() => handleSelectModel(provider.id, model.id)}
+                            disabled={!provider.available}
+                            style={{
+                              width: '100%',
+                              padding: '10px 14px 10px 28px',
+                              background: selectedProvider === provider.id && selectedModel === model.id
+                                ? 'rgba(255,255,255,0.15)'
+                                : 'transparent',
+                              border: 'none',
+                              color: provider.available ? 'white' : 'rgba(255,255,255,0.4)',
+                              fontSize: '13px',
+                              textAlign: 'left',
+                              cursor: provider.available ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              opacity: provider.available ? 1 : 0.6
+                            }}
+                            onMouseEnter={(e) => {
+                              if (provider.available) {
+                                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background =
+                                selectedProvider === provider.id && selectedModel === model.id
+                                  ? 'rgba(255,255,255,0.15)'
+                                  : 'transparent';
+                            }}
+                          >
+                            <span>{model.name}</span>
+                            {selectedProvider === provider.id && selectedModel === model.id && (
+                              <span style={{ color: 'rgba(100, 200, 100, 0.9)' }}>✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={clearChat}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -1246,6 +1455,7 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
                 <X size={18} />
               </button>
             </div>
+          </div>
           </div>
 
           {/* Config Panel */}
