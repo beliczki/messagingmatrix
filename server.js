@@ -358,7 +358,13 @@ app.get('/api/config-basic', (req, res) => {
           buttonStyle: 'border: 1px solid white;',
           secondaryColor1: '#eb4c79',
           secondaryColor2: '#02a3a4',
-          secondaryColor3: '#711c7a'
+          secondaryColor3: '#711c7a',
+          pageTitle: 'Matrix 1.0',
+          fontFamily: 'Inter',
+          cobranding: {
+            enabled: false,
+            logoUrl: ''
+          }
         }
       });
     }

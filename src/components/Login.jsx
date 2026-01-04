@@ -107,44 +107,64 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
-  // Get colors from CSS variables (set by App.jsx from config)
+  // Get colors directly from config API (no auth required)
   const [colors, setColors] = useState({
-    mainColor: '',
-    secondaryColor1: '',
-    secondaryColor2: '',
-    secondaryColor3: ''
+    mainColor: '#2870ed',  // Fallback blue
+    secondaryColor1: '#1e5bb8',
+    secondaryColor2: '#4a90e2',
+    secondaryColor3: '#6ba3eb'
   });
 
-  useEffect(() => {
-    // Read CSS variables after they're set by App.jsx
-    const readColors = () => {
-      const root = document.documentElement;
-      const computedStyle = getComputedStyle(root);
-      const mainColor = computedStyle.getPropertyValue('--color-primary').trim();
-      const toolbarColor = computedStyle.getPropertyValue('--toolbar-color').trim();
-      if (mainColor) {
-        setColors({
-          mainColor,
-          secondaryColor1: toolbarColor,
-          secondaryColor2: '',
-          secondaryColor3: ''
-        });
-        return true;
-      }
-      return false;
-    };
+  // Cobranding state
+  const [cobranding, setCobranding] = useState({ enabled: false, logoUrl: '' });
 
-    // Try immediately, then retry a few times if CSS variables aren't set yet
-    if (!readColors()) {
-      const retryInterval = setInterval(() => {
-        if (readColors()) {
-          clearInterval(retryInterval);
+  useEffect(() => {
+    // Fetch config directly - don't rely on CSS variables which may not be set yet
+    const loadConfig = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3003' : '');
+        const response = await fetch(`${API_URL}/api/config-basic`);
+        if (response.ok) {
+          const data = await response.json();
+          const lf = data.lookAndFeel || {};
+
+          // Set colors
+          setColors({
+            mainColor: lf.headerColor || '#2870ed',
+            secondaryColor1: lf.secondaryColor1 || lf.headerColor || '#1e5bb8',
+            secondaryColor2: lf.secondaryColor2 || lf.headerColor || '#4a90e2',
+            secondaryColor3: lf.secondaryColor3 || lf.headerColor || '#6ba3eb'
+          });
+
+          // Set page title
+          if (lf.pageTitle) {
+            document.title = lf.pageTitle;
+          }
+
+          // Set font family
+          const fontFamily = lf.fontFamily || 'Inter';
+          const fontMap = {
+            'Inter': "'Inter', system-ui, sans-serif",
+            'Poppins': "'Poppins', system-ui, sans-serif",
+            'Novatica': "'BC Novatica', system-ui, sans-serif",
+            'TeleNeo': "'TeleNeo', system-ui, sans-serif"
+          };
+          document.documentElement.style.setProperty('--font-family', fontMap[fontFamily] || fontMap['Inter']);
+
+          // Set cobranding
+          if (lf.cobranding) {
+            setCobranding({
+              enabled: lf.cobranding.enabled || false,
+              logoUrl: lf.cobranding.logoUrl || ''
+            });
+          }
         }
-      }, 100);
-      // Stop retrying after 2 seconds
-      setTimeout(() => clearInterval(retryInterval), 2000);
-      return () => clearInterval(retryInterval);
-    }
+      } catch (error) {
+        console.error('Error loading login config:', error);
+        // Keep fallback colors on error
+      }
+    };
+    loadConfig();
   }, []);
 
   const mainColor = colors.mainColor;
@@ -221,8 +241,22 @@ const Login = () => {
         />
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
-            <MessagingMatrixLogo className="w-full h-full" color="#ffffff" />
+          <div className="inline-flex items-center justify-center gap-3 mb-4">
+            <div className="w-20 h-20">
+              <MessagingMatrixLogo className="w-full h-full" color="#ffffff" />
+            </div>
+            {/* Cobranding Logo */}
+            {cobranding.enabled && cobranding.logoUrl && (
+              <>
+                <span className="text-white/60 text-3xl font-light">×</span>
+                <img
+                  src={cobranding.logoUrl}
+                  alt="Cobranding"
+                  className="h-16 w-auto object-contain"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+              </>
+            )}
           </div>
           <h1 className="text-5xl font-bold text-white leading-tight">Messaging<br/>Matrix</h1>
         </div>
