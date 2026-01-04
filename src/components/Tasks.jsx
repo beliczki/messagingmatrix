@@ -327,7 +327,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
 
     try {
       // Create on server to get real auto-increment ID
-      const response = await apiPost('/api/task', newTask);
+      const response = await apiPost('/api/tasks/create', newTask);
       if (response.ok) {
         const data = await response.json();
         const realId = data.task.id;
