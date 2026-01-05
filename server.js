@@ -842,6 +842,11 @@ app.post('/api/claude', verifyToken, async (req, res) => {
 // AI Assistant Prompts endpoints
 const promptsDir = path.join(__dirname, 'AI'); // AI directory
 
+// Ensure AI directory exists
+if (!fs.existsSync(promptsDir)) {
+  fs.mkdirSync(promptsDir, { recursive: true });
+}
+
 // Map of module names to filenames
 const promptFileMap = {
   'client-context': 'AiClientContext.txt',
@@ -912,11 +917,15 @@ app.post('/api/ai-prompts/:module', verifyToken, (req, res) => {
     const { prompt } = req.body;
     const filename = promptFileMap[module];
 
+    console.log(`[AI Prompts] Saving module: ${module}, filename: ${filename}`);
+
     if (!filename) {
+      console.error(`[AI Prompts] Module not found: ${module}`);
       return res.status(404).json({ error: 'Module not found' });
     }
 
     const filePath = path.join(promptsDir, filename);
+    console.log(`[AI Prompts] File path: ${filePath}`);
 
     // Ensure prompt is a string
     const promptStr = typeof prompt === 'string' ? prompt : '';
@@ -925,15 +934,23 @@ app.post('/api/ai-prompts/:module', verifyToken, (req, res) => {
     if (!promptStr || promptStr.trim() === '') {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
+        console.log(`[AI Prompts] Deleted empty prompt file: ${filePath}`);
       }
       return res.json({ success: true, message: 'Prompt reset to default' });
     }
 
+    // Ensure directory exists before writing
+    if (!fs.existsSync(promptsDir)) {
+      fs.mkdirSync(promptsDir, { recursive: true });
+      console.log(`[AI Prompts] Created directory: ${promptsDir}`);
+    }
+
     // Save prompt to file
     fs.writeFileSync(filePath, promptStr, 'utf8');
+    console.log(`[AI Prompts] Saved ${module} prompt (${promptStr.length} chars) to ${filePath}`);
     res.json({ success: true, message: 'Prompt saved successfully' });
   } catch (error) {
-    console.error('Error saving AI prompt:', error);
+    console.error('[AI Prompts] Error saving:', error);
     res.status(500).json({ error: error.message });
   }
 });
