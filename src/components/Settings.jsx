@@ -207,7 +207,11 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       const response = await apiGet('/api/ai-prompts');
       if (response.ok) {
         const prompts = await response.json();
+        console.log('📥 Loaded AI prompts from server:', Object.keys(prompts));
+        console.log('📥 message-generation prompt:', prompts['message-generation'] ? `${prompts['message-generation'].length} chars` : 'EMPTY/MISSING');
         setAiPrompts(prompts);
+      } else {
+        console.error('❌ Failed to load AI prompts:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error loading AI prompts:', error);
