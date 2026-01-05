@@ -121,6 +121,7 @@ const Matrix = ({
   });
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [generatedContent, setGeneratedContent] = useState(null);
+  const [generatedVersions, setGeneratedVersions] = useState(null); // { headline: [...], copy1: [...], etc }
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [orphanedMessages, setOrphanedMessages] = useState([]);
   const [showOrphanedDialog, setShowOrphanedDialog] = useState(false);
@@ -364,16 +365,27 @@ const Matrix = ({
     if (msgOrNull === null) {
       // Closing the editor
       setEditingMessage(null);
+      setGeneratedVersions(null); // Clear generated versions when closing
       // URL update handled by effect
     } else if (editingMessage && msgOrNull.id === editingMessage.id) {
       // Same message, just updating fields - no URL change
       setEditingMessage(msgOrNull);
     } else {
       // Different message (e.g., prev/next navigation)
+      setGeneratedVersions(null); // Clear generated versions BEFORE changing message
       const messageId = `${msgOrNull.number}${msgOrNull.variant || 'a'}`;
       navigate(`/matrix/edit/${messageId}`, { replace: true });
       setEditingMessage(msgOrNull);
     }
+  };
+
+  // Handler for applying a single field from AI-generated content
+  const handleApplyField = (fieldName, value) => {
+    if (!editingMessage) return;
+    setEditingMessage({
+      ...editingMessage,
+      [fieldName]: value
+    });
   };
 
   // Use matrixViewState for persisted values - memoize arrays with stable references
@@ -2177,6 +2189,8 @@ const Matrix = ({
         setActiveTab={setActiveTab}
         isGeneratingContent={isGeneratingContent}
         handleGenerateContent={handleGenerateContent}
+        generatedVersions={generatedVersions}
+        onApplyField={handleApplyField}
         selectedProducts={currentProducts}
         selectedStatuses={currentStatuses}
         creatives={matrixData?.creatives || []}
@@ -2267,6 +2281,11 @@ const Matrix = ({
             onAddMessage={addMessage}
             onDeleteAudience={deleteAudience}
             onDeleteTopic={deleteTopic}
+            editingMessage={editingMessage}
+            onApplyField={handleApplyField}
+            setGeneratedVersions={setGeneratedVersions}
+            setActiveEditorTab={setActiveTab}
+            setIsGeneratingContent={setIsGeneratingContent}
           />
         </div>,
         document.body

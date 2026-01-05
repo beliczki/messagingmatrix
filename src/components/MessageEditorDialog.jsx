@@ -24,6 +24,8 @@ const MessageEditorDialog = ({
   setActiveTab,
   isGeneratingContent,
   handleGenerateContent,
+  generatedVersions,
+  onApplyField,
   selectedProducts = [],
   selectedStatuses = [],
   creatives = [],
@@ -64,6 +66,29 @@ const MessageEditorDialog = ({
   const [relatedTasks, setRelatedTasks] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
   const [taskSearch, setTaskSearch] = useState('');
+
+  // Track original field values before AI preview changes
+  const [originalFieldValues, setOriginalFieldValues] = useState(null);
+
+  // Track hovered line for showing action buttons
+  const [hoveredLine, setHoveredLine] = useState(null);
+
+  // Capture original values when generatedVersions first appears
+  useEffect(() => {
+    if (generatedVersions && !originalFieldValues && editingMessage) {
+      setOriginalFieldValues({
+        headline: editingMessage.headline || '',
+        copy1: editingMessage.copy1 || '',
+        copy2: editingMessage.copy2 || '',
+        flash: editingMessage.flash || '',
+        cta: editingMessage.cta || ''
+      });
+    }
+    // Clear original values when generatedVersions is cleared
+    if (!generatedVersions && originalFieldValues) {
+      setOriginalFieldValues(null);
+    }
+  }, [generatedVersions, editingMessage, originalFieldValues]);
 
   // Fetch tasks and find those related to this message
   useEffect(() => {
@@ -2359,29 +2384,342 @@ const MessageEditorDialog = ({
               )}
 
               {/* Generate Tab */}
-              {activeTab === 'generate' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
-                  <Sparkles size={48} style={{ color: 'var(--white-50)' }} />
-                  <div style={{ textAlign: 'center' }}>
-                    <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>AI Content Generation</h3>
-                    <p style={{ color: 'var(--white-60)', fontSize: '13px', maxWidth: '300px' }}>
-                      Generate headlines, copy, and CTAs using AI based on your topic and audience.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleGenerateContent}
-                    disabled={isGeneratingContent}
-                    className="btn btn-primary"
-                    style={{ padding: '12px 24px' }}
-                  >
-                    {isGeneratingContent ? (
-                      <><Loader size={16} className="animate-spin" /> Generating...</>
-                    ) : (
-                      <><Sparkles size={16} /> Generate Content</>
+              {activeTab === 'generate' && (() => {
+                // Find sibling variants (same message number, same cell, different variant letter)
+                // Only match if in the same audience/topic cell with the same message number
+                const currentNumber = editingMessage?.number;
+                const currentAudienceId = editingMessage?.audienceId;
+                const currentTopicId = editingMessage?.topicId;
+                const siblingVariants = (currentNumber && currentAudienceId && currentTopicId) ? messages.filter(m =>
+                  m.number === currentNumber &&
+                  m.audienceId === currentAudienceId &&
+                  m.topicId === currentTopicId &&
+                  m.id !== editingMessage?.id &&
+                  m.status !== 'deleted'
+                ).sort((a, b) => (a.variant || 'a').localeCompare(b.variant || 'a')) : [];
+
+                return (
+                  <>
+                    {/* Generate Button */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '16px',
+                      background: 'var(--white-05)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--white-10)'
+                    }}>
+                      <div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Sparkles size={18} style={{ color: 'white' }} />
+                          AI Content Generation
+                        </h3>
+                        <p style={{ color: 'var(--white-50)', fontSize: '12px' }}>
+                          Generate 5 versions of each field based on topic and audience
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleGenerateContent}
+                        disabled={isGeneratingContent}
+                        className="btn btn-primary"
+                        style={{ padding: '10px 20px' }}
+                      >
+                        {isGeneratingContent ? (
+                          <><Loader size={14} className="animate-spin" /> Generating...</>
+                        ) : (
+                          <><Sparkles size={14} /> Generate</>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Sibling Variants Section */}
+                    {siblingVariants.length > 0 && (
+                      <div style={{
+                        background: 'var(--white-05)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        border: '1px solid var(--white-10)'
+                      }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#ec4899',
+                          marginBottom: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          <span style={{
+                            width: '4px',
+                            height: '16px',
+                            background: '#ec4899',
+                            borderRadius: '2px'
+                          }} />
+                          Message Variants ({siblingVariants.length})
+                        </div>
+                        <p style={{ fontSize: '11px', color: 'var(--white-50)', marginBottom: '12px' }}>
+                          Click on a variant to copy all its content fields
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {siblingVariants.map((variant) => (
+                            <button
+                              type="button"
+                              key={variant.id}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const updates = {};
+                                ['headline', 'copy1', 'copy2', 'flash', 'cta'].forEach(field => {
+                                  if (variant[field]) {
+                                    updates[field] = variant[field];
+                                  }
+                                });
+                                if (Object.keys(updates).length > 0) {
+                                  updateFields(updates);
+                                }
+                              }}
+                              style={{
+                                padding: '12px',
+                                background: 'var(--white-05)',
+                                border: '1px solid var(--white-10)',
+                                borderRadius: '8px',
+                                color: 'white',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(236,72,153,0.1)';
+                                e.currentTarget.style.borderColor = '#ec4899';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'var(--white-05)';
+                                e.currentTarget.style.borderColor = 'var(--white-10)';
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                                <span style={{
+                                  width: '22px',
+                                  height: '22px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'rgba(236,72,153,0.2)',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: '#ec4899',
+                                  textTransform: 'uppercase'
+                                }}>
+                                  {variant.variant || 'a'}
+                                </span>
+                                <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                                  {variant.name || `Variant ${(variant.variant || 'a').toUpperCase()}`}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--white-60)', paddingLeft: '32px' }}>
+                                {variant.headline && <div><strong>H:</strong> {variant.headline.substring(0, 50)}{variant.headline.length > 50 ? '...' : ''}</div>}
+                                {variant.copy1 && <div><strong>C1:</strong> {variant.copy1.substring(0, 50)}{variant.copy1.length > 50 ? '...' : ''}</div>}
+                                {variant.cta && <div><strong>CTA:</strong> {variant.cta}</div>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </button>
-                </div>
-              )}
+
+                    {/* AI Generated Versions */}
+                    {generatedVersions ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {[
+                          { key: 'headline', label: 'Headline' },
+                          { key: 'copy1', label: 'Copy 1' },
+                          { key: 'copy2', label: 'Copy 2' },
+                          { key: 'flash', label: 'Flash' },
+                          { key: 'cta', label: 'CTA' }
+                        ].filter(({ key }) => generatedVersions[key]?.length > 0)
+                        .map(({ key, label }, idx) => {
+                          const hasChanged = originalFieldValues &&
+                            (editingMessage?.[key] || '') !== (originalFieldValues[key] || '');
+
+                          // Check if this field has a placeholder in the template HTML
+                          // First find the placeholder name that maps to this field
+                          const placeholderName = templateConfig?.placeholders && Object.entries(templateConfig.placeholders).find(([name, p]) => {
+                            const binding = p['binding-messagingmatrix'];
+                            return binding && binding.replace(/^message\./i, '').toLowerCase() === key;
+                          })?.[0];
+                          // Then check if that placeholder is actually used in the HTML
+                          const hasPlaceholder = placeholderName && templateHtml && templateHtml.includes(`{{${placeholderName}}}`);
+
+                          return (
+                            <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {idx > 0 && (
+                                <hr style={{ border: 'none', borderTop: '1px solid var(--white-10)', margin: '8px 0 12px 0' }} />
+                              )}
+                              <div style={{
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}>
+                                <span>{label}</span>
+                                {hasChanged && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (originalFieldValues) {
+                                        updateField(key, originalFieldValues[key]);
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '4px 8px',
+                                      background: 'var(--white-10)',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      color: 'white',
+                                      fontSize: '10px',
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title="Restore original value"
+                                  >
+                                    Return to Original
+                                  </button>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {generatedVersions[key].map((version, idx) => {
+                                  const lineId = `${key}-${idx}`;
+                                  const isHovered = hoveredLine === lineId;
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onMouseEnter={() => setHoveredLine(lineId)}
+                                      onMouseLeave={() => setHoveredLine(null)}
+                                      onClick={() => {
+                                        if (version) {
+                                          if (isNonHtmlTemplate || !hasPlaceholder) {
+                                            // For non-dynamic templates or missing placeholders, add to comment instead
+                                            const currentComment = editingMessage?.comment || '';
+                                            const aiLine = `AI ${label}: "${version}"`;
+                                            const newComment = currentComment
+                                              ? `${currentComment}\n${aiLine}`
+                                              : aiLine;
+                                            updateField('comment', newComment);
+                                          } else {
+                                            updateField(key, version);
+                                          }
+                                        }
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '8px 12px',
+                                        background: isHovered ? 'var(--white-10)' : 'var(--white-05)',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        transition: 'background 0.15s',
+                                        minHeight: '36px'
+                                      }}
+                                    >
+                                      <span style={{ flex: 1, fontSize: '12px', color: 'white', lineHeight: '1.4' }}>{version}</span>
+                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: isHovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+                                          {!isNonHtmlTemplate && hasPlaceholder && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (version) {
+                                                  updateField(key, version);
+                                                }
+                                              }}
+                                              style={{
+                                                padding: '4px 8px',
+                                                background: 'var(--white-20)',
+                                                border: 'none',
+                                                borderRadius: '4px',
+                                                color: 'white',
+                                                fontSize: '10px',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Apply to preview"
+                                            >
+                                              Preview
+                                            </button>
+                                          )}
+                                          {!isNonHtmlTemplate && !hasPlaceholder && (
+                                            <span style={{
+                                              fontSize: '10px',
+                                              fontStyle: 'italic',
+                                              color: 'white',
+                                              whiteSpace: 'nowrap',
+                                              lineHeight: '22px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              marginRight: '8px'
+                                            }}>
+                                              placeholder not available
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              const currentComment = editingMessage?.comment || '';
+                                              const aiLine = `AI ${label}: "${version}"`;
+                                              const newComment = currentComment
+                                                ? `${currentComment}\n${aiLine}`
+                                                : aiLine;
+                                              updateField('comment', newComment);
+                                            }}
+                                            style={{
+                                              padding: '4px 8px',
+                                              background: 'var(--white-20)',
+                                              border: 'none',
+                                              borderRadius: '4px',
+                                              color: 'white',
+                                              fontSize: '10px',
+                                              cursor: 'pointer',
+                                              whiteSpace: 'nowrap'
+                                            }}
+                                            title="Add to message comments"
+                                          >
+                                            Add to Comment
+                                          </button>
+                                        </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : !siblingVariants.length && !isGeneratingContent && (
+                      <div style={{ textAlign: 'center', color: 'var(--white-50)', marginTop: '20px' }}>
+                        <p style={{ fontSize: '13px' }}>
+                          Click "Generate" to create AI-powered content variations
+                        </p>
+                        {isNonHtmlTemplate && (
+                          <p style={{ fontSize: '12px', marginTop: '12px', color: 'var(--white-40)' }}>
+                            Non-dynamic template ({editingMessage?.template}) can't be previewed, but text variants can be added to comment.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Styles Tab */}
               {activeTab === 'styles' && (

@@ -1,0 +1,53 @@
+Generate marketing message content for the following context:
+
+**Audience:**
+- Name: {{AUDIENCE_NAME}}
+- Strategy: {{AUDIENCE_STRATEGY}}
+- Device: {{AUDIENCE_DEVICE}}
+- Targeting: {{AUDIENCE_TARGETING}}
+- Comment: {{AUDIENCE_COMMENT}}
+
+**Topic:**
+- Name: {{TOPIC_NAME}}
+- Tags: {{TOPIC_TAGS}}
+- Comment: {{TOPIC_COMMENT}}
+
+**Current Message Content (if any):**
+- Name: {{MESSAGE_NAME}}
+- Headline: {{MESSAGE_HEADLINE}}
+- Copy 1: {{MESSAGE_COPY1}}
+- Copy 2: {{MESSAGE_COPY2}}
+- Flash: {{MESSAGE_FLASH}}
+- CTA: {{MESSAGE_CTA}}
+
+{{EXAMPLES_SECTION}}
+
+**IMPORTANT INSTRUCTIONS:**
+- Study the examples above carefully to match the writing style, tone, and text length
+- Use similar language patterns and vocabulary
+- Match the level of formality/informality
+- Keep text lengths similar to the examples
+- Maintain consistency with the brand voice shown in examples
+- Use placeholders like {{placeholder}} for dynamic content if you see this pattern in examples
+
+Please generate 5 DIFFERENT versions of each field. Each version should be unique and offer variety in approach, tone, or wording while maintaining brand consistency.
+
+Respond ONLY with a JSON object in this exact format:
+
+```json
+{
+  "headline": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "copy1": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "copy2": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "flash": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "cta": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"]
+}
+```
+
+Make sure each version is:
+- Relevant to the audience and topic
+- Matching the style, tone, and length of the examples provided
+- Engaging and action-oriented
+- Appropriate for the specified device and platform
+- Using placeholders where the examples use them
+- DISTINCT from other versions (vary the approach, angle, or wording)

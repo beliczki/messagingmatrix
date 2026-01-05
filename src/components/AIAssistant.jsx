@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
+import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, ChevronRight, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
 // X is already imported
 import { callClaudeAPI } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
@@ -42,7 +42,7 @@ const AI_PROVIDERS = {
   }
 };
 
-const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl }, ref) => {
+const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, setGeneratedVersions, setActiveEditorTab, setIsGeneratingContent }, ref) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +59,30 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [dataStructureDoc, setDataStructureDoc] = useState('');
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'context'
+  const [contextParts, setContextParts] = useState(() => {
+    const saved = localStorage.getItem('ai_assistant_context_parts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // Default all enabled
+      }
+    }
+    return {
+      clientContext: true,
+      moduleInstructions: true,
+      dataStructure: true,
+      audiences: true,
+      topics: true,
+      messages: true,
+      messagesByAudience: false,
+      messagesByTopic: false,
+      keywords: true,
+      assets: true,
+      creatives: true,
+      textFormatting: true
+    };
+  });
   const [height, setHeight] = useState(() => {
     const saved = localStorage.getItem('ai_assistant_height');
     return saved ? parseInt(saved) : window.innerHeight * 0.6; // Default 60% of viewport height
@@ -398,55 +422,92 @@ ${emailSummaries}`;
         });
       }
 
-      // Build the generation prompt
-      const generationPrompt = `Generate marketing message content for the following context:
+      // Build the generation prompt from configurable template
+      let generationPrompt = customPrompts['message-generation'] || '';
+
+      // If no custom prompt, use default
+      if (!generationPrompt.trim()) {
+        generationPrompt = `Generate marketing message content for the following context:
 
 **Audience:**
-- Name: ${contextData.audience.name}
-- Strategy: ${contextData.audience.strategy || 'N/A'}
-- Device: ${contextData.audience.device || 'N/A'}
-- Targeting: ${contextData.audience.targeting_type || 'N/A'}
-- Comment: ${contextData.audience.comment || 'N/A'}
+- Name: {{AUDIENCE_NAME}}
+- Strategy: {{AUDIENCE_STRATEGY}}
+- Device: {{AUDIENCE_DEVICE}}
+- Targeting: {{AUDIENCE_TARGETING}}
+- Comment: {{AUDIENCE_COMMENT}}
 
 **Topic:**
-- Name: ${contextData.topic.name}
-- Tags: ${[contextData.topic.tag1, contextData.topic.tag2, contextData.topic.tag3, contextData.topic.tag4].filter(Boolean).join(', ') || 'N/A'}
-- Comment: ${contextData.topic.comment || 'N/A'}
+- Name: {{TOPIC_NAME}}
+- Tags: {{TOPIC_TAGS}}
+- Comment: {{TOPIC_COMMENT}}
 
 **Current Message Content (if any):**
-- Name: ${contextData.currentMessage.name || 'N/A'}
-- Headline: ${contextData.currentMessage.headline || 'N/A'}
-- Copy 1: ${contextData.currentMessage.copy1 || 'N/A'}
-- Copy 2: ${contextData.currentMessage.copy2 || 'N/A'}
-- Flash: ${contextData.currentMessage.flash || 'N/A'}
-- CTA: ${contextData.currentMessage.cta || 'N/A'}
-${examplesSection}
-**IMPORTANT INSTRUCTIONS:**
-- Study the examples above carefully to match the writing style, tone, and text length
-- Use similar language patterns and vocabulary
-- Match the level of formality/informality
-- Keep text lengths similar to the examples
-- Maintain consistency with the brand voice shown in examples
-- Use placeholders like {{placeholder}} for dynamic content if you see this pattern in examples
+- Name: {{MESSAGE_NAME}}
+- Headline: {{MESSAGE_HEADLINE}}
+- Copy 1: {{MESSAGE_COPY1}}
+- Copy 2: {{MESSAGE_COPY2}}
+- Flash: {{MESSAGE_FLASH}}
+- CTA: {{MESSAGE_CTA}}
 
-Please generate compelling marketing message content. Respond ONLY with a JSON object in this exact format:
+{{EXAMPLES_SECTION}}
+
+Please generate 5 DIFFERENT versions of each field. Each version should be unique and offer variety in approach, tone, or wording while maintaining brand consistency.
+
+Respond ONLY with a JSON object in this exact format:
 
 \`\`\`json
 {
-  "headline": "Your generated headline here",
-  "copy1": "Your generated first copy text here",
-  "copy2": "Your generated second copy text here",
-  "flash": "Your generated flash text here",
-  "cta": "Your generated call-to-action here"
+  "headline": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "copy1": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "copy2": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "flash": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"],
+  "cta": ["Version 1", "Version 2", "Version 3", "Version 4", "Version 5"]
 }
-\`\`\`
+\`\`\``;
+      }
 
-Make sure the content is:
-- Relevant to the audience and topic
-- Matching the style, tone, and length of the examples provided
-- Engaging and action-oriented
-- Appropriate for the specified device and platform
-- Using placeholders where the examples use them`;
+      // Replace placeholders with actual values
+      generationPrompt = generationPrompt
+        .replace(/\{\{AUDIENCE_NAME\}\}/g, contextData.audience.name || 'N/A')
+        .replace(/\{\{AUDIENCE_STRATEGY\}\}/g, contextData.audience.strategy || 'N/A')
+        .replace(/\{\{AUDIENCE_DEVICE\}\}/g, contextData.audience.device || 'N/A')
+        .replace(/\{\{AUDIENCE_TARGETING\}\}/g, contextData.audience.targeting_type || 'N/A')
+        .replace(/\{\{AUDIENCE_COMMENT\}\}/g, contextData.audience.comment || 'N/A')
+        .replace(/\{\{TOPIC_NAME\}\}/g, contextData.topic.name || 'N/A')
+        .replace(/\{\{TOPIC_TAGS\}\}/g, [contextData.topic.tag1, contextData.topic.tag2, contextData.topic.tag3, contextData.topic.tag4].filter(Boolean).join(', ') || 'N/A')
+        .replace(/\{\{TOPIC_COMMENT\}\}/g, contextData.topic.comment || 'N/A')
+        .replace(/\{\{MESSAGE_NAME\}\}/g, contextData.currentMessage.name || 'N/A')
+        .replace(/\{\{MESSAGE_HEADLINE\}\}/g, contextData.currentMessage.headline || 'N/A')
+        .replace(/\{\{MESSAGE_COPY1\}\}/g, contextData.currentMessage.copy1 || 'N/A')
+        .replace(/\{\{MESSAGE_COPY2\}\}/g, contextData.currentMessage.copy2 || 'N/A')
+        .replace(/\{\{MESSAGE_FLASH\}\}/g, contextData.currentMessage.flash || 'N/A')
+        .replace(/\{\{MESSAGE_CTA\}\}/g, contextData.currentMessage.cta || 'N/A')
+        .replace(/\{\{EXAMPLES_SECTION\}\}/g, examplesSection);
+
+      // Find sibling variants for context
+      const { messages: matrixMsgs = [] } = matrixState || {};
+      const siblingVariants = matrixMsgs.filter(m =>
+        m.number === contextData.currentMessage.number &&
+        m.id !== contextData.currentMessage.id &&
+        m.status !== 'deleted'
+      ).map(v => ({
+        variant: v.variant || 'a',
+        name: v.name,
+        headline: v.headline,
+        copy1: v.copy1,
+        copy2: v.copy2,
+        flash: v.flash,
+        cta: v.cta
+      }));
+
+      // Add variants info to chat if they exist
+      if (siblingVariants.length > 0) {
+        const variantsMessage = {
+          role: 'system',
+          content: `📋 Sibling Variants (${siblingVariants.length}):\n\`\`\`json\n${JSON.stringify(siblingVariants, null, 2)}\n\`\`\``
+        };
+        setMessages(prev => [...prev, variantsMessage]);
+      }
 
       // Add user message to chat
       const userMessage = {
@@ -458,8 +519,8 @@ Make sure the content is:
       setIsLoading(true);
 
       try {
-        // Call Claude API with selected model
-        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 2048);
+        // Call Claude API with selected model (increased tokens for 5 versions per field)
+        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 4096);
         const responseText = data.content[0].text;
 
         // Add assistant response to chat
@@ -488,17 +549,25 @@ Make sure the content is:
             const jsonText = jsonMatch[1].trim();
             const generatedContent = JSON.parse(jsonText);
 
-            // Validate that we have at least some content
-            if (generatedContent.headline || generatedContent.copy1 || generatedContent.cta) {
+            // Validate that we have at least some content (arrays of versions)
+            const hasContent = generatedContent.headline?.length || generatedContent.copy1?.length || generatedContent.cta?.length;
+            if (hasContent) {
+              // Store the generated versions for display in the editor's Generate tab
+              if (setGeneratedVersions) {
+                setGeneratedVersions(generatedContent);
+              }
+
+              // Switch to the Generate tab in the message editor
+              if (setActiveEditorTab) {
+                setActiveEditorTab('generate');
+              }
+
               // Add success message
               const successMessage = {
                 role: 'system',
-                content: '✅ Content generated and applied to the message editor!'
+                content: '✅ Generated 5 versions for each field! Switch to Generate tab to apply.'
               };
               setMessages(prev => [...prev, successMessage]);
-
-              // Call the callback with the generated content
-              callback(generatedContent);
             } else {
               const errorMessage = {
                 role: 'system',
@@ -532,6 +601,9 @@ Make sure the content is:
       } finally {
         setIsLoading(false);
         setIsGenerating(false);
+        if (setIsGeneratingContent) {
+          setIsGeneratingContent(false);
+        }
       }
     },
     getIsGenerating: () => isGenerating
@@ -550,6 +622,7 @@ Make sure the content is:
     buildContextPrompt();
   }, [moduleContext?.module, taskContext]);
 
+  
   useEffect(() => {
     if (!isResizing) return;
 
@@ -619,6 +692,19 @@ Make sure the content is:
     scrollToBottom();
   }, [messages]);
 
+  // Save context parts to localStorage
+  useEffect(() => {
+    localStorage.setItem('ai_assistant_context_parts', JSON.stringify(contextParts));
+  }, [contextParts]);
+
+  // Toggle a context part
+  const toggleContextPart = (partKey) => {
+    setContextParts(prev => ({
+      ...prev,
+      [partKey]: !prev[partKey]
+    }));
+  };
+
   const saveApiKey = () => {
     if (apiKey.trim()) {
       localStorage.setItem('ai_assistant_api_key', apiKey.trim());
@@ -640,69 +726,167 @@ Make sure the content is:
     if (!data) return '';
 
     const { audiences = [], topics = [], messages = [], keywords = {}, assets = [], creatives = [], textFormatting = [] } = data;
+    const activeMessages = messages.filter(m => m.status !== 'deleted');
 
-    // If we have the data structure documentation loaded, use it and append ALL data
-    if (dataStructureDoc) {
-      const activeMessages = messages.filter(m => m.status !== 'deleted');
+    let result = '';
 
-      return `
-${dataStructureDoc}
-
-**Current Data Counts:**
-- Audiences: ${audiences.length}
-- Topics: ${topics.length}
-- Messages: ${activeMessages.length}
-- Matrix cells: ${audiences.length} × ${topics.length} = ${audiences.length * topics.length} possible cells
-- Keywords: ${Object.keys(keywords).length} categories
-- Assets: ${assets.length}
-- Creatives: ${creatives.length}
-- Text Formatting Styles: ${textFormatting.length}
-
----
-
-## COMPLETE CURRENT DATA (Full Dataset):
-
-### ALL AUDIENCES (${audiences.length} total):
-${audiences.length > 0 ? JSON.stringify(audiences, null, 2) : 'No audiences defined'}
-
-### ALL TOPICS (${topics.length} total):
-${topics.length > 0 ? JSON.stringify(topics, null, 2) : 'No topics defined'}
-
-### ALL MESSAGES (${activeMessages.length} active):
-${activeMessages.length > 0 ? JSON.stringify(activeMessages, null, 2) : 'No messages defined'}
-
-### ALL KEYWORDS:
-${Object.keys(keywords).length > 0 ? JSON.stringify(keywords, null, 2) : 'No keywords defined'}
-
-### ALL ASSETS (${assets.length} total):
-${assets.length > 0 ? JSON.stringify(assets, null, 2) : 'No assets'}
-
-### ALL CREATIVES (${creatives.length} total):
-${creatives.length > 0 ? JSON.stringify(creatives, null, 2) : 'No creatives'}
-
-### ALL TEXT FORMATTING (${textFormatting.length} styles):
-${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text formatting styles defined'}
-`;
+    // Data structure documentation
+    if (contextParts.dataStructure && dataStructureDoc) {
+      result += `${dataStructureDoc}\n\n`;
     }
 
-    // Fallback if data structure file not loaded (shouldn't happen)
-    return '';
+    // Current data counts (always show if any data part is enabled)
+    const anyDataEnabled = contextParts.audiences || contextParts.topics || contextParts.messages ||
+                           contextParts.keywords || contextParts.assets || contextParts.creatives ||
+                           contextParts.textFormatting;
+
+    if (anyDataEnabled) {
+      result += `**Current Data Counts:**\n`;
+      if (contextParts.audiences) result += `- Audiences: ${audiences.length}\n`;
+      if (contextParts.topics) result += `- Topics: ${topics.length}\n`;
+      if (contextParts.messages) result += `- Messages: ${activeMessages.length}\n`;
+      if (contextParts.audiences && contextParts.topics) {
+        result += `- Matrix cells: ${audiences.length} × ${topics.length} = ${audiences.length * topics.length} possible cells\n`;
+      }
+      if (contextParts.keywords) result += `- Keywords: ${Object.keys(keywords).length} categories\n`;
+      if (contextParts.assets) result += `- Assets: ${assets.length}\n`;
+      if (contextParts.creatives) result += `- Creatives: ${creatives.length}\n`;
+      if (contextParts.textFormatting) result += `- Text Formatting Styles: ${textFormatting.length}\n`;
+      result += `\n---\n\n## CURRENT DATA:\n\n`;
+    }
+
+    // Individual data sections
+    if (contextParts.audiences) {
+      result += `### ALL AUDIENCES (${audiences.length} total):\n${audiences.length > 0 ? JSON.stringify(audiences, null, 2) : 'No audiences defined'}\n\n`;
+    }
+    if (contextParts.topics) {
+      result += `### ALL TOPICS (${topics.length} total):\n${topics.length > 0 ? JSON.stringify(topics, null, 2) : 'No topics defined'}\n\n`;
+    }
+    if (contextParts.messages) {
+      result += `### ALL MESSAGES (${activeMessages.length} active):\n${activeMessages.length > 0 ? JSON.stringify(activeMessages, null, 2) : 'No messages defined'}\n\n`;
+    }
+    if (contextParts.messagesByAudience && activeMessages.length > 0) {
+      // Group messages by audience
+      const byAudience = {};
+      activeMessages.forEach(msg => {
+        const audienceKey = msg.audience || 'unassigned';
+        if (!byAudience[audienceKey]) byAudience[audienceKey] = [];
+        byAudience[audienceKey].push(msg);
+      });
+      result += `### MESSAGES GROUPED BY AUDIENCE:\n`;
+      Object.keys(byAudience).forEach(audienceKey => {
+        const audienceName = audiences.find(a => a.key === audienceKey)?.name || audienceKey;
+        result += `\n**${audienceName}** (${byAudience[audienceKey].length} messages):\n${JSON.stringify(byAudience[audienceKey], null, 2)}\n`;
+      });
+      result += `\n`;
+    }
+    if (contextParts.messagesByTopic && activeMessages.length > 0) {
+      // Group messages by topic
+      const byTopic = {};
+      activeMessages.forEach(msg => {
+        const topicKey = msg.topic || 'unassigned';
+        if (!byTopic[topicKey]) byTopic[topicKey] = [];
+        byTopic[topicKey].push(msg);
+      });
+      result += `### MESSAGES GROUPED BY TOPIC:\n`;
+      Object.keys(byTopic).forEach(topicKey => {
+        const topicName = topics.find(t => t.key === topicKey)?.name || topicKey;
+        result += `\n**${topicName}** (${byTopic[topicKey].length} messages):\n${JSON.stringify(byTopic[topicKey], null, 2)}\n`;
+      });
+      result += `\n`;
+    }
+    if (contextParts.keywords) {
+      result += `### ALL KEYWORDS:\n${Object.keys(keywords).length > 0 ? JSON.stringify(keywords, null, 2) : 'No keywords defined'}\n\n`;
+    }
+    if (contextParts.assets) {
+      result += `### ALL ASSETS (${assets.length} total):\n${assets.length > 0 ? JSON.stringify(assets, null, 2) : 'No assets'}\n\n`;
+    }
+    if (contextParts.creatives) {
+      result += `### ALL CREATIVES (${creatives.length} total):\n${creatives.length > 0 ? JSON.stringify(creatives, null, 2) : 'No creatives'}\n\n`;
+    }
+    if (contextParts.textFormatting) {
+      result += `### ALL TEXT FORMATTING (${textFormatting.length} styles):\n${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text formatting styles defined'}\n\n`;
+    }
+
+    return result;
   };
 
   const buildContextPrompt = () => {
     const appStateContext = buildAppStateContext();
 
-    // Get client context (added to ALL modules)
+    // Get client context (added to ALL modules) - respect toggle
     const clientContext = customPrompts['client-context'] || '';
-    const clientContextSection = clientContext ? `${clientContext}\n\n---\n\n` : '';
+    const clientContextSection = (contextParts.clientContext && clientContext) ? `${clientContext}\n\n---\n\n` : '';
+
+    // Message editing context - use message-generation prompt with populated placeholders
+    if (editingMessage) {
+      let messageInstructions = contextParts.moduleInstructions ? (customPrompts['message-generation'] || '') : '';
+
+      // Get audience and topic data for the editing message
+      const data = matrixData || matrixState || {};
+      const audiences = data.audiences || [];
+      const topics = data.topics || [];
+      const audience = audiences.find(a => a.key === editingMessage.audience) || {};
+      const topic = topics.find(t => t.key === editingMessage.topic) || {};
+
+      // Build examples section (same logic as generateMessageContent)
+      const matrixMessages = data.messages || [];
+      const exampleMessages = matrixMessages
+        .filter(m => m.status !== 'deleted' && m.id !== editingMessage.id && (m.headline || m.copy1 || m.cta))
+        .slice(0, 5)
+        .map(m => ({
+          headline: m.headline || '',
+          copy1: m.copy1 || '',
+          copy2: m.copy2 || '',
+          flash: m.flash || '',
+          cta: m.cta || ''
+        }));
+
+      let examplesSection = '';
+      if (exampleMessages.length > 0) {
+        examplesSection = `\n**Examples from Other Messages (for style, length, and tone reference):**\n\n`;
+        exampleMessages.forEach((msg, idx) => {
+          examplesSection += `Example ${idx + 1}:\n`;
+          if (msg.headline) examplesSection += `- Headline: "${msg.headline}"\n`;
+          if (msg.copy1) examplesSection += `- Copy 1: "${msg.copy1}"\n`;
+          if (msg.copy2) examplesSection += `- Copy 2: "${msg.copy2}"\n`;
+          if (msg.flash) examplesSection += `- Flash: "${msg.flash}"\n`;
+          if (msg.cta) examplesSection += `- CTA: "${msg.cta}"\n`;
+          examplesSection += `\n`;
+        });
+      }
+
+      // Replace placeholders with actual values
+      messageInstructions = messageInstructions
+        .replace(/\{\{AUDIENCE_NAME\}\}/g, audience.name || 'N/A')
+        .replace(/\{\{AUDIENCE_STRATEGY\}\}/g, audience.strategy || 'N/A')
+        .replace(/\{\{AUDIENCE_DEVICE\}\}/g, audience.device || 'N/A')
+        .replace(/\{\{AUDIENCE_TARGETING\}\}/g, audience.targeting_type || 'N/A')
+        .replace(/\{\{AUDIENCE_COMMENT\}\}/g, audience.comment || 'N/A')
+        .replace(/\{\{TOPIC_NAME\}\}/g, topic.name || 'N/A')
+        .replace(/\{\{TOPIC_TAGS\}\}/g, [topic.tag1, topic.tag2, topic.tag3, topic.tag4].filter(Boolean).join(', ') || 'N/A')
+        .replace(/\{\{TOPIC_COMMENT\}\}/g, topic.comment || 'N/A')
+        .replace(/\{\{MESSAGE_NAME\}\}/g, editingMessage.name || 'N/A')
+        .replace(/\{\{MESSAGE_HEADLINE\}\}/g, editingMessage.headline || 'N/A')
+        .replace(/\{\{MESSAGE_COPY1\}\}/g, editingMessage.copy1 || 'N/A')
+        .replace(/\{\{MESSAGE_COPY2\}\}/g, editingMessage.copy2 || 'N/A')
+        .replace(/\{\{MESSAGE_FLASH\}\}/g, editingMessage.flash || 'N/A')
+        .replace(/\{\{MESSAGE_CTA\}\}/g, editingMessage.cta || 'N/A')
+        .replace(/\{\{EXAMPLES_SECTION\}\}/g, examplesSection);
+
+      const context = `${clientContextSection}${messageInstructions}
+${appStateContext}`;
+      return context;
+    }
 
     // Module-specific contexts (creative-library, assets, monitoring, templates, users, settings)
     if (moduleContext) {
       const module = moduleContext.module;
 
-      // Use prompt from file (loaded from backend on component mount)
+      // Use prompt from file (loaded from backend on component mount) - respect toggle
       if (customPrompts[module] && customPrompts[module].trim() !== '') {
-        const context = `${clientContextSection}${customPrompts[module]}
+        const moduleInstructions = contextParts.moduleInstructions ? customPrompts[module] : '';
+        const context = `${clientContextSection}${moduleInstructions}
 ${appStateContext}`;
         return context;
       }
@@ -730,11 +914,12 @@ ${JSON.stringify(tasks, null, 2)}
 ### ALL EMAILS (${emails.length} total):
 ${JSON.stringify(emails, null, 2)}`;
 
-      // Use prompt from file
+      // Use prompt from file - respect toggle
       if (customPrompts.tasks && customPrompts.tasks.trim() !== '') {
+        const moduleInstructions = contextParts.moduleInstructions ? customPrompts.tasks : '';
         const context = `${clientContextSection}${taskStateJSON}
 
-${customPrompts.tasks}`;
+${moduleInstructions}`;
         return context;
       }
 
@@ -758,56 +943,15 @@ Error: AI Assistant prompt not configured for tasks. Please check that AITasksIn
       return 'Loading application data...';
     }
 
-    const { audiences = [], topics = [], messages: matrixMessages = [], keywords = {}, assets = [], creatives = [], textFormatting = [] } = data;
-    const activeMessages = matrixMessages.filter(m => m.status !== 'deleted');
-
-    // Build complete matrix context: Client Context -> Instructions -> README -> Data
-    const matrixContextFull = `${clientContextSection}${customPrompts.matrix || ''}
+    // Build complete matrix context using appStateContext (already respects toggles)
+    const moduleInstructions = contextParts.moduleInstructions ? (customPrompts.matrix || '') : '';
+    const matrixContextFull = `${clientContextSection}${moduleInstructions}
 
 ---
 
 # APPLICATION CONTEXT
 
-${dataStructureDoc}
-
----
-
-## MESSAGING MATRIX SNAPSHOT:
-
-**Dimensions:**
-- Audiences: ${audiences.length}
-- Topics: ${topics.length}
-- Active Messages: ${activeMessages.length}
-- Matrix Coverage: ${activeMessages.length} / ${audiences.length * topics.length} cells filled (${audiences.length * topics.length > 0 ? Math.round((activeMessages.length / (audiences.length * topics.length)) * 100) : 0}%)
-- Keywords: ${Object.keys(keywords).length} categories
-- Assets: ${assets.length}
-- Creatives: ${creatives.length}
-- Text Formatting Styles: ${textFormatting.length}
-
----
-
-## COMPLETE CURRENT DATA (Full Dataset):
-
-### ALL AUDIENCES (${audiences.length} total):
-${audiences.length > 0 ? JSON.stringify(audiences, null, 2) : 'No audiences defined'}
-
-### ALL TOPICS (${topics.length} total):
-${topics.length > 0 ? JSON.stringify(topics, null, 2) : 'No topics defined'}
-
-### ALL MESSAGES (${activeMessages.length} active):
-${activeMessages.length > 0 ? JSON.stringify(activeMessages, null, 2) : 'No messages defined'}
-
-### ALL KEYWORDS (${Object.keys(keywords).length} categories):
-${Object.keys(keywords).length > 0 ? JSON.stringify(keywords, null, 2) : 'No keywords defined'}
-
-### ALL ASSETS (${assets.length} total):
-${assets.length > 0 ? JSON.stringify(assets, null, 2) : 'No assets defined'}
-
-### ALL CREATIVES (${creatives.length} total):
-${creatives.length > 0 ? JSON.stringify(creatives, null, 2) : 'No creatives defined'}
-
-### ALL TEXT FORMATTING (${textFormatting.length} styles):
-${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text formatting styles defined'}`;
+${appStateContext}`;
 
     // If prompts haven't loaded yet, return loading message
     if (!promptsLoaded) {
@@ -1259,7 +1403,20 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Bot size={24} style={{ color: 'white' }} />
-                <span style={{ color: 'white', fontSize: '18px', fontWeight: 600 }}>AI Assistant</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: 'white', fontSize: '16px', fontWeight: 600 }}>AI Assistant</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                    {isGenerating ? 'Message Generation' :
+                     editingMessage ? 'Messages' :
+                     moduleContext?.module === 'creative-library' ? 'Creative Library' :
+                     moduleContext?.module === 'assets' ? 'Assets' :
+                     moduleContext?.module === 'monitoring' ? 'Monitoring' :
+                     moduleContext?.module === 'templates' ? 'Templates' :
+                     moduleContext?.module === 'users' ? 'Users' :
+                     moduleContext?.module === 'settings' ? 'Settings' :
+                     taskContext ? 'Tasks' : 'Matrix'}
+                  </span>
+                </div>
               </div>
 
               {/* Tabs */}
@@ -1645,33 +1802,224 @@ ${textFormatting.length > 0 ? JSON.stringify(textFormatting, null, 2) : 'No text
           )}
 
           {/* Context Tab Content */}
-          {activeTab === 'context' && (
-            <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-4)' }}>
+          {activeTab === 'context' && (() => {
+            // Get counts for data items
+            const data = matrixData || matrixState || {};
+            const audiences = data.audiences || [];
+            const topics = data.topics || [];
+            const messages = (data.messages || []).filter(m => m.status !== 'deleted');
+            const keywords = data.keywords || {};
+            const assets = data.assets || [];
+            const creatives = data.creatives || [];
+            const textFormatting = data.textFormatting || [];
+
+            // Scrollbar styles
+            const scrollbarStyles = {
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(255,255,255,0.3) transparent'
+            };
+
+            return (
+            <div style={{ flex: 1, overflow: 'hidden', padding: 'var(--space-4)', display: 'flex', gap: '16px' }}>
+              {/* Context Parts Checkboxes - Left Side */}
               <div style={{
+                width: '240px',
+                flexShrink: 0,
                 background: 'rgba(0,0,0,0.2)',
                 borderRadius: '8px',
-                padding: '16px'
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
               }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '12px' }}>AI Assistant Context</h3>
-                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
-                  This is the complete context that will be sent with your next message to the AI assistant.
-                </p>
-                <pre style={{
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  background: 'rgba(0,0,0,0.2)',
-                  padding: '16px',
-                  borderRadius: '6px',
+                <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '16px', flexShrink: 0 }}>Context Parts</h3>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
                   overflow: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  color: 'rgba(255,255,255,0.9)',
-                  margin: 0
+                  flex: 1,
+                  marginRight: '-8px',
+                  paddingRight: '8px',
+                  ...scrollbarStyles
                 }}>
-                  {buildContextPrompt()}
-                </pre>
+                  {[
+                    { key: 'clientContext', label: 'Client Context', description: 'Client-specific instructions', anchor: '# CLIENT' },
+                    { key: 'moduleInstructions', label: 'Module Instructions', description: 'AI behavior instructions', anchor: 'IMPORTANT' },
+                    { key: 'dataStructure', label: 'Data Structure', description: 'Schema documentation', anchor: '# Data Structure' },
+                    { key: 'audiences', label: 'Audiences', description: 'All audience data', count: audiences.length, anchor: '### ALL AUDIENCES' },
+                    { key: 'topics', label: 'Topics', description: 'All topic data', count: topics.length, anchor: '### ALL TOPICS' },
+                    { key: 'messages', label: 'Messages', description: 'All message data', count: messages.length, anchor: '### ALL MESSAGES' },
+                    { key: 'messagesByAudience', label: 'By Audience', description: 'Grouped by audience', indent: true, anchor: '### MESSAGES GROUPED BY AUDIENCE' },
+                    { key: 'messagesByTopic', label: 'By Topic', description: 'Grouped by topic', indent: true, anchor: '### MESSAGES GROUPED BY TOPIC' },
+                    { key: 'keywords', label: 'Keywords', description: 'Keyword categories', count: Object.keys(keywords).length, anchor: '### ALL KEYWORDS' },
+                    { key: 'assets', label: 'Assets', description: 'Asset library data', count: assets.length, anchor: '### ALL ASSETS' },
+                    { key: 'creatives', label: 'Creatives', description: 'Creative library data', count: creatives.length, anchor: '### ALL CREATIVES' },
+                    { key: 'textFormatting', label: 'Text Formatting', description: 'Formatting rules', count: textFormatting.length, anchor: '### ALL TEXT FORMATTING' }
+                  ].map(({ key, label, description, indent, count, anchor }) => (
+                    <label
+                      key={key}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        paddingLeft: indent ? '24px' : '10px',
+                        background: contextParts[key] ? 'rgba(255,255,255,0.1)' : 'transparent',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s',
+                        borderLeft: indent ? '2px solid rgba(255,255,255,0.2)' : 'none',
+                        marginLeft: indent ? '10px' : '0'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!contextParts[key]) e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!contextParts[key]) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={contextParts[key]}
+                        onChange={() => toggleContextPart(key)}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          marginTop: '2px',
+                          accentColor: '#3b82f6',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {label}
+                          {count !== undefined && (
+                            <span style={{
+                              fontSize: '11px',
+                              padding: '1px 6px',
+                              background: 'rgba(255,255,255,0.15)',
+                              borderRadius: '10px',
+                              color: 'rgba(255,255,255,0.8)'
+                            }}>
+                              {count}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{description}</div>
+                      </div>
+                      {contextParts[key] && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const preEl = document.getElementById('context-preview-pre');
+                            if (preEl && anchor) {
+                              // Use Range API to find text position
+                              const textNode = preEl.firstChild;
+                              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                                const text = textNode.textContent || '';
+                                const anchorIndex = text.indexOf(anchor);
+                                if (anchorIndex !== -1) {
+                                  // Create a range to the anchor position
+                                  const range = document.createRange();
+                                  range.setStart(textNode, anchorIndex);
+                                  range.setEnd(textNode, anchorIndex + anchor.length);
+
+                                  // Get the bounding rect of the range
+                                  const rect = range.getBoundingClientRect();
+                                  const preRect = preEl.getBoundingClientRect();
+
+                                  // Calculate scroll position relative to the pre element
+                                  const scrollOffset = rect.top - preRect.top + preEl.scrollTop - 50;
+                                  preEl.scrollTop = Math.max(0, scrollOffset);
+                                }
+                              }
+                            }
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            color: 'rgba(255,255,255,0.4)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            marginTop: '2px',
+                            transition: 'color 0.15s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                          title={`Jump to ${label}`}
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      )}
+                    </label>
+                  ))}
+                </div>
               </div>
+
+              {/* Context Preview - Right Side */}
+              {(() => {
+                const contextText = buildContextPrompt();
+                const charCount = contextText.length;
+                // Estimate tokens: ~3.5 chars per token (JSON/code is denser than prose)
+                const estimatedTokens = Math.ceil(charCount / 3.5);
+                return (
+                  <div style={{
+                    flex: 1,
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', margin: 0 }}>Context Preview</h3>
+                      <div style={{
+                        display: 'flex',
+                        gap: '12px',
+                        fontSize: '12px',
+                        color: 'rgba(255,255,255,0.6)',
+                        background: 'rgba(0,0,0,0.2)',
+                        padding: '4px 10px',
+                        borderRadius: '4px'
+                      }}>
+                        <span><strong style={{ color: 'rgba(255,255,255,0.9)' }}>{charCount.toLocaleString()}</strong> chars</span>
+                        <span>~<strong style={{ color: 'rgba(255,255,255,0.9)' }}>{estimatedTokens.toLocaleString()}</strong> tokens</span>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
+                      This is the context that will be sent with your next message to the AI assistant.
+                    </p>
+                    <pre
+                      id="context-preview-pre"
+                      style={{
+                        flex: 1,
+                        fontSize: '11px',
+                        lineHeight: '16px',
+                        fontFamily: 'monospace',
+                        background: 'rgba(0,0,0,0.2)',
+                        padding: '16px',
+                        borderRadius: '6px',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        color: 'rgba(255,255,255,0.9)',
+                        margin: 0,
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'rgba(255,255,255,0.3) transparent'
+                      }}
+                    >
+                      {contextText}
+                    </pre>
+                  </div>
+                );
+              })()}
             </div>
-          )}
+            );
+          })()}
 
           {/* Input */}
           <div style={{

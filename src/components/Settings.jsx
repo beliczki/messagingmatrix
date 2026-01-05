@@ -246,7 +246,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
 
       // Save AI prompts to text files
       console.log('💾 Saving AI Prompts - Current state:', aiPrompts);
-      const allModules = ['client-context', 'matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings', 'email-to-task'];
+      const allModules = ['client-context', 'matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings', 'email-to-task', 'message-generation'];
       const savePromises = allModules.map(module => {
         const promptValue = aiPrompts[module] || '';
         console.log(`📝 Saving ${module}:`, promptValue.substring(0, 100) + (promptValue.length > 100 ? '...' : ''));
@@ -1664,6 +1664,43 @@ Guidelines for creating instructions:
                 </p>
               </div>
 
+              {/* Message Generation */}
+              <div className="border-b-2 border-blue-300 pb-6 bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-md font-semibold text-blue-900">Message Generation</h3>
+                    <p className="text-xs text-blue-700 mt-1">Prompt used when generating message content (headline, copy, CTA)</p>
+                  </div>
+                  <button
+                    onClick={() => generateNewInstructions('message-generation')}
+                    disabled={generatingModule === 'message-generation'}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingModule === 'message-generation' ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        Generate New Instructions
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompts['message-generation'] || ''}
+                  onChange={(e) => handleAiPromptChange('message-generation', e.target.value)}
+                  placeholder="Leave empty to use default prompt..."
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-xs bg-white"
+                  rows="15"
+                />
+                <p className="text-xs text-blue-700 mt-1">
+                  Placeholders: {"{{AUDIENCE_NAME}}"}, {"{{AUDIENCE_STRATEGY}}"}, {"{{TOPIC_NAME}}"}, {"{{TOPIC_TAGS}}"}, {"{{MESSAGE_HEADLINE}}"}, {"{{MESSAGE_COPY1}}"}, {"{{EXAMPLES_SECTION}}"}, etc.
+                </p>
+              </div>
+
               {/* Matrix Module */}
               <div className="border-b border-gray-200 pb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -1935,6 +1972,7 @@ Guidelines for creating instructions:
                   Default: Email analysis and task extraction, conversation context structuring, multilingual support
                 </p>
               </div>
+
             </div>
           </div>
             </>

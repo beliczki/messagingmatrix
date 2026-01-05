@@ -853,7 +853,8 @@ const promptFileMap = {
   'users': 'AIUsersInstructions.txt',
   'tasks': 'AITasksInstructions.txt',
   'settings': 'AISettingsInstructions.txt',
-  'email-to-task': 'AIEmailToTaskInstructions.txt'
+  'email-to-task': 'AIEmailToTaskInstructions.txt',
+  'message-generation': 'AIMessageGenerationInstructions.txt'
 };
 
 // Get all AI prompts
