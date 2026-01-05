@@ -873,11 +873,14 @@ app.get('/api/ai-prompts', verifyToken, (req, res) => {
 
       if (fs.existsSync(filePath)) {
         prompts[module] = fs.readFileSync(filePath, 'utf8');
+        console.log(`[AI Prompts GET] Loaded ${module}: ${prompts[module].length} chars`);
       } else {
         prompts[module] = ''; // Empty string if file doesn't exist
+        console.log(`[AI Prompts GET] File not found for ${module}: ${filePath}`);
       }
     }
 
+    console.log(`[AI Prompts GET] Returning prompts for: ${Object.keys(prompts).join(', ')}`);
     res.json(prompts);
   } catch (error) {
     console.error('Error reading AI prompts:', error);
@@ -955,28 +958,6 @@ app.post('/api/ai-prompts/:module', verifyToken, (req, res) => {
   }
 });
 
-// Get all AI prompts at once
-app.get('/api/ai-prompts', (req, res) => {
-  try {
-    const prompts = {};
-
-    Object.keys(promptFileMap).forEach(module => {
-      const filename = promptFileMap[module];
-      const filePath = path.join(promptsDir, filename);
-
-      if (fs.existsSync(filePath)) {
-        prompts[module] = fs.readFileSync(filePath, 'utf8');
-      } else {
-        prompts[module] = '';
-      }
-    });
-
-    res.json(prompts);
-  } catch (error) {
-    console.error('Error reading AI prompts:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Get AI data structure documentation
 app.get('/api/ai-data-structure', verifyToken, (req, res) => {
