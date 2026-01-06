@@ -4,6 +4,24 @@
  * Creates true Sankey effect with nodes centered per level (creating crossing flows)
  */
 
+/**
+ * Smart sort comparator - sorts numerically if both values are numbers, otherwise alphabetically
+ */
+const smartCompare = (a, b) => {
+  const aVal = a.value || '';
+  const bVal = b.value || '';
+  const aNum = parseFloat(aVal);
+  const bNum = parseFloat(bVal);
+
+  // If both are valid numbers, sort numerically
+  if (!isNaN(aNum) && !isNaN(bNum) && aVal.trim() !== '' && bVal.trim() !== '') {
+    return aNum - bNum;
+  }
+
+  // Otherwise sort alphabetically
+  return aVal.localeCompare(bVal);
+};
+
 export class SankeyLayout {
   constructor(options = {}) {
     // Spacing configuration
@@ -183,9 +201,9 @@ export class SankeyLayout {
     });
 
     // Sort nodes at each level to minimize crossings
-    // Level 0: sort alphabetically (or by weight)
+    // Level 0: sort numerically if numbers, otherwise alphabetically
     if (levels[0]) {
-      levels[0].sort((a, b) => (a.value || '').localeCompare(b.value || ''));
+      levels[0].sort(smartCompare);
     }
 
     // Levels 1+: sort by average position of connected sources
@@ -409,8 +427,8 @@ export class SankeyLayout {
     let currentAngle = -Math.PI / 2; // Start at top
 
     levels.forEach((levelNodes, levelIndex) => {
-      // Sort nodes within level alphabetically for consistent ordering
-      levelNodes.sort((a, b) => (a.value || '').localeCompare(b.value || ''));
+      // Sort nodes within level - numerically if numbers, otherwise alphabetically
+      levelNodes.sort(smartCompare);
 
       levelNodes.forEach((node, nodeIndex) => {
         const nodeWeight = node.weight || 1;
