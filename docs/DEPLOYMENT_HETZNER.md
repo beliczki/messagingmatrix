@@ -1,34 +1,38 @@
-# Deployment Guide: Second Instance on Hetzner VPS
+# Deployment Guide: New Instance on Hetzner VPS
 
-Add a second Messaging Matrix instance for `telekom.messagingmatrix.ai` alongside existing `erste.messagingmatrix.ai`.
+Deploy a new Messaging Matrix instance on the Hetzner VPS.
 
 ## Current Setup
 
 | Instance | Domain | Path | Port | PM2 Name |
 |----------|--------|------|------|----------|
-| Erste | erste.messagingmatrix.ai | /var/www/messagingmatrix | 3003 | messagingmatrix |
-| **Telekom** | telekom.messagingmatrix.ai | /var/www/messagingmatrix-telekom | **3004** | messagingmatrix-telekom |
+| Erste | erste.messagingmatrix.ai | /var/www/messagingmatrix | 3003 | mm-server-erste |
+| Telekom | telekom.messagingmatrix.ai | /var/www/messagingmatrix-telekom | 3004 | mm-server-telekom |
+| Proficio | proficio.messagingmatrix.ai | /var/www/messagingmatrix-proficio | 3005 | mm-server-proficio |
 
 ---
 
-## 1. Create Telekom Instance Directory
+## 1. Create New Instance Directory
 
 ```bash
 ssh root@46.224.60.159
 
-# Create new app directory
-sudo mkdir -p /var/www/messagingmatrix-telekom
-sudo chown $USER:$USER /var/www/messagingmatrix-telekom
+# Create new app directory (replace <instance> with your instance name)
+sudo mkdir -p /var/www/messagingmatrix-<instance>
+sudo chown $USER:$USER /var/www/messagingmatrix-<instance>
 
 # Clone repo
-cd /var/www/messagingmatrix-telekom
+cd /var/www/messagingmatrix-<instance>
 git clone https://github.com/beliczki/messagingmatrix.git .
 
-# Checkout the correct branch
-git checkout workflow-update
+# Checkout the main branch
+git checkout main
 
 # Install dependencies
 npm install
+
+# Copy the service account file
+# (copy service-account.json from another instance or download from Google Cloud)
 ```
 
 ---
@@ -36,31 +40,35 @@ npm install
 ## 2. Environment Configuration
 
 ```bash
-nano /var/www/messagingmatrix-telekom/.env
+nano /var/www/messagingmatrix-<instance>/.env
 ```
 
 ```env
-# Server - USE DIFFERENT PORT
-PORT=3004
+# Server Configuration - USE UNIQUE PORT PER INSTANCE
+PORT=3005
 NODE_ENV=production
 
-# Google OAuth (create NEW OAuth client for Telekom)
-GOOGLE_CLIENT_ID=your_telekom_google_client_id
-GOOGLE_CLIENT_SECRET=your_telekom_google_client_secret
-GOOGLE_REDIRECT_URI=https://telekom.messagingmatrix.ai/auth/google/callback
+# JWT Configuration (generate unique secret for each instance)
+JWT_SECRET=your_unique_jwt_secret_here_64chars
+JWT_EXPIRATION=24h
 
-# Session Secret (DIFFERENT from Erste instance)
-SESSION_SECRET=your_unique_telekom_session_secret_here
+# CORS Configuration - MUST MATCH YOUR DOMAIN EXACTLY
+CORS_ORIGIN=https://yourinstance.messagingmatrix.ai
 
-# Google Sheets (Telekom's spreadsheet)
-SPREADSHEET_ID=telekom_spreadsheet_id
+# Google Service Account (for Google Sheets)
+GOOGLE_SERVICE_ACCOUNT_FILE=./service-account.json
 
-# IMAP Email (Telekom's email if needed)
-IMAP_HOST=your_imap_host
-IMAP_PORT=993
-IMAP_USER=telekom_email
-IMAP_PASSWORD=telekom_password
+# Anthropic API Key (for AI features)
+VITE_ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# SupaBase (if using)
+VITE_SUPABASE_PW=your_supabase_password
+
+# API URL (leave empty - code auto-detects dev vs production)
+VITE_API_URL=
 ```
+
+**Important:** The `CORS_ORIGIN` must exactly match the domain (no trailing slash).
 
 ---
 
@@ -73,64 +81,77 @@ npm run build
 
 ---
 
-## 4. Configure PM2 for Telekom Instance
+## 4. Configure PM2
 
 ```bash
-nano /var/www/messagingmatrix-telekom/ecosystem.config.cjs
+nano /var/www/messagingmatrix-<instance>/ecosystem.config.cjs
 ```
 
 ```javascript
 module.exports = {
   apps: [
     {
-      name: 'messagingmatrix-telekom',
-      script: 'server.js',
-      cwd: '/var/www/messagingmatrix-telekom',
+      name: 'mm-server-<instance>',
+      script: './server.js',
       instances: 1,
+      exec_mode: 'fork',
       autorestart: true,
       watch: false,
-      max_memory_restart: '500M',
+      max_memory_restart: '1G',
+      // IMPORTANT: Set NODE_ENV=production here, not just in env_production
       env: {
         NODE_ENV: 'production',
-        PORT: 3004
-      }
+        PORT: 3005
+      },
+      error_file: './logs/error.log',
+      out_file: './logs/out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      kill_timeout: 5000,
+      min_uptime: '10s',
+      max_restarts: 10
     }
+    // DO NOT include frontend dev server for production!
+    // The frontend is served statically from dist/ folder
   ]
 };
 ```
 
-Start the Telekom instance:
+**Critical Notes:**
+- `NODE_ENV: 'production'` MUST be in the `env` section (not just `env_production`)
+- Do NOT include the frontend Vite dev server - production serves static files from `dist/`
+- Do NOT use Windows-specific settings (`interpreter: 'cmd'`, `interpreter_args: '/c'`)
+
+Create logs directory and start:
 
 ```bash
-cd /var/www/messagingmatrix-telekom
+mkdir -p /var/www/messagingmatrix-<instance>/logs
+cd /var/www/messagingmatrix-<instance>
 pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-Verify both instances are running:
+Verify all instances are running:
 
 ```bash
-pm2 status
-# Should show:
-# messagingmatrix         (port 3003) - erste
-# messagingmatrix-telekom (port 3004) - telekom
+pm2 list
 ```
 
 ---
 
-## 5. Configure Nginx for Telekom
+## 5. Configure Nginx
 
 ```bash
-sudo nano /etc/nginx/sites-available/messagingmatrix-telekom
+sudo nano /etc/nginx/sites-available/messagingmatrix-<instance>
 ```
 
 ```nginx
 server {
     listen 80;
-    server_name telekom.messagingmatrix.ai;
+    server_name <instance>.messagingmatrix.ai;
 
     location / {
-        proxy_pass http://localhost:3004;
+        proxy_pass http://localhost:<PORT>;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -143,7 +164,7 @@ server {
     }
 
     location /assets {
-        alias /var/www/messagingmatrix-telekom/dist/assets;
+        alias /var/www/messagingmatrix-<instance>/dist/assets;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
@@ -153,34 +174,32 @@ server {
 Enable the site:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/messagingmatrix-telekom /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/messagingmatrix-<instance> /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
 ---
 
-## 6. SSL Certificate for Telekom
+## 6. SSL Certificate
 
 ```bash
-sudo certbot --nginx -d telekom.messagingmatrix.ai
+sudo certbot --nginx -d <instance>.messagingmatrix.ai
 ```
 
 ---
 
-## 7. Google OAuth for Telekom
+## 7. Google Service Account
 
-Create a **separate** OAuth client in Google Cloud Console:
+The app uses a Google Service Account for Sheets API access. Copy the `service-account.json` from an existing instance or create a new one:
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID
-3. Application type: Web application
-4. Name: `Messaging Matrix Telekom`
-5. Authorized JavaScript origins:
-   - `https://telekom.messagingmatrix.ai`
-6. Authorized redirect URIs:
-   - `https://telekom.messagingmatrix.ai/auth/google/callback`
-7. Copy Client ID and Secret to `.env`
+2. IAM & Admin → Service Accounts
+3. Use existing service account or create new
+4. Download JSON key file
+5. Copy to `/var/www/messagingmatrix-<instance>/service-account.json`
+
+Make sure the service account has access to the Google Sheets you want to use.
 
 ---
 
@@ -253,9 +272,33 @@ chmod +x /var/www/messagingmatrix-telekom/deploy.sh
 
 ## Server Overview
 
-| Instance | Domain | Port | Path | PM2 Name | Database |
-|----------|--------|------|------|----------|----------|
-| Erste | erste.messagingmatrix.ai | 3003 | /var/www/messagingmatrix | messagingmatrix | db/messaging-matrix.db |
-| Telekom | telekom.messagingmatrix.ai | 3004 | /var/www/messagingmatrix-telekom | messagingmatrix-telekom | db/messaging-matrix.db |
+| Instance | Domain | Port | Path | PM2 Name |
+|----------|--------|------|------|----------|
+| Erste | erste.messagingmatrix.ai | 3003 | /var/www/messagingmatrix | mm-server-erste |
+| Telekom | telekom.messagingmatrix.ai | 3004 | /var/www/messagingmatrix-telekom | mm-server-telekom |
+| Proficio | proficio.messagingmatrix.ai | 3005 | /var/www/messagingmatrix-proficio | mm-server-proficio |
 
 **Server IP:** 46.224.60.159
+
+---
+
+## Troubleshooting
+
+### "Cannot GET /" error
+- Frontend not built: Run `npm run build`
+- Server in development mode: Check `pm2 logs` shows `Environment: production`
+- If showing `development`, ensure `NODE_ENV: 'production'` is in the `env` section of ecosystem.config.cjs
+
+### CORS errors
+- Check `CORS_ORIGIN` in `.env` matches your domain exactly (no trailing slash)
+- Verify server.js allows the origin in the CORS configuration
+- Restart server after changing: `pm2 restart mm-server-<instance>`
+
+### PM2 "Interpreter cmd not found"
+- Remove Windows-specific settings from ecosystem.config.cjs:
+  - Delete `interpreter: 'cmd'`
+  - Delete `interpreter_args: '/c'`
+
+### Login fails with 500 error
+- Check server logs: `pm2 logs mm-server-<instance> --lines 50`
+- Usually CORS or database issue
