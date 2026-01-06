@@ -1,31 +1,98 @@
-import React, { useEffect } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, Trash2, Check } from 'lucide-react';
 import settings from '../services/settings';
 
 const AudienceEditorDialog = ({
   editingAudience,
   setEditingAudience,
   audiences,
+  filteredAudiences,
   updateAudience,
   deleteAudience,
   addAudience,
   keywords,
   messages
 }) => {
+  const [isClosing, setIsClosing] = useState(false);
+  const [autoSave, setAutoSave] = useState(() => {
+    const saved = localStorage.getItem('audienceEditor_autoSave');
+    return saved === 'true';
+  });
+
+  // Persist auto-save preference
+  useEffect(() => {
+    localStorage.setItem('audienceEditor_autoSave', autoSave);
+  }, [autoSave]);
+
+  // Handle close with animation
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      setEditingAudience(null);
+    }, 200);
+  };
+
+  // Get sorted audiences for navigation (use filtered list if available)
+  const sortedAudiences = useMemo(() => {
+    const list = filteredAudiences || audiences;
+    return [...list].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [filteredAudiences, audiences]);
+
+  // Current index in navigation
+  const currentIndex = useMemo(() => {
+    return sortedAudiences.findIndex(a => a.id === editingAudience?.id);
+  }, [sortedAudiences, editingAudience?.id]);
+
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex < sortedAudiences.length - 1;
+
+  // Navigate to previous/next audience
+  const goToPrevious = () => {
+    if (sortedAudiences.length === 0) return;
+    const targetIndex = hasPrevious ? currentIndex - 1 : sortedAudiences.length - 1;
+    setEditingAudience(sortedAudiences[targetIndex]);
+  };
+
+  const goToNext = () => {
+    if (sortedAudiences.length === 0) return;
+    const targetIndex = hasNext ? currentIndex + 1 : 0;
+    setEditingAudience(sortedAudiences[targetIndex]);
+  };
+
+  // Auto-save effect
+  useEffect(() => {
+    if (!autoSave || !editingAudience) return;
+
+    const timer = setTimeout(() => {
+      const isNew = !audiences.find(a => a.id === editingAudience.id);
+      if (!isNew) {
+        updateAudience(editingAudience.id, editingAudience);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [editingAudience, autoSave, audiences, updateAudience]);
+
   // ESC key to close dialog
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && editingAudience) {
-        setEditingAudience(null);
+        handleClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [editingAudience, setEditingAudience]);
+  }, [editingAudience]);
 
   if (!editingAudience) return null;
 
-  // Helper function to get text color based on background luminance
+  // Get status color
+  const statusColors = settings.getStatusColors();
+  const currentStatus = (editingAudience.status || 'INCOMING').toUpperCase();
+  const statusColor = statusColors[currentStatus] || statusColors['INCOMING'] || '#8B5CF6';
+
   const getTextColor = (hexColor) => {
     const hex = hexColor.replace('#', '');
     const r = parseInt(hex.substr(0, 2), 16);
@@ -34,26 +101,19 @@ const AudienceEditorDialog = ({
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return luminance > 0.6 ? '#000000' : '#ffffff';
   };
-
-  // Debug: Log keywords structure
-  console.log('AudienceEditorDialog keywords:', keywords);
-  console.log('keywords.audiences:', keywords?.audiences);
-  console.log('Available audience fields:', keywords?.audiences ? Object.keys(keywords.audiences) : 'none');
+  const textColor = getTextColor(statusColor);
 
   // Helper to render input or dropdown based on keyword availability
   const renderField = (fieldName, placeholder = '') => {
     const keywordValues = keywords.audiences && keywords.audiences[fieldName];
     const value = editingAudience[fieldName] || '';
 
-    console.log(`Field ${fieldName}:`, keywordValues);
-
     if (keywordValues && keywordValues.length > 0) {
-      // Render dropdown if keywords exist
       return (
         <select
           value={value}
           onChange={(e) => setEditingAudience({ ...editingAudience, [fieldName]: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="form-select"
         >
           <option value="">None</option>
           {keywordValues.map((val) => (
@@ -62,259 +122,305 @@ const AudienceEditorDialog = ({
         </select>
       );
     } else {
-      // Render text input if no keywords
       return (
         <input
           type="text"
           value={value}
           onChange={(e) => setEditingAudience({ ...editingAudience, [fieldName]: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="form-input"
           placeholder={placeholder}
         />
       );
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Edit Audience</h2>
-          <button
-            onClick={() => setEditingAudience(null)}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <X size={20} />
-          </button>
-        </div>
+  const handleSave = () => {
+    const isNew = !audiences.find(a => a.id === editingAudience.id);
+    if (isNew) {
+      addAudience(editingAudience);
+    } else {
+      updateAudience(editingAudience.id, editingAudience);
+    }
+  };
 
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
-            <input
-              type="text"
-              value={editingAudience.id || ''}
-              disabled
-              className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-50 text-gray-500 cursor-not-allowed"
-            />
-          </div>
+  const handleSaveAndClose = () => {
+    handleSave();
+    handleClose();
+  };
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input
-              type="text"
-              value={editingAudience.name || ''}
-              onChange={(e) => setEditingAudience({ ...editingAudience, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+  const handleDelete = () => {
+    const hasMessages = messages.some(m => m.audience === editingAudience.key && m.status !== 'deleted');
+    if (hasMessages) {
+      alert('Cannot delete this audience because it has messages assigned to it. Please delete or move the messages first.');
+      return;
+    }
+    if (confirm('Are you sure you want to delete this audience?')) {
+      deleteAudience(editingAudience.id);
+      handleClose();
+    }
+  };
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Order</label>
-              <input
-                type="number"
-                value={editingAudience.order || ''}
-                onChange={(e) => setEditingAudience({ ...editingAudience, order: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+  return createPortal(
+    <div
+      className={`dialog-overlay overlay-animated ${isClosing ? 'closing' : 'open'}`}
+      onClick={handleClose}
+    >
+      <div
+        className={`dialog dialog-animated ${isClosing ? 'closing' : 'open'}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '900px' }}
+      >
+        <div className="dialog-layout">
+          {/* LEFT SIDEBAR */}
+          <div className="dialog-sidebar">
+            <h2 className="dialog-title">Edit Audience</h2>
+
+            {/* Navigation */}
+            <div className="dialog-nav">
+              <button
+                onClick={goToPrevious}
+                className="dialog-nav-btn"
+                title="Previous audience"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div
+                className="dialog-nav-indicator"
+                style={{
+                  backgroundColor: statusColor,
+                  color: textColor,
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  paddingTop: '3px'
+                }}
+              >
+                {editingAudience.id || ''}
+              </div>
+              <button
+                onClick={goToNext}
+                className="dialog-nav-btn"
+                title="Next audience"
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              {(() => {
-                const keywordValues = keywords.audiences && keywords.audiences.status;
-                const statusOptions = keywordValues && keywordValues.length > 0
-                  ? keywordValues
-                  : ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
-
-                const statusColors = settings.getStatusColors();
-                const currentStatus = (editingAudience.status || '').toUpperCase();
-                const currentColor = currentStatus ? (statusColors[currentStatus] || statusColors['INCOMING'] || '#8B5CF6') : '#ffffff';
-
-                return (
-                  <select
-                    value={editingAudience.status || ''}
-                    onChange={(e) => setEditingAudience({ ...editingAudience, status: e.target.value })}
-                    className="w-full px-3 py-2 border-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent font-semibold"
-                    style={{
-                      backgroundColor: currentColor,
-                      borderColor: currentColor,
-                      color: currentStatus ? getTextColor(currentColor) : '#000000'
-                    }}
-                  >
-                    <option value="" style={{ backgroundColor: '#ffffff', color: '#000000' }}>None</option>
-                    {statusOptions.map((val) => {
-                      const optionColor = statusColors[val.toUpperCase()] || statusColors['INCOMING'] || '#8B5CF6';
-                      return (
-                        <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
-                          {val}
-                        </option>
-                      );
-                    })}
-                  </select>
-                );
-              })()}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-              {renderField('product')}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Strategy</label>
-              {renderField('strategy')}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Buying Platform</label>
-              {renderField('buying_platform')}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Data Source</label>
-              {renderField('data_source')}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Targeting Type</label>
-              {renderField('targeting_type')}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Device</label>
-              {renderField('device')}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tag</label>
-              {renderField('tag', 'Category tag')}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Key</label>
-            <input
-              type="text"
-              value={editingAudience.key || ''}
-              onChange={(e) => setEditingAudience({ ...editingAudience, key: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
-            <textarea
-              value={editingAudience.comment || ''}
-              onChange={(e) => setEditingAudience({ ...editingAudience, comment: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Internal notes..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Campaign Name</label>
-              <input
-                type="text"
-                value={editingAudience.campaign_name || ''}
-                onChange={(e) => setEditingAudience({ ...editingAudience, campaign_name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Campaign ID</label>
-              <input
-                type="text"
-                value={editingAudience.campaign_id || ''}
-                onChange={(e) => setEditingAudience({ ...editingAudience, campaign_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Line Item Name</label>
-              <input
-                type="text"
-                value={editingAudience.lineitem_name || ''}
-                onChange={(e) => setEditingAudience({ ...editingAudience, lineitem_name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Line Item ID</label>
-              <input
-                type="text"
-                value={editingAudience.lineitem_id || ''}
-                onChange={(e) => setEditingAudience({ ...editingAudience, lineitem_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-between items-center">
-          <button
-            onClick={() => {
-              // Check if any messages use this audience
-              const hasMessages = messages.some(m => m.audience === editingAudience.key && m.status !== 'deleted');
-
-              if (hasMessages) {
-                alert('Cannot delete this audience because it has messages assigned to it. Please delete or move the messages first.');
-                return;
-              }
-
-              if (confirm('Are you sure you want to delete this audience?')) {
-                deleteAudience(editingAudience.id);
-                setEditingAudience(null);
-              }
-            }}
-            className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded hover:bg-red-50"
-          >
-            <Trash2 size={16} />
-            Delete Audience
-          </button>
-          <div className="flex gap-2">
+            {/* Auto-Save Toggle */}
             <button
-              onClick={() => setEditingAudience(null)}
-              className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              className={`dialog-toggle ${autoSave ? 'checked' : ''}`}
+              onClick={() => setAutoSave(!autoSave)}
             >
-              Cancel
+              <div className="checkbox-box">
+                <Check size={14} />
+              </div>
+              <span>Auto-Save</span>
             </button>
-            <button
-              onClick={() => {
-                // Check if this is a new audience (not in the list yet)
-                const isNew = !audiences.find(a => a.id === editingAudience.id);
 
-                if (isNew) {
-                  // Add new audience
-                  addAudience(editingAudience);
-                } else {
-                  // Update existing audience
-                  updateAudience(editingAudience.id, editingAudience);
-                }
-                setEditingAudience(null);
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Save & Close
-            </button>
+            {/* Spacer to push actions to bottom */}
+            <div style={{ flex: 1 }} />
+
+            {/* Actions */}
+            <div className="dialog-actions">
+              <button onClick={handleDelete} className="link-button danger">
+                <Trash2 size={16} />
+                Delete
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handleClose} className="btn btn-secondary btn-lg" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+                <button onClick={handleSave} className="btn btn-secondary btn-lg" style={{ flex: 1 }}>
+                  Save
+                </button>
+              </div>
+              <button onClick={handleSaveAndClose} className="btn btn-primary btn-lg">
+                Save & Close
+              </button>
+            </div>
+          </div>
+
+          {/* CONTENT AREA */}
+          <div className="dialog-content-area">
+            <div className="dialog-main custom-scrollbar">
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">ID</label>
+                  <input
+                    type="text"
+                    value={editingAudience.id || ''}
+                    disabled
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Order</label>
+                  <input
+                    type="number"
+                    value={editingAudience.order || ''}
+                    onChange={(e) => setEditingAudience({ ...editingAudience, order: parseInt(e.target.value) || 0 })}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input
+                  type="text"
+                  value={editingAudience.name || ''}
+                  onChange={(e) => setEditingAudience({ ...editingAudience, name: e.target.value })}
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Key</label>
+                <input
+                  type="text"
+                  value={editingAudience.key || ''}
+                  onChange={(e) => setEditingAudience({ ...editingAudience, key: e.target.value })}
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Status</label>
+                  {(() => {
+                    const keywordValues = keywords.audiences && keywords.audiences.status;
+                    const statusOptions = keywordValues && keywordValues.length > 0
+                      ? keywordValues
+                      : ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
+
+                    const currentColor = currentStatus ? (statusColors[currentStatus] || '#8B5CF6') : 'rgba(255,255,255,0.15)';
+
+                    return (
+                      <select
+                        value={editingAudience.status || ''}
+                        onChange={(e) => setEditingAudience({ ...editingAudience, status: e.target.value })}
+                        className="form-select"
+                        style={{
+                          backgroundColor: currentColor,
+                          borderColor: currentColor,
+                          color: currentStatus ? getTextColor(currentColor) : 'var(--color-white)'
+                        }}
+                      >
+                        <option value="" style={{ backgroundColor: 'var(--main-ui-color)', color: 'white' }}>None</option>
+                        {statusOptions.map((val) => {
+                          const optionColor = statusColors[val.toUpperCase()] || '#8B5CF6';
+                          return (
+                            <option key={val} value={val} style={{ backgroundColor: optionColor, color: getTextColor(optionColor) }}>
+                              {val}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    );
+                  })()}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Product</label>
+                  {renderField('product')}
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Strategy</label>
+                  {renderField('strategy')}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Buying Platform</label>
+                  {renderField('buying_platform')}
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Data Source</label>
+                  {renderField('data_source')}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Targeting Type</label>
+                  {renderField('targeting_type')}
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Device</label>
+                  {renderField('device')}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Tag</label>
+                  {renderField('tag', 'Category tag')}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Comment</label>
+                <textarea
+                  value={editingAudience.comment || ''}
+                  onChange={(e) => setEditingAudience({ ...editingAudience, comment: e.target.value })}
+                  rows={3}
+                  className="form-input"
+                  placeholder="Internal notes..."
+                />
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Campaign Name</label>
+                  <input
+                    type="text"
+                    value={editingAudience.campaign_name || ''}
+                    onChange={(e) => setEditingAudience({ ...editingAudience, campaign_name: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Campaign ID</label>
+                  <input
+                    type="text"
+                    value={editingAudience.campaign_id || ''}
+                    onChange={(e) => setEditingAudience({ ...editingAudience, campaign_id: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Line Item Name</label>
+                  <input
+                    type="text"
+                    value={editingAudience.lineitem_name || ''}
+                    onChange={(e) => setEditingAudience({ ...editingAudience, lineitem_name: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Line Item ID</label>
+                  <input
+                    type="text"
+                    value={editingAudience.lineitem_id || ''}
+                    onChange={(e) => setEditingAudience({ ...editingAudience, lineitem_id: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

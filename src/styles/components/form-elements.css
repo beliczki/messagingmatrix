@@ -49,6 +49,46 @@
   cursor: not-allowed;
 }
 
+/* --- Select Input --- */
+.form-select {
+  background: var(--white-10);
+  border: 1px solid var(--white-20);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  padding-right: 2.5rem;
+  color: var(--color-white);
+  font-size: var(--font-size-base);
+  font-family: var(--font-family);
+  transition: all var(--transition-fast);
+  width: 100%;
+  min-width: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: var(--white-50);
+  background-color: var(--white-15);
+}
+
+.form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-select option {
+  background: var(--main-ui-color);
+  color: var(--color-white);
+  padding: var(--space-2);
+}
+
 /* --- Date Input --- */
 input[type="date"].form-input,
 .form-input[type="date"] {
