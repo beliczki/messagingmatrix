@@ -1354,7 +1354,7 @@ const Matrix = ({
   };
 
   // Handle generate content with Claude
-  const handleGenerateContent = () => {
+  const handleGenerateContent = (brief = '') => {
     if (!editingMessage || !claudeChatRef.current) return;
 
     // Find audience and topic data
@@ -1396,7 +1396,8 @@ const Matrix = ({
         copy2: editingMessage.copy2,
         flash: editingMessage.flash,
         cta: editingMessage.cta
-      }
+      },
+      brief: brief || ''
     };
 
     // Call Claude chat to generate content

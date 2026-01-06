@@ -134,12 +134,52 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
 
   // Note: status field removed in v2 schema - bucket determines task state
 
+  // Helper: Sync linked MC statuses when task bucket changes
+  // IMPORTANT: Tasks drive MC status - when task moves between buckets, update all linked MCs
+  const syncMcStatuses = (task, oldBucket, newBucket) => {
+    if (!task?.outputContent?.length || oldBucket === newBucket) return;
+
+    console.log(`[Tasks] Bucket changed from ${oldBucket} to ${newBucket}, syncing ${task.outputContent.length} MCs`);
+    console.log(`[Tasks] matrixData available:`, !!matrixData, 'messages:', matrixData?.messages?.length, 'updateMessage:', !!matrixData?.updateMessage);
+
+    task.outputContent.forEach(mcLabel => {
+      // Parse MC label: "MC282a" -> number=282, variant=a
+      const match = mcLabel.match(/^MC(\d+)([a-z]?)$/i);
+      console.log(`[Tasks] Parsing "${mcLabel}" -> match:`, match);
+
+      if (match && matrixData?.messages && matrixData?.updateMessage) {
+        const mcNumber = match[1];
+        const mcVariant = (match[2] || 'a').toLowerCase();
+
+        // Find matching message(s) by number and variant
+        const matchingMessages = matrixData.messages.filter(m =>
+          String(m.number) === mcNumber &&
+          (m.variant || 'a').toLowerCase() === mcVariant
+        );
+
+        console.log(`[Tasks] Looking for MC${mcNumber}${mcVariant}, found ${matchingMessages.length} matches`);
+
+        // Update status for each matching message
+        matchingMessages.forEach(msg => {
+          console.log(`[Tasks] Syncing MC${mcNumber}${mcVariant} (id=${msg.id}) status to ${newBucket}`);
+          matrixData.updateMessage(msg.id, { status: newBucket });
+        });
+      }
+    });
+  };
+
   const moveTaskToBucket = (taskId, newBucket) => {
+    // Find the task to sync MC statuses
+    const task = tasks.find(t => t.id === taskId);
+    if (task && task.bucket !== newBucket) {
+      syncMcStatuses(task, task.bucket, newBucket);
+    }
+
     setTasks(prev =>
-      prev.map(task =>
-        task.id === taskId
-          ? { ...task, bucket: newBucket }
-          : task
+      prev.map(t =>
+        t.id === taskId
+          ? { ...t, bucket: newBucket }
+          : t
       )
     );
   };
@@ -149,6 +189,14 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
   };
 
   const updateTask = (updatedTask) => {
+    // Find the old task to detect bucket changes
+    const oldTask = tasks.find(t => t.id === updatedTask.id);
+
+    // Sync MC statuses if bucket changed
+    if (oldTask && oldTask.bucket !== updatedTask.bucket) {
+      syncMcStatuses(updatedTask, oldTask.bucket, updatedTask.bucket);
+    }
+
     setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
   };
 
@@ -478,6 +526,8 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
             lastSync={null}
             isSaving={false}
             onClearReload={clearAndReloadApp}
+            changeTracking={matrixData?.changeTracking}
+            originalState={matrixData?.originalState}
           />
           <AIAssistant
             ref={claudeChatRef}

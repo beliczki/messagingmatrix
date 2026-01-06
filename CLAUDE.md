@@ -172,3 +172,26 @@ const handleDelete = (id) => {
 - Location: `src/templates/html/`
 - Preview uses `previewService.js`
 - CSS injection for size-specific styles
+
+### Tasks & MC Status Sync
+**IMPORTANT: Tasks drive MC status**
+- Location: `src/components/Tasks.jsx` - `updateTask()` function
+- When a task's bucket changes, all linked MCs (in `outputContent`) are updated to match
+- Bucket name becomes MC status (e.g., task moves to "APPROVED" bucket → linked MCs get status "APPROVED")
+- MC labels in outputContent format: "MC282a" (number + variant)
+- This ensures workflow consistency: task progress = MC progress
+- Changes are applied via `matrixData.updateMessage()` - requires Matrix Save to persist
+
+```
+Task bucket: CONTENT → APPROVED
+↓
+Linked MCs: MC287a, MC287b
+↓
+MC status: CONTENT → APPROVED (for both)
+```
+
+### Share Links (Tasks)
+- Tasks can have multiple share links stored in `shareLinks` array
+- Created from Creative Library share dialog with "Add to Task" dropdown
+- Displayed in TaskEditorDialog below Related Content Output
+- Stored in SQLite `tasks.share_links` column (comma-separated)

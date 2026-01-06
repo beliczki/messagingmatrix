@@ -35,8 +35,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [shareTitle, setShareTitle] = useState('');
   const [generatedShareUrl, setGeneratedShareUrl] = useState(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
-  const [selectedBaseColor, setSelectedBaseColor] = useState(lookAndFeel?.headerColor || '#2870ed');
   const [bgColor, setBgColor] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_bgColor');
+    return saved || lookAndFeel?.headerColor || '#2870ed';
+  });
+  const [selectedBaseColor, setSelectedBaseColor] = useState(() => {
     const saved = localStorage.getItem('creativeLibrary_bgColor');
     return saved || lookAndFeel?.headerColor || '#2870ed';
   });
@@ -696,8 +699,15 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     setCopiedUrl(false);
     setSelectedCreativeIds(new Set());
     setSelectorMode(false);
-    setSelectedBaseColor(lookAndFeel?.headerColor || '#2870ed');
+    setSelectedBaseColor(bgColor);
   };
+
+  // Sync selectedBaseColor with bgColor when share dialog opens
+  useEffect(() => {
+    if (showShareDialog) {
+      setSelectedBaseColor(bgColor);
+    }
+  }, [showShareDialog, bgColor]);
 
   const handleFileUpload = async (files) => {
     const fileArray = Array.from(files);
@@ -998,14 +1008,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             // Selection props
             selectorMode={selectorMode}
             selectedCount={selectedCreativeIds.size}
+            onEnterSelectMode={() => setSelectorMode(true)}
             onSelectAll={() => {
-              if (!selectorMode) {
-                setSelectorMode(true);
-              } else {
-                // Select all filtered creatives
-                const allIds = new Set(filteredCreatives.map(c => c.id));
-                setSelectedCreativeIds(allIds);
-              }
+              // Select all filtered creatives
+              const allIds = new Set(filteredCreatives.map(c => c.id));
+              setSelectedCreativeIds(allIds);
             }}
             onDeselectAll={() => setSelectedCreativeIds(new Set())}
             onExitSelection={() => {

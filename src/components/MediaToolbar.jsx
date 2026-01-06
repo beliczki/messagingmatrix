@@ -27,6 +27,7 @@ const MediaToolbar = ({
   // Selection props
   selectorMode = false,
   selectedCount = 0,
+  onEnterSelectMode,
   onSelectAll,
   onDeselectAll,
   onExitSelection,
@@ -339,30 +340,39 @@ const MediaToolbar = ({
           )}
 
           {/* Selection Controls */}
-          {(onSelectAll || onDeselectAll) && (
+          {(onEnterSelectMode || onSelectAll || onDeselectAll) && (
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/20">
-              {selectorMode && (
-                <div className="text-white/80 text-sm text-center">
-                  {selectedCount} selected
-                </div>
-              )}
-              <div className="flex gap-2">
+              {!selectorMode ? (
                 <button
-                  onClick={onSelectAll}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
+                  onClick={onEnterSelectMode}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
                 >
                   <CheckSquare size={16} />
-                  <span>Select All</span>
+                  <span>Enter Select Mode</span>
                 </button>
-                <button
-                  onClick={onDeselectAll}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
-                  disabled={!selectorMode}
-                >
-                  <Square size={16} />
-                  <span>Deselect</span>
-                </button>
-              </div>
+              ) : (
+                <>
+                  <div className="text-white/80 text-sm text-center">
+                    {selectedCount} selected
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onSelectAll}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
+                    >
+                      <CheckSquare size={16} />
+                      <span>Select All</span>
+                    </button>
+                    <button
+                      onClick={onDeselectAll}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
+                    >
+                      <Square size={16} />
+                      <span>Deselect</span>
+                    </button>
+                  </div>
+                </>
+              )}
               {selectorMode && (
                 <div className="flex gap-2">
                   {onShare && selectedCount > 0 && (

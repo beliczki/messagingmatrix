@@ -754,3 +754,32 @@
   background: rgba(255, 255, 255, 0.2);
   font-weight: 600;
 }
+
+/* --- Template Warning Box --- */
+.template-warning {
+  background: rgba(255, 193, 7, 0.64);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.template-warning-icon {
+  color: var(--white-80);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.template-warning-content {
+  font-size: 13px;
+}
+
+.template-warning-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.template-warning-text {
+  color: var(--white-70);
+}

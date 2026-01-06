@@ -403,14 +403,11 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
             // Selection props
             selectorMode={selectorMode}
             selectedCount={selectedAssetIds.size}
+            onEnterSelectMode={() => setSelectorMode(true)}
             onSelectAll={() => {
-              if (!selectorMode) {
-                setSelectorMode(true);
-              } else {
-                // Select all filtered assets
-                const allIds = new Set(filteredAssets.map(a => a.ID));
-                setSelectedAssetIds(allIds);
-              }
+              // Select all filtered assets
+              const allIds = new Set(filteredAssets.map(a => a.ID));
+              setSelectedAssetIds(allIds);
             }}
             onDeselectAll={() => setSelectedAssetIds(new Set())}
             onExitSelection={() => {

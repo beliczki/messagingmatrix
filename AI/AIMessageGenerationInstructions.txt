@@ -1,5 +1,8 @@
 Generate marketing message content for the following context:
 
+**brief:**
+{{BRIEF}}
+
 **Audience:**
 - Name: {{AUDIENCE_NAME}}
 - Strategy: {{AUDIENCE_STRATEGY}}
@@ -45,7 +48,7 @@ Respond ONLY with a JSON object in this exact format:
 ```
 
 Make sure each version is:
-- Relevant to the audience and topic
+- Relevant to the audience and topic and additional brief (if exists)
 - Matching the style, tone, and length of the examples provided
 - Engaging and action-oriented
 - Appropriate for the specified device and platform

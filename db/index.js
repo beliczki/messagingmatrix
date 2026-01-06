@@ -247,9 +247,17 @@ class DatabaseService {
         context TEXT,
         user_notes TEXT,
         related_content TEXT,
-        output_content TEXT
+        output_content TEXT,
+        share_links TEXT
       )
     `);
+
+    // Migration: Add share_links column if it doesn't exist
+    try {
+      this.sqlite.exec(`ALTER TABLE tasks ADD COLUMN share_links TEXT`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
 
     // Create config table
     this.sqlite.exec(`

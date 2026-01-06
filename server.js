@@ -1247,8 +1247,14 @@ app.post('/api/shares', async (req, res) => {
 
     // Build full share URL
     // Use APP_BASE_URL from environment if set, otherwise detect from request
-    const baseUrl = process.env.APP_BASE_URL ||
-                    `${req.protocol}://${req.get('host')}`;
+    // In development, use port 5173 (Vite) instead of 3003 (Express)
+    let baseUrl = process.env.APP_BASE_URL;
+    if (!baseUrl) {
+      const host = req.get('host');
+      const isDev = process.env.NODE_ENV !== 'production';
+      const devHost = isDev ? host.replace(':3003', ':5173') : host;
+      baseUrl = `${req.protocol}://${devHost}`;
+    }
     const fullShareUrl = `${baseUrl}/share/${shareId}`;
 
     // Return share info
@@ -2032,6 +2038,7 @@ app.get('/api/tasks', (req, res) => {
       userNotes: task.user_notes,
       relatedContent: parseCommaSeparated(task.related_content),
       outputContent: parseCommaSeparated(task.output_content),
+      shareLinks: parseCommaSeparated(task.share_links),
       bucket: task.bucket,
       createdAt: task.created_at,
       updatedAt: task.updated_at,
@@ -2268,6 +2275,10 @@ app.put('/api/tasks/:id', (req, res) => {
     if (updates.keywords !== undefined) {
       fields.push('keywords = ?');
       values.push(arrayToCommaSep(updates.keywords));
+    }
+    if (updates.shareLinks !== undefined) {
+      fields.push('share_links = ?');
+      values.push(arrayToCommaSep(updates.shareLinks));
     }
 
     fields.push('updated_at = ?');

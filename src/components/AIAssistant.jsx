@@ -482,7 +482,13 @@ Respond ONLY with a JSON object in this exact format:
         .replace(/\{\{MESSAGE_COPY2\}\}/g, contextData.currentMessage.copy2 || 'N/A')
         .replace(/\{\{MESSAGE_FLASH\}\}/g, contextData.currentMessage.flash || 'N/A')
         .replace(/\{\{MESSAGE_CTA\}\}/g, contextData.currentMessage.cta || 'N/A')
-        .replace(/\{\{EXAMPLES_SECTION\}\}/g, examplesSection);
+        .replace(/\{\{EXAMPLES_SECTION\}\}/g, examplesSection)
+        .replace(/\{\{BRIEF\}\}/g, contextData.brief || '');
+
+      // If brief is provided but not in template, append it
+      if (contextData.brief && !generationPrompt.includes('{{BRIEF}}')) {
+        generationPrompt += `\n\n**Additional Instructions/Brief:**\n${contextData.brief}`;
+      }
 
       // Find sibling variants for context
       const { messages: matrixMsgs = [] } = matrixState || {};

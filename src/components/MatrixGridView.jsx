@@ -1,6 +1,20 @@
 import React, { useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { Plus, Edit2, Eye, Copy, Move, X, Circle, CheckCircle2 } from 'lucide-react';
 
+// Default status colors matching Settings.jsx defaults
+const DEFAULT_STATUS_COLORS = {
+  INCOMING: '#8B5CF6',
+  NAMING: '#EAB308',
+  CONTENT: '#F97316',
+  PREVIEW: '#3B82F6',
+  APPROVED: '#22C55E',
+  ACTIVE: '#15803D',
+  INACTIVE: '#9CA3AF',
+  ERROR: '#EF4444',
+  DEAD: '#64748B',
+  MEMORY: '#06B6D4'
+};
+
 // Move MessageCard outside to prevent recreation on every render
 const MessageCard = memo(({
   msg,
@@ -19,7 +33,9 @@ const MessageCard = memo(({
   lastClickRef
 }) => {
   const status = (msg.status || 'INCOMING').toUpperCase();
-  const statusColorHex = lookAndFeel?.statusColors?.[status] || '#8B5CF6';
+  // Use lookAndFeel.statusColors with proper defaults
+  const statusColors = { ...DEFAULT_STATUS_COLORS, ...(lookAndFeel?.statusColors || {}) };
+  const statusColorHex = statusColors[status] || DEFAULT_STATUS_COLORS.INCOMING;
   const bgColor = statusColorHex;
 
   // Calculate text color based on background

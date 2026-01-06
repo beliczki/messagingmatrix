@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Trash2, Mail, Clock, Plus, Search, Tag, ArrowRight, Check, Link2, Unlink, FileText, FileText as SummaryIcon, MessageSquare, Paperclip, ChevronDown, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { X, Trash2, Mail, Clock, Plus, Search, Tag, ArrowRight, Check, Link2, Unlink, FileText, FileText as SummaryIcon, MessageSquare, Paperclip, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Share2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { apiGet } from '../utils/api';
 
@@ -413,26 +413,50 @@ const TaskEditorDialog = ({
   // Helper: Get bucket color from lookAndFeel statusColors
   const getBucketColor = (bucketId) => {
     const statusColors = lookAndFeel?.statusColors || {};
+    // Normalize bucket ID to uppercase for lookup
+    const bucketUpper = (bucketId || '').toUpperCase();
+    // Try direct match from statusColors first
+    if (statusColors[bucketUpper]) {
+      return statusColors[bucketUpper];
+    }
+    // Fallback map for common buckets
     const colorMap = {
-      incoming: statusColors.INCOMING || '#8B5CF6',    // Purple
-      naming: statusColors.NAMING || '#EAB308',        // Yellow
-      content: statusColors.CONTENT || '#F97316',      // Orange
-      preview: statusColors.PREVIEW || '#3B82F6',      // Blue
-      approved: statusColors.APPROVED || '#22C55E',    // Green
-      delivered: statusColors.ACTIVE || '#15803D',     // Dark Green
-      dead: statusColors.INACTIVE || '#9CA3AF'         // Gray
+      INCOMING: statusColors.INCOMING || '#8B5CF6',    // Purple
+      NAMING: statusColors.NAMING || '#EAB308',        // Yellow
+      CONTENT: statusColors.CONTENT || '#F97316',      // Orange
+      PREVIEW: statusColors.PREVIEW || '#3B82F6',      // Blue
+      APPROVED: statusColors.APPROVED || '#22C55E',    // Green
+      ACTIVE: statusColors.ACTIVE || '#15803D',        // Dark Green
+      INACTIVE: statusColors.INACTIVE || '#9CA3AF',    // Gray
+      ERROR: statusColors.ERROR || '#EF4444',          // Red
+      DEAD: statusColors.DEAD || '#6B7280',            // Dark Gray
+      MEMORY: statusColors.MEMORY || '#06B6D4',        // Cyan
+      BACKLOG: statusColors.BACKLOG || '#8B5CF6'       // Purple
     };
-    return colorMap[bucketId] || '#8B5CF6';
+    return colorMap[bucketUpper] || '#8B5CF6';
   };
 
   // Current bucket color
   const currentBucketColor = getBucketColor(editingTask.bucket || 'incoming');
 
-  // Helper: Get MC status color from lookAndFeel statusColors
+  // Helper: Get MC status color from lookAndFeel statusColors with proper defaults
   const getMcStatusColor = (status) => {
-    const statusColors = lookAndFeel?.statusColors || {};
+    // Default status colors matching Settings.jsx
+    const defaultColors = {
+      INCOMING: '#8B5CF6',
+      NAMING: '#EAB308',
+      CONTENT: '#F97316',
+      PREVIEW: '#3B82F6',
+      APPROVED: '#22C55E',
+      ACTIVE: '#15803D',
+      INACTIVE: '#9CA3AF',
+      ERROR: '#EF4444',
+      DEAD: '#64748B',
+      MEMORY: '#06B6D4'
+    };
+    const statusColors = { ...defaultColors, ...(lookAndFeel?.statusColors || {}) };
     const statusUpper = (status || '').toUpperCase();
-    return statusColors[statusUpper] || statusColors.INACTIVE || '#9CA3AF';
+    return statusColors[statusUpper] || defaultColors.INCOMING;
   };
 
   const handleSave = () => {
@@ -1516,18 +1540,13 @@ const TaskEditorDialog = ({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Add all selected MCs in one batch
-                                  const newItems = searchResults
+                                  // v2 schema: relatedContent is array of MC labels (strings) like ["MC282a", "MC283b"]
+                                  const newLabels = searchResults
                                     .filter(mc => selectedMcIds.has(mc.id))
-                                    .map((mc, idx) => ({
-                                      id: Date.now() + idx,
-                                      reference: mc.mcLabel,
-                                      type: 'message',
-                                      messageId: mc.id
-                                    }));
+                                    .map(mc => mc.mcLabel);
                                   const existingContent = editingTask.relatedContent || [];
-                                  const existingIds = new Set(existingContent.map(c => c.messageId));
-                                  const filteredNew = newItems.filter(item => !existingIds.has(item.messageId));
+                                  const existingSet = new Set(existingContent);
+                                  const filteredNew = newLabels.filter(label => !existingSet.has(label));
                                   setEditingTask({
                                     ...editingTask,
                                     relatedContent: [...existingContent, ...filteredNew]
@@ -1897,17 +1916,13 @@ const TaskEditorDialog = ({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const newItems = outputSearchResults
+                                    // v2 schema: outputContent is array of MC labels (strings) like ["MC282a", "MC283b"]
+                                    const newLabels = outputSearchResults
                                       .filter(mc => selectedOutputMcIds.has(mc.id))
-                                      .map((mc, idx) => ({
-                                        id: Date.now() + idx,
-                                        reference: mc.mcLabel,
-                                        type: 'message',
-                                        messageId: mc.id
-                                      }));
+                                      .map(mc => mc.mcLabel);
                                     const existingContent = editingTask.outputContent || [];
-                                    const existingIds = new Set(existingContent.map(c => c.messageId));
-                                    const filteredNew = newItems.filter(item => !existingIds.has(item.messageId));
+                                    const existingSet = new Set(existingContent);
+                                    const filteredNew = newLabels.filter(label => !existingSet.has(label));
                                     setEditingTask({
                                       ...editingTask,
                                       outputContent: [...existingContent, ...filteredNew]
@@ -2031,9 +2046,92 @@ const TaskEditorDialog = ({
                       </div>
                     )}
                   </div>
+                  </>
+                  )}
 
-                  {/* Create New Messages Box */}
-                  {addMessage && (
+                  {/* Share Links Section - shows for ALL task types */}
+                  {editingTask.shareLinks && editingTask.shareLinks.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)', marginBottom: '8px' }}>
+                        Share Links ({editingTask.shareLinks.length})
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        {editingTask.shareLinks.map((link, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '8px 12px',
+                              background: 'var(--white-10)',
+                              borderRadius: '8px',
+                              border: '1px solid var(--white-15)'
+                            }}
+                          >
+                            <Share2 size={14} style={{ color: 'var(--white-60)', flexShrink: 0 }} />
+                            <a
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                flex: 1,
+                                color: 'var(--color-accent)',
+                                fontSize: '12px',
+                                textDecoration: 'none',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {link}
+                            </a>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(link);
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                background: 'var(--white-10)',
+                                border: '1px solid var(--white-20)',
+                                borderRadius: '4px',
+                                color: 'var(--white-80)',
+                                fontSize: '11px',
+                                cursor: 'pointer'
+                              }}
+                              title="Copy link"
+                            >
+                              Copy
+                            </button>
+                            <button
+                              onClick={() => {
+                                const newLinks = editingTask.shareLinks.filter((_, i) => i !== index);
+                                setEditingTask({ ...editingTask, shareLinks: newLinks });
+                              }}
+                              style={{
+                                padding: '4px 6px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--white-40)',
+                                fontSize: '14px',
+                                cursor: 'pointer'
+                              }}
+                              title="Remove link"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Create New Messages Box - only for INCOMING or NAMING buckets */}
+                  {addMessage && ['INCOMING', 'NAMING'].includes(editingTask.bucket?.toUpperCase()) && (
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-white)', marginBottom: '8px' }}>
                         Create New Messages
@@ -2147,8 +2245,6 @@ const TaskEditorDialog = ({
                         </button>
                       </div>
                     </div>
-                  )}
-                  </>
                   )}
                 </div>
               </div>

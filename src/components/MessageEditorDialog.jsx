@@ -61,6 +61,23 @@ const MessageEditorDialog = ({
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [warningDismissed, setWarningDismissed] = useState(false);
+  const [briefExpanded, setBriefExpanded] = useState(false);
+  const [briefText, setBriefText] = useState('');
+
+  // Load brief from JSON comment when message changes
+  useEffect(() => {
+    if (editingMessage?.comment) {
+      try {
+        const parsed = JSON.parse(editingMessage.comment);
+        if (parsed.brief) {
+          setBriefText(parsed.brief);
+        }
+      } catch {
+        // Not JSON, ignore
+      }
+    }
+  }, [editingMessage?.id]);
 
   // Related tasks state
   const [relatedTasks, setRelatedTasks] = useState([]);
@@ -69,6 +86,9 @@ const MessageEditorDialog = ({
 
   // Track original field values before AI preview changes
   const [originalFieldValues, setOriginalFieldValues] = useState(null);
+
+  // Preview overrides - temporary values shown in preview without changing input
+  const [previewOverrides, setPreviewOverrides] = useState({});
 
   // Track hovered line for showing action buttons
   const [hoveredLine, setHoveredLine] = useState(null);
@@ -412,6 +432,38 @@ const MessageEditorDialog = ({
     const isHtmlTemplate = templates.some(t => t.name === selectedTemplate);
     return !isHtmlTemplate;
   }, [editingMessage?.template, templates]);
+
+  // Helper functions for JSON comment structure
+  const parseCommentJson = (comment) => {
+    if (!comment) return { brief: '', generated: {} };
+    try {
+      const parsed = JSON.parse(comment);
+      return {
+        brief: parsed.brief || '',
+        generated: parsed.generated || {}
+      };
+    } catch {
+      // Not JSON, return empty structure
+      return { brief: '', generated: {} };
+    }
+  };
+
+  const updateCommentBrief = (newBrief) => {
+    const current = parseCommentJson(editingMessage?.comment);
+    current.brief = newBrief;
+    updateField('comment', JSON.stringify(current, null, 2));
+  };
+
+  const addGeneratedToComment = (field, version) => {
+    const current = parseCommentJson(editingMessage?.comment);
+    if (!current.generated[field]) {
+      current.generated[field] = [];
+    }
+    if (!current.generated[field].includes(version)) {
+      current.generated[field].push(version);
+    }
+    updateField('comment', JSON.stringify(current, null, 2));
+  };
 
   // Keep isAdobePSD for creative matching logic
   const isAdobePSD = editingMessage?.template === 'Adobe PSD';
@@ -972,29 +1024,22 @@ const MessageEditorDialog = ({
 
           // Map message fields to values (including style fields and span-formatted text)
           // Use mergedTextFormatting for real-time preview of new formatting entries
+          // Use previewOverrides to show AI generated content without changing input
+          const getFieldValue = (field) => {
+            const value = previewOverrides[field] !== undefined ? previewOverrides[field] : editingMessage[field];
+            if (textFields.includes(field) && value) {
+              return applyTextFormattingSpans(value, mergedTextFormatting, msgIdentifiers);
+            }
+            return value;
+          };
+
           const fieldMap = {
-            'headline': (() => {
-              if (textFields.includes('headline') && editingMessage.headline) {
-                const formatted = applyTextFormattingSpans(editingMessage.headline, mergedTextFormatting, msgIdentifiers);
-                return formatted;
-              }
-              return editingMessage.headline;
-            })(),
-            'copy1': textFields.includes('copy1') && editingMessage.copy1
-              ? applyTextFormattingSpans(editingMessage.copy1, mergedTextFormatting, msgIdentifiers)
-              : editingMessage.copy1,
-            'copy2': textFields.includes('copy2') && editingMessage.copy2
-              ? applyTextFormattingSpans(editingMessage.copy2, mergedTextFormatting, msgIdentifiers)
-              : editingMessage.copy2,
-            'flash': textFields.includes('flash') && editingMessage.flash
-              ? applyTextFormattingSpans(editingMessage.flash, mergedTextFormatting, msgIdentifiers)
-              : editingMessage.flash,
-            'cta': textFields.includes('cta') && editingMessage.cta
-              ? applyTextFormattingSpans(editingMessage.cta, mergedTextFormatting, msgIdentifiers)
-              : editingMessage.cta,
-            'disclaimer': textFields.includes('disclaimer') && editingMessage.disclaimer
-              ? applyTextFormattingSpans(editingMessage.disclaimer, mergedTextFormatting, msgIdentifiers)
-              : editingMessage.disclaimer,
+            'headline': getFieldValue('headline'),
+            'copy1': getFieldValue('copy1'),
+            'copy2': getFieldValue('copy2'),
+            'flash': getFieldValue('flash'),
+            'cta': getFieldValue('cta'),
+            'disclaimer': getFieldValue('disclaimer'),
             'image1': editingMessage.image1,
             'image2': editingMessage.image2,
             'image3': editingMessage.image3,
@@ -1242,11 +1287,21 @@ const MessageEditorDialog = ({
 
   // Determine if preview should be on side or top based on width
   const [width, height] = previewSize.split('x').map(Number);
-  const isWide = width > 600; // Wide sizes go to top
+  const isWide = width > height && width > 600; // Only landscape creatives with width > 600 go to top
 
-  // Check if either dimension is >= 1080, then scale to 50% (same as TemplatePreview)
-  const shouldScale = width >= 1080 || height >= 1080;
-  const scale = shouldScale ? 0.5 : 1;
+  // Calculate scale based on layout mode
+  // Wide layout: scale if >= 1080
+  // Side view: scale to fit max 300px width
+  let scale = 1;
+  if (isWide) {
+    if (width >= 1080 || height >= 1080) {
+      scale = 0.5;
+    }
+  } else {
+    if (width > 300) {
+      scale = 300 / width;
+    }
+  }
   const scaledWidth = width * scale;
   const scaledHeight = height * scale;
 
@@ -1698,32 +1753,70 @@ const MessageEditorDialog = ({
         </div>
       </div>
       <div className="preview-frame">
-        {editingMessage.template ? (
-          <div style={{
-            width: `${scaledWidth}px`,
-            height: `${scaledHeight}px`,
-            overflow: 'hidden',
-            position: 'relative',
-            boxShadow: 'var(--ui-shadow)'
-          }}>
-            <iframe
-              key={`${editingMessage.id}-${previewSize}-${mergedTextFormatting.map(r => r.text_formatted || '').join('')}`}
-              srcDoc={generatePreviewHtml()}
-              style={{
-                width: `${width}px`,
-                height: `${height}px`,
-                transform: shouldScale ? 'scale(0.5)' : 'none',
-                transformOrigin: 'top left',
-                border: 0,
-                position: 'absolute',
-                top: 0,
-                left: 0
-              }}
-              title="Message Preview"
-              sandbox="allow-same-origin allow-scripts"
-            />
-          </div>
-        ) : (
+        {editingMessage.template ? (() => {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              {isNonHtmlTemplate && !warningDismissed && (
+                <div
+                  className="template-warning"
+                  style={{
+                    width: `${scaledWidth}px`,
+                    boxSizing: 'border-box',
+                    position: 'relative'
+                  }}
+                >
+                  <AlertCircle size={18} className="template-warning-icon" />
+                  <div className="template-warning-content">
+                    <p className="template-warning-title">Non-HTML Template: {editingMessage?.template}</p>
+                    <p className="template-warning-text">Preview requires external tools (Adobe).</p>
+                  </div>
+                  <button
+                    onClick={() => setWarningDismissed(true)}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: 'var(--white-60)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <div style={{
+                width: `${scaledWidth}px`,
+                height: `${scaledHeight}px`,
+                overflow: 'hidden',
+                position: 'relative',
+                boxShadow: 'var(--ui-shadow)'
+              }}>
+              <iframe
+                key={`${editingMessage.id}-${previewSize}-${mergedTextFormatting.map(r => r.text_formatted || '').join('')}`}
+                srcDoc={generatePreviewHtml()}
+                style={{
+                  width: `${width}px`,
+                  height: `${height}px`,
+                  transform: scale !== 1 ? `scale(${scale})` : 'none',
+                  transformOrigin: 'top left',
+                  border: 0,
+                  position: 'absolute',
+                  top: 0,
+                  left: 0
+                }}
+                title="Message Preview"
+                sandbox="allow-same-origin allow-scripts"
+              />
+              </div>
+            </div>
+          );
+        })() : (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -1824,7 +1917,10 @@ const MessageEditorDialog = ({
               {tabs.map(tab => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setPreviewOverrides({});
+                  }}
                   className={`dialog-tab ${activeTab === tab.id ? 'active' : ''}`}
                 >
                   <h2 className="text-xl">{tab.label}</h2>
@@ -2196,26 +2292,7 @@ const MessageEditorDialog = ({
               {/* Content Tab */}
               {activeTab === 'content' && (
                 <>
-                  {/* Notice for non-HTML templates */}
-                  {isNonHtmlTemplate && (
-                    <div style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: '1px solid var(--white-20)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px'
-                    }}>
-                      <AlertCircle size={18} style={{ color: 'var(--white-80)', flexShrink: 0, marginTop: '2px' }} />
-                      <div style={{ fontSize: '13px' }}>
-                        <p style={{ fontWeight: 600, marginBottom: '4px' }}>Non-HTML Template: {editingMessage?.template}</p>
-                        <p style={{ color: 'var(--white-70)' }}>Content fields are disabled for this template type. Use external tools to edit the creative.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ opacity: isNonHtmlTemplate ? 0.5 : 1, pointerEvents: isNonHtmlTemplate ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                     <div className="form-group">
                       <label className="form-label">
                         Template Variant Classes
@@ -2373,10 +2450,24 @@ const MessageEditorDialog = ({
                       <label className="form-label">Comment</label>
                       <textarea
                         value={editingMessage.comment || ''}
-                        onChange={(e) => updateField('comment', e.target.value)}
+                        onChange={(e) => {
+                          updateField('comment', e.target.value);
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        ref={(el) => {
+                          if (el && editingMessage.comment) {
+                            el.style.height = 'auto';
+                            el.style.height = el.scrollHeight + 'px';
+                          }
+                        }}
                         rows={2}
                         className="form-textarea"
-                        style={{ minHeight: '60px' }}
+                        style={{ minHeight: '60px', resize: 'none', overflow: 'hidden' }}
                       />
                     </div>
                   </div>
@@ -2400,37 +2491,81 @@ const MessageEditorDialog = ({
 
                 return (
                   <>
-                    {/* Generate Button */}
+                    {/* Generate Section */}
                     <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px',
                       background: 'var(--white-05)',
                       borderRadius: '8px',
                       border: '1px solid var(--white-10)'
                     }}>
-                      <div>
-                        <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Sparkles size={18} style={{ color: 'white' }} />
-                          AI Content Generation
-                        </h3>
-                        <p style={{ color: 'var(--white-50)', fontSize: '12px' }}>
-                          Generate 5 versions of each field based on topic and audience
-                        </p>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '16px'
+                      }}>
+                        <div>
+                          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Sparkles size={18} style={{ color: 'white' }} />
+                            AI Content Generation
+                          </h3>
+                          <p style={{ color: 'var(--white-50)', fontSize: '12px' }}>
+                            Generate 5 versions of each field based on topic and audience
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => setBriefExpanded(!briefExpanded)}
+                            className="btn btn-secondary"
+                            style={{ padding: '10px 20px' }}
+                          >
+                            Add Brief
+                          </button>
+                          <button
+                            onClick={() => handleGenerateContent(briefText)}
+                            disabled={isGeneratingContent}
+                            className="btn btn-primary"
+                            style={{ padding: '10px 20px' }}
+                          >
+                            {isGeneratingContent ? (
+                              <><Loader size={14} className="animate-spin" /> Generating...</>
+                            ) : (
+                              <><Sparkles size={14} /> Generate</>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={handleGenerateContent}
-                        disabled={isGeneratingContent}
-                        className="btn btn-primary"
-                        style={{ padding: '10px 20px' }}
-                      >
-                        {isGeneratingContent ? (
-                          <><Loader size={14} className="animate-spin" /> Generating...</>
-                        ) : (
-                          <><Sparkles size={14} /> Generate</>
-                        )}
-                      </button>
+                      {briefExpanded && (
+                        <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--white-10)', paddingTop: '16px' }}>
+                          <textarea
+                            value={briefText}
+                            onChange={(e) => {
+                              setBriefText(e.target.value);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            placeholder="Add additional instructions or context for AI generation..."
+                            rows={2}
+                            className="form-textarea"
+                            style={{ minHeight: '60px', resize: 'none', overflow: 'hidden' }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => {
+                                updateCommentBrief(briefText);
+                              }}
+                              disabled={!briefText.trim()}
+                              className="btn btn-secondary"
+                              style={{ padding: '8px 16px' }}
+                            >
+                              Save to Comments
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Sibling Variants Section */}
@@ -2606,12 +2741,7 @@ const MessageEditorDialog = ({
                                         if (version) {
                                           if (isNonHtmlTemplate || !hasPlaceholder) {
                                             // For non-dynamic templates or missing placeholders, add to comment instead
-                                            const currentComment = editingMessage?.comment || '';
-                                            const aiLine = `AI ${label}: "${version}"`;
-                                            const newComment = currentComment
-                                              ? `${currentComment}\n${aiLine}`
-                                              : aiLine;
-                                            updateField('comment', newComment);
+                                            addGeneratedToComment(key, version);
                                           } else {
                                             updateField(key, version);
                                           }
@@ -2632,29 +2762,59 @@ const MessageEditorDialog = ({
                                       <span style={{ flex: 1, fontSize: '12px', color: 'white', lineHeight: '1.4' }}>{version}</span>
                                         <div style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: isHovered ? 1 : 0, transition: 'opacity 0.15s' }}>
                                           {!isNonHtmlTemplate && hasPlaceholder && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (version) {
-                                                  updateField(key, version);
-                                                }
-                                              }}
-                                              style={{
-                                                padding: '4px 8px',
-                                                background: 'var(--white-20)',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                color: 'white',
-                                                fontSize: '10px',
-                                                cursor: 'pointer',
-                                                whiteSpace: 'nowrap'
-                                              }}
-                                              title="Apply to preview"
-                                            >
-                                              Preview
-                                            </button>
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  if (version) {
+                                                    setPreviewOverrides(prev => ({ ...prev, [key]: version }));
+                                                  }
+                                                }}
+                                                style={{
+                                                  padding: '4px 8px',
+                                                  background: previewOverrides[key] === version ? 'var(--white-40)' : 'var(--white-20)',
+                                                  border: 'none',
+                                                  borderRadius: '4px',
+                                                  color: 'white',
+                                                  fontSize: '10px',
+                                                  cursor: 'pointer',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title="Preview in template"
+                                              >
+                                                Preview
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  if (version) {
+                                                    updateField(key, version);
+                                                    setPreviewOverrides(prev => {
+                                                      const next = { ...prev };
+                                                      delete next[key];
+                                                      return next;
+                                                    });
+                                                  }
+                                                }}
+                                                style={{
+                                                  padding: '4px 8px',
+                                                  background: 'var(--white-20)',
+                                                  border: 'none',
+                                                  borderRadius: '4px',
+                                                  color: 'white',
+                                                  fontSize: '10px',
+                                                  cursor: 'pointer',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title="Apply to content field"
+                                              >
+                                                Apply
+                                              </button>
+                                            </>
                                           )}
                                           {!isNonHtmlTemplate && !hasPlaceholder && (
                                             <span style={{
@@ -2675,12 +2835,7 @@ const MessageEditorDialog = ({
                                             onClick={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
-                                              const currentComment = editingMessage?.comment || '';
-                                              const aiLine = `AI ${label}: "${version}"`;
-                                              const newComment = currentComment
-                                                ? `${currentComment}\n${aiLine}`
-                                                : aiLine;
-                                              updateField('comment', newComment);
+                                              addGeneratedToComment(key, version);
                                             }}
                                             style={{
                                               padding: '4px 8px',
@@ -2710,11 +2865,6 @@ const MessageEditorDialog = ({
                         <p style={{ fontSize: '13px' }}>
                           Click "Generate" to create AI-powered content variations
                         </p>
-                        {isNonHtmlTemplate && (
-                          <p style={{ fontSize: '12px', marginTop: '12px', color: 'var(--white-40)' }}>
-                            Non-dynamic template ({editingMessage?.template}) can't be previewed, but text variants can be added to comment.
-                          </p>
-                        )}
                       </div>
                     )}
                   </>
@@ -2724,24 +2874,6 @@ const MessageEditorDialog = ({
               {/* Styles Tab */}
               {activeTab === 'styles' && (
                 <>
-                  {isNonHtmlTemplate && (
-                    <div style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: '1px solid var(--white-20)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px'
-                    }}>
-                      <AlertCircle size={18} style={{ color: 'var(--white-80)', flexShrink: 0, marginTop: '2px' }} />
-                      <div style={{ fontSize: '13px' }}>
-                        <p style={{ fontWeight: 600, marginBottom: '4px' }}>Non-HTML Template: {editingMessage?.template}</p>
-                        <p style={{ color: 'var(--white-70)' }}>Style fields are disabled for this template type.</p>
-                      </div>
-                    </div>
-                  )}
-
                   <div style={{ opacity: isNonHtmlTemplate ? 0.5 : 1, pointerEvents: isNonHtmlTemplate ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                     <div className="form-group">
                       <label className="form-label">Headline Style</label>
