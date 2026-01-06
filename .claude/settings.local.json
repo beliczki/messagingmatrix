@@ -65,7 +65,8 @@
       "Bash(git merge:*)",
       "Bash(git stash:*)",
       "Bash(if not exist \"C:\\\\Users\\\\belic\\\\Claude\\\\Messaging matrix\\\\messagingmatrix\\\\.orchestrator\\\\reports\\\\claude-code\" mkdir \"C:\\\\Users\\\\belic\\\\Claude\\\\Messaging matrix\\\\messagingmatrix\\\\.orchestrator\\\\reports\\\\claude-code\")",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git rev-parse:*)"
     ],
     "deny": [],
     "ask": []

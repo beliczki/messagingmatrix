@@ -165,17 +165,22 @@ export const buildTree2 = (audiences, topics, getMessages, treeStructure, status
           }).map(aud => ({ ...aud, type: 'audience' }));
 
         } else if (nextLevel.source === 'Topics' || nextLevel.source === 'Topic') {
-          // Get topics for this audience
-          const currentAudience = groupItems[0].type === 'audience' ? groupItems[0] : null;
-          if (currentAudience) {
-            nextItems = topics.filter(topic => {
-              const msgs = getMessages(topic.key, currentAudience.key);
-              // Apply status filter if present
-              if (statusFilters && statusFilters.length > 0) {
-                return msgs.some(m => statusFilters.includes(m.status));
-              }
-              return msgs.length > 0;
-            }).map(topic => ({ ...topic, type: 'topic', audienceKey: currentAudience.key }));
+          if (groupItems[0].type === 'topic') {
+            // Topic → Topic transition: pass through topics to group by next field
+            nextItems = groupItems;
+          } else {
+            // Audience → Topic transition: get topics for this audience
+            const currentAudience = groupItems[0].type === 'audience' ? groupItems[0] : null;
+            if (currentAudience) {
+              nextItems = topics.filter(topic => {
+                const msgs = getMessages(topic.key, currentAudience.key);
+                // Apply status filter if present
+                if (statusFilters && statusFilters.length > 0) {
+                  return msgs.some(m => statusFilters.includes(m.status));
+                }
+                return msgs.length > 0;
+              }).map(topic => ({ ...topic, type: 'topic', audienceKey: currentAudience.key }));
+            }
           }
 
         } else if (nextLevel.source === 'Messages' || nextLevel.source === 'Message') {
