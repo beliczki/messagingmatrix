@@ -629,8 +629,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           }
 
           // Look up product from audiences based on message.audience
+          // Only use actual product values - don't fallback to message name/number
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
-          const product = audience?.product || message.name || `Message ${message.number}`;
+          const product = audience?.product || '';
 
           // Get template-specific sizes for this message
           const templateName = message.template || 'html';

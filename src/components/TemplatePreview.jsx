@@ -18,7 +18,9 @@ const TemplatePreview = ({
   previewSize = '300x250',
   className = '',
   templateConfig = null,
-  textFormatting = []
+  textFormatting = [],
+  customMainCss = null,
+  customSizeCss = null
 }) => {
   // Helper function to build full image URL using template.json path-messagingmatrix parameter
   const buildImageUrl = (imageKey, filename) => {
@@ -62,6 +64,9 @@ const TemplatePreview = ({
     let result = html;
 
     // Inject CSS inline - replace <link> tags with <style> tags
+    // Use custom CSS props if provided, otherwise fall back to hardcoded imports
+    const effectiveMainCss = customMainCss !== null ? customMainCss : mainCss;
+
     const cssMap = {
       '300x250': css300x250,
       '300x600': css300x600,
@@ -70,10 +75,10 @@ const TemplatePreview = ({
       '1080x1080': css1080x1080
     };
 
-    const sizeCss = cssMap[previewSize] || '';
+    const effectiveSizeCss = customSizeCss !== null ? customSizeCss : (cssMap[previewSize] || '');
 
-    if (mainCss && sizeCss) {
-      const combinedCss = `${mainCss}\n${sizeCss}`;
+    if (effectiveMainCss || effectiveSizeCss) {
+      const combinedCss = `${effectiveMainCss}\n${effectiveSizeCss}`;
 
       // Replace main.css link with inline styles
       result = result.replace(

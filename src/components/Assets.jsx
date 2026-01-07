@@ -38,6 +38,10 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
     const saved = localStorage.getItem('assets_formatFilter');
     return saved ? JSON.parse(saved) : [];
   });
+  const [sizeFilter, setSizeFilter] = useState(() => {
+    const saved = localStorage.getItem('assets_sizeFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Background color state
   const [bgColor, setBgColor] = useState(() => {
@@ -220,6 +224,10 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   }, [formatFilter]);
 
   useEffect(() => {
+    localStorage.setItem('assets_sizeFilter', JSON.stringify(sizeFilter));
+  }, [sizeFilter]);
+
+  useEffect(() => {
     localStorage.setItem('assets_bgColor', bgColor);
   }, [bgColor]);
 
@@ -267,6 +275,22 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
     return Array.from(formats).sort();
   }, [assets]);
 
+  // Get unique sizes (dimensions) from assets
+  const availableSizes = useMemo(() => {
+    const sizes = new Set();
+    assets.forEach(asset => {
+      if (asset.File_dimensions && asset.File_dimensions.trim()) {
+        sizes.add(asset.File_dimensions);
+      }
+    });
+    return Array.from(sizes).sort((a, b) => {
+      // Sort by width (first number in WxH format)
+      const aWidth = parseInt(a.split('x')[0]) || 0;
+      const bWidth = parseInt(b.split('x')[0]) || 0;
+      return aWidth - bWidth;
+    });
+  }, [assets]);
+
   // Filter assets based on filters
   const filteredByFilters = useMemo(() => {
     return assets.filter(asset => {
@@ -277,24 +301,23 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         }
       }
 
-      // Type filter
+      // Type filter (uses Type column)
       if (typeFilter.length > 0) {
         if (!asset.Type || !typeFilter.includes(asset.Type)) {
           return false;
         }
       }
 
-      // Format filter
-      if (formatFilter.length > 0) {
-        const assetFormat = (asset.File_format || '').toLowerCase();
-        if (!formatFilter.includes(assetFormat)) {
+      // Size filter (dimensions like 300x250)
+      if (sizeFilter.length > 0) {
+        if (!asset.File_dimensions || !sizeFilter.includes(asset.File_dimensions)) {
           return false;
         }
       }
 
       return true;
     });
-  }, [assets, productFilter, typeFilter, formatFilter]);
+  }, [assets, productFilter, typeFilter, sizeFilter]);
 
   // Selection handlers
   const toggleAssetSelection = (assetId, enableSelectorMode = false) => {
@@ -391,11 +414,11 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
             setProductFilter={setProductFilter}
             typeFilter={typeFilter}
             setTypeFilter={setTypeFilter}
-            sizeFilter={formatFilter}
-            setSizeFilter={setFormatFilter}
+            sizeFilter={sizeFilter}
+            setSizeFilter={setSizeFilter}
             availableProducts={availableProducts}
             typeOptions={availableTypes}
-            availableSizes={availableFormats}
+            availableSizes={availableSizes}
             filteredCount={filteredCount}
             totalCount={totalItems}
             viewMode={viewMode}

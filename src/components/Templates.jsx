@@ -254,6 +254,8 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   const [selectedFile, setSelectedFile] = useState(getInitialFile());
   const [fileContent, setFileContent] = useState('');
   const [templateHtmlContent, setTemplateHtmlContent] = useState('');
+  const [templateMainCss, setTemplateMainCss] = useState('');
+  const [templateSizeCss, setTemplateSizeCss] = useState('');
   const [previewSize, setPreviewSize] = useState(() => {
     // Load from localStorage, fallback to first available dimension
     const saved = localStorage.getItem('templateEditor_previewSize');
@@ -520,25 +522,22 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
       if (!htmlResponse.ok) throw new Error('Failed to load template HTML');
 
       const htmlData = await htmlResponse.json();
-      let htmlContent = htmlData.content;
+      setTemplateHtmlContent(htmlData.content);
 
-      // Inject CSS into HTML
-      let cssContent = '';
+      // Store CSS separately - TemplatePreview will handle injection
       if (mainCssResponse && mainCssResponse.ok) {
         const mainCssData = await mainCssResponse.json();
-        cssContent += `<style>${mainCssData.content}</style>`;
+        setTemplateMainCss(mainCssData.content);
+      } else {
+        setTemplateMainCss('');
       }
+
       if (dimCssResponse && dimCssResponse.ok) {
         const dimCssData = await dimCssResponse.json();
-        cssContent += `<style>${dimCssData.content}</style>`;
+        setTemplateSizeCss(dimCssData.content);
+      } else {
+        setTemplateSizeCss('');
       }
-
-      // Insert CSS into head if present
-      if (cssContent) {
-        htmlContent = htmlContent.replace('</head>', `${cssContent}</head>`);
-      }
-
-      setTemplateHtmlContent(htmlContent);
     } catch (err) {
       console.error('Error loading template for preview:', err);
     }
@@ -769,6 +768,8 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
             previewSize={previewSize}
             templateConfig={templateConfig}
             textFormatting={textFormatting}
+            customMainCss={templateMainCss}
+            customSizeCss={templateSizeCss}
             className="inline-block"
           />
         ) : (
