@@ -108,7 +108,9 @@ const Tree2View = forwardRef(function Tree2View({
     navigateToParent,
     navigateToChild,
     navigateToPrevSibling,
-    navigateToNextSibling
+    navigateToNextSibling,
+    navigateToPrevOnLevel,
+    navigateToNextOnLevel
   } = useTree2({
     audiences,
     topics,
@@ -214,8 +216,10 @@ const Tree2View = forwardRef(function Tree2View({
     navigateToParent,
     navigateToChild,
     navigateToPrevSibling,
-    navigateToNextSibling
-  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView, localNodeScale, localLayerHeightScale, localScaleBase, handleNodeScaleChange, handleLayerHeightScaleChange, handleScaleBaseChange, treeOrientation, selectedNode, selectAndCenterNode, centerOnNode, navigateToParent, navigateToChild, navigateToPrevSibling, navigateToNextSibling]);
+    navigateToNextSibling,
+    navigateToPrevOnLevel,
+    navigateToNextOnLevel
+  }), [zoom, zoomIn, zoomOut, resetZoom, fitToView, localNodeScale, localLayerHeightScale, localScaleBase, handleNodeScaleChange, handleLayerHeightScaleChange, handleScaleBaseChange, treeOrientation, selectedNode, selectAndCenterNode, centerOnNode, navigateToParent, navigateToChild, navigateToPrevSibling, navigateToNextSibling, navigateToPrevOnLevel, navigateToNextOnLevel]);
 
   // Store callbacks in refs to avoid re-initialization when they change
   const onEditAudienceRef = useRef(onEditAudience);

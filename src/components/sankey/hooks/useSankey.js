@@ -667,6 +667,41 @@ export function useSankey({
     }
   }, [zoom, onZoomChange]);
 
+  // Track previous viewType to detect changes and trigger fit
+  const prevViewTypeRef = useRef(viewType);
+  const pendingFitRef = useRef(false);
+
+  // Mark that we need a fit when viewType changes
+  useEffect(() => {
+    if (prevViewTypeRef.current !== viewType) {
+      prevViewTypeRef.current = viewType;
+      pendingFitRef.current = true;
+    }
+  }, [viewType]);
+
+  // Auto fit when bounds change after viewType change
+  // This ensures we fit AFTER slider values have been loaded and layout recalculated
+  useEffect(() => {
+    if (!pendingFitRef.current) return;
+
+    const timerId = setTimeout(() => {
+      if (interactionRef.current && dimensionsRef.current.width > 0 && layoutRef.current) {
+        const bounds = layoutRef.current.bounds;
+        if (bounds && bounds.maxX > bounds.minX) {
+          interactionRef.current.fitToView(
+            bounds,
+            dimensionsRef.current.width,
+            dimensionsRef.current.height
+          );
+          handleUpdate();
+          pendingFitRef.current = false;
+        }
+      }
+    }, 150); // Longer delay to ensure slider values have settled
+
+    return () => clearTimeout(timerId);
+  }, [layoutResult.bounds, handleUpdate]);
+
   return {
     // Data
     nodes: sankeyData.nodes,

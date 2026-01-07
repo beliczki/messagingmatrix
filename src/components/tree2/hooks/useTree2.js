@@ -527,10 +527,33 @@ export function useTree2({
     }
   }, [treeData.nodes, selectedNode]);
 
-  // Find siblings of a node
+  // Find siblings of a node (same parent)
   const findSiblings = useCallback((node) => {
     if (!node || !node.parent) return [];
     return node.parent.children || [];
+  }, []);
+
+  // Find all nodes at the same level (depth) across all branches
+  const findNodesAtLevel = useCallback((targetLevel) => {
+    const nodesAtLevel = [];
+    const traverse = (node) => {
+      if (node.level === targetLevel) {
+        nodesAtLevel.push(node);
+      }
+      if (node.children) {
+        node.children.forEach(traverse);
+      }
+    };
+    // Traverse from root nodes
+    if (nodesRef.current) {
+      nodesRef.current.forEach(traverse);
+    }
+    // Sort by position (x for vertical tree, y for horizontal)
+    nodesAtLevel.sort((a, b) => {
+      // Use x position as primary sort (works for both orientations after layout)
+      return a.x - b.x;
+    });
+    return nodesAtLevel;
   }, []);
 
   // Navigation functions
@@ -548,6 +571,7 @@ export function useTree2({
     }
   }, [selectAndCenterNode]);
 
+  // Navigate to previous sibling (same parent only)
   const navigateToPrevSibling = useCallback(() => {
     const current = selectedNodeRef.current;
     if (!current) return;
@@ -559,6 +583,7 @@ export function useTree2({
     }
   }, [selectAndCenterNode, findSiblings]);
 
+  // Navigate to next sibling (same parent only)
   const navigateToNextSibling = useCallback(() => {
     const current = selectedNodeRef.current;
     if (!current) return;
@@ -569,6 +594,30 @@ export function useTree2({
       selectAndCenterNode(siblings[currentIndex + 1]);
     }
   }, [selectAndCenterNode, findSiblings]);
+
+  // Navigate to previous node at same level (across branches)
+  const navigateToPrevOnLevel = useCallback(() => {
+    const current = selectedNodeRef.current;
+    if (!current || current.level === undefined) return;
+
+    const levelNodes = findNodesAtLevel(current.level);
+    const currentIndex = levelNodes.findIndex(n => n.id === current.id);
+    if (currentIndex > 0) {
+      selectAndCenterNode(levelNodes[currentIndex - 1]);
+    }
+  }, [selectAndCenterNode, findNodesAtLevel]);
+
+  // Navigate to next node at same level (across branches)
+  const navigateToNextOnLevel = useCallback(() => {
+    const current = selectedNodeRef.current;
+    if (!current || current.level === undefined) return;
+
+    const levelNodes = findNodesAtLevel(current.level);
+    const currentIndex = levelNodes.findIndex(n => n.id === current.id);
+    if (currentIndex >= 0 && currentIndex < levelNodes.length - 1) {
+      selectAndCenterNode(levelNodes[currentIndex + 1]);
+    }
+  }, [selectAndCenterNode, findNodesAtLevel]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -634,6 +683,8 @@ export function useTree2({
     navigateToChild,
     navigateToPrevSibling,
     navigateToNextSibling,
+    navigateToPrevOnLevel,
+    navigateToNextOnLevel,
 
     // Instances (for advanced use)
     getLayout: () => layoutRef.current,

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Filter, Minus, Plus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Square, GripHorizontal, List, PocketKnife, Check, ChevronDown, X } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Filter, Minus, Plus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Square, GripHorizontal, List, PocketKnife, Check, ChevronDown, X, Info } from 'lucide-react';
 
 // Grid 2x2 (informative view)
 const Grid2x2Icon = ({ size = 18 }) => (
@@ -32,9 +32,9 @@ const NetworkIcon = ({ size = 18 }) => (
   </svg>
 );
 
-// Horizontal tree (rotated network icon)
+// Horizontal tree (rotated network icon - root on left)
 const NetworkHorizontalIcon = ({ size = 18 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'rotate(90deg)' }}>
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'rotate(-90deg)' }}>
     <rect x="16" y="16" width="6" height="6" rx="1"/>
     <rect x="2" y="16" width="6" height="6" rx="1"/>
     <rect x="9" y="2" width="6" height="6" rx="1"/>
@@ -256,25 +256,93 @@ const MatrixControlPanel = ({
   };
 
   // Navigation handlers for tree/sankey views
-  const handleNavUp = () => {
-    if (viewMode === 'tree2') tree2Ref?.current?.navigateToPrevSibling?.();
-    else if (viewMode === 'tree3') sankeyRef?.current?.navigateToPrevSibling?.();
-  };
+  // In vertical tree: left/right = jump across branches at same level, up/down = parent/child
+  // In horizontal tree: up/down = jump across branches at same level, left/right = parent/child
+  const handleNavUp = useCallback(() => {
+    if (viewMode === 'tree2') {
+      if (treeOrientation === 'vertical') {
+        tree2Ref?.current?.navigateToParent?.();
+      } else {
+        // Jump across branches at same level
+        tree2Ref?.current?.navigateToPrevOnLevel?.();
+      }
+    } else if (viewMode === 'tree3') {
+      sankeyRef?.current?.navigateToPrevSibling?.();
+    }
+  }, [viewMode, treeOrientation, tree2Ref, sankeyRef]);
 
-  const handleNavDown = () => {
-    if (viewMode === 'tree2') tree2Ref?.current?.navigateToNextSibling?.();
-    else if (viewMode === 'tree3') sankeyRef?.current?.navigateToNextSibling?.();
-  };
+  const handleNavDown = useCallback(() => {
+    if (viewMode === 'tree2') {
+      if (treeOrientation === 'vertical') {
+        tree2Ref?.current?.navigateToChild?.();
+      } else {
+        // Jump across branches at same level
+        tree2Ref?.current?.navigateToNextOnLevel?.();
+      }
+    } else if (viewMode === 'tree3') {
+      sankeyRef?.current?.navigateToNextSibling?.();
+    }
+  }, [viewMode, treeOrientation, tree2Ref, sankeyRef]);
 
-  const handleNavLeft = () => {
-    if (viewMode === 'tree2') tree2Ref?.current?.navigateToParent?.();
-    else if (viewMode === 'tree3') sankeyRef?.current?.navigateToParent?.();
-  };
+  const handleNavLeft = useCallback(() => {
+    if (viewMode === 'tree2') {
+      if (treeOrientation === 'vertical') {
+        // Jump across branches at same level
+        tree2Ref?.current?.navigateToPrevOnLevel?.();
+      } else {
+        tree2Ref?.current?.navigateToParent?.();
+      }
+    } else if (viewMode === 'tree3') {
+      sankeyRef?.current?.navigateToParent?.();
+    }
+  }, [viewMode, treeOrientation, tree2Ref, sankeyRef]);
 
-  const handleNavRight = () => {
-    if (viewMode === 'tree2') tree2Ref?.current?.navigateToChild?.();
-    else if (viewMode === 'tree3') sankeyRef?.current?.navigateToChild?.();
-  };
+  const handleNavRight = useCallback(() => {
+    if (viewMode === 'tree2') {
+      if (treeOrientation === 'vertical') {
+        // Jump across branches at same level
+        tree2Ref?.current?.navigateToNextOnLevel?.();
+      } else {
+        tree2Ref?.current?.navigateToChild?.();
+      }
+    } else if (viewMode === 'tree3') {
+      sankeyRef?.current?.navigateToChild?.();
+    }
+  }, [viewMode, treeOrientation, tree2Ref, sankeyRef]);
+
+  // Keyboard navigation for tree views
+  useEffect(() => {
+    if (viewMode !== 'tree2') return;
+
+    const handleKeyDown = (e) => {
+      // Don't handle if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          handleNavUp();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          handleNavDown();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          handleNavLeft();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          handleNavRight();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewMode, handleNavUp, handleNavDown, handleNavLeft, handleNavRight]);
 
   const handleNavCenter = () => {
     if (viewMode === 'tree2') {
@@ -672,7 +740,7 @@ const MatrixControlPanel = ({
 
           {/* Zoom Controls - Not in feed mode */}
           {viewMode !== 'feed' && (
-            <div className="zoom-controls">
+            <div className="zoom-controls full-width">
               <div className="zoom-row">
                 <button className="zoom-btn" onClick={handleZoomOut}>
                   <Minus size={16} />
@@ -686,19 +754,26 @@ const MatrixControlPanel = ({
                 </button>
               </div>
 
-              {/* Navigation Pad */}
-              <div className="nav-pad">
-                <div></div>
-                <button className="nav-pad-btn" onClick={handleNavUp} title="Previous sibling"><ArrowUp size={16} /></button>
-                <div></div>
-                <button className="nav-pad-btn" onClick={handleNavLeft} title="Go to parent"><ArrowLeft size={16} /></button>
-                <button className="nav-pad-btn center" onClick={handleNavCenter} title="Center on selected">
-                  <Square size={14} />
-                </button>
-                <button className="nav-pad-btn" onClick={handleNavRight} title="Go to child"><ArrowRight size={16} /></button>
-                <div></div>
-                <button className="nav-pad-btn" onClick={handleNavDown} title="Next sibling"><ArrowDown size={16} /></button>
-                <div></div>
+              {/* Navigation Pad - Only for tree views (not sankey) */}
+              {viewMode !== 'tree3' && (
+                <div className="nav-pad">
+                  <div></div>
+                  <button className="nav-pad-btn" onClick={handleNavUp} title="Previous sibling"><ArrowUp size={16} /></button>
+                  <div></div>
+                  <button className="nav-pad-btn" onClick={handleNavLeft} title="Go to parent"><ArrowLeft size={16} /></button>
+                  <button className="nav-pad-btn center" onClick={handleNavCenter} title="Center on selected">
+                    <Square size={14} />
+                  </button>
+                  <button className="nav-pad-btn" onClick={handleNavRight} title="Go to child"><ArrowRight size={16} /></button>
+                  <div></div>
+                  <button className="nav-pad-btn" onClick={handleNavDown} title="Next sibling"><ArrowDown size={16} /></button>
+                  <div></div>
+                </div>
+              )}
+
+              <div className="zoom-info">
+                <Info size={14} />
+                <span>Press space for panning<br />and Zoom-scrolling</span>
               </div>
             </div>
           )}

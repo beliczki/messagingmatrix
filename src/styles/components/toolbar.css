@@ -307,6 +307,28 @@
   color: var(--toolbar-color);
 }
 
+/* --- Full Width Modifier --- */
+.zoom-controls.full-width {
+  width: 100%;
+}
+
+/* --- Zoom Info --- */
+.zoom-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-white);
+  font-size: var(--font-size-xs);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--white-10);
+}
+
+.zoom-info svg {
+  flex-shrink: 0;
+}
+
 .nav-pad-btn.center {
   border-radius: var(--radius-md);
 }

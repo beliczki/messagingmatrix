@@ -468,13 +468,13 @@ export class SankeyLayout {
     // Calculate chord flow positions
     this.calculateChordFlowPositions(levels, flows, nodeMap, centerX, centerY, radius);
 
-    // Calculate bounds - use same bounds as linear layout would have for consistent panning
-    const padding = 100;
+    // Calculate bounds - tight bounds around the circular diagram with padding for labels
+    const labelPadding = 150; // Extra space for labels extending outward
     this.bounds = {
-      minX: Math.min(0, centerX - radius - padding),
-      maxX: Math.max(linearMaxX, centerX + radius + padding),
-      minY: Math.min(0, centerY - radius - padding),
-      maxY: Math.max(linearTotalHeight + 60, centerY + radius + padding)
+      minX: centerX - radius - labelPadding,
+      maxX: centerX + radius + labelPadding,
+      minY: centerY - radius - labelPadding,
+      maxY: centerY + radius + labelPadding
     };
 
     return this.bounds;

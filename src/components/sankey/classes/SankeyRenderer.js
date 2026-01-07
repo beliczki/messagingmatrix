@@ -378,7 +378,10 @@ export class SankeyRenderer {
     // Skip labels for very short flows (unless being highlighted)
     if (flowHeight * zoom < 12 && highlightAmount < 0.3) return;
 
-    const text = node.getDisplayText ? node.getDisplayText(30) : (node.value || '');
+    // Show full text when highlighted/selected, otherwise truncate
+    const text = highlightAmount > 0.3
+      ? (node.value || '')
+      : (node.getDisplayText ? node.getDisplayText(30) : (node.value || ''));
     if (!text) return;
 
     // Interpolate font size: normal (9-12) -> highlighted (14-18), scaled by textScale
@@ -672,7 +675,10 @@ export class SankeyRenderer {
 
     if (!node.radius || node.angle === undefined) return;
 
-    const text = node.getDisplayText ? node.getDisplayText(20) : (node.value || '');
+    // Show full text when highlighted/selected, otherwise truncate
+    const text = highlightAmount > 0.3
+      ? (node.value || '')
+      : (node.getDisplayText ? node.getDisplayText(20) : (node.value || ''));
     if (!text) return;
 
     // Calculate label position (outside the arc)
