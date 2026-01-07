@@ -978,7 +978,7 @@ const MatrixGridView = ({
               {visibleAudiences.map((aud) => (
                 <td key={aud.key} style={{ backgroundColor: 'var(--color-primary)' }}></td>
               ))}
-              <td style={{ width: '20rem', minWidth: '20rem', backgroundColor: 'var(--color-primary)' }}></td>
+              <td style={{ width: '20rem', minWidth: '20rem', height: '20rem', backgroundColor: 'var(--color-primary)' }}></td>
             </tr>
           </tbody>
         </table>
