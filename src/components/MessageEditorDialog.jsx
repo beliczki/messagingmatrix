@@ -999,6 +999,7 @@ const MessageEditorDialog = ({
     }
 
     // Populate template with message data using template.json bindings
+    const templateName = editingMessage.template || 'html';
     if (templateConfig && templateConfig.placeholders) {
       Object.keys(templateConfig.placeholders).forEach(placeholderName => {
         const config = templateConfig.placeholders[placeholderName];
@@ -1066,9 +1067,9 @@ const MessageEditorDialog = ({
 
           // Use path-messagingmatrix for images and videos
           if ((config.type === 'image' || config.type === 'video') && value) {
-            // Special case: empty.png is a placeholder, serve from public folder
+            // Special case: empty.png is a placeholder, serve from template folder
             if (value.toLowerCase() === 'empty.png') {
-              value = '/empty.png';
+              value = `/api/templates/${templateName}/empty.png`;
             } else {
               const pathPrefix = config['path-messagingmatrix'] || '';
               // If value is already a full URL, use it as-is
