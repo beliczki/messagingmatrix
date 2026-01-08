@@ -118,7 +118,6 @@ const CreativePreview = ({
   const populateTemplate = (html, msg) => {
     if (!msg || !html) return html;
     let result = html;
-    const templateName = msg.template || 'html';
 
     if (templateConfig && templateConfig.placeholders) {
       Object.keys(templateConfig.placeholders).forEach(placeholderName => {
@@ -147,23 +146,18 @@ const CreativePreview = ({
 
           // Use path-messagingmatrix for images and videos
           if ((config.type === 'image' || config.type === 'video') && value) {
-            // Special case: empty.png is a placeholder, serve from template folder
-            if (value.toLowerCase() === 'empty.png') {
-              value = `/api/templates/${templateName}/empty.png`;
-            } else {
-              const pathPrefix = config['path-messagingmatrix'] || '';
-              // If value is already a full URL, use it as-is
-              if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
-                // If it starts with /, it's a relative path, so prepend the path prefix
-                if (value.startsWith('/') && !pathPrefix) {
-                  value = value; // Keep as-is
-                } else if (!value.startsWith('http')) {
-                  value = pathPrefix + value;
-                }
-              } else {
-                // It's a file ID or filename, prepend the path
+            const pathPrefix = config['path-messagingmatrix'] || '';
+            // If value is already a full URL, use it as-is
+            if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+              // If it starts with /, it's a relative path, so prepend the path prefix
+              if (value.startsWith('/') && !pathPrefix) {
+                value = value; // Keep as-is
+              } else if (!value.startsWith('http')) {
                 value = pathPrefix + value;
               }
+            } else {
+              // It's a file ID or filename, prepend the path
+              value = pathPrefix + value;
             }
           }
         }
