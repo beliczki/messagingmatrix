@@ -1,12 +1,5 @@
 {
     "default_size": "300x250",
-    "sizes": [
-        { "width": 300, "height": 250, "name": "Medium Rectangle" },
-        { "width": 300, "height": 600, "name": "Half Page" },
-        { "width": 970, "height": 250, "name": "Billboard" },
-        { "width": 640, "height": 360, "name": "Social Video" },
-        { "width": 1080, "height": 1080, "name": "Social Square" }
-    ],
     "placeholders": {
         "advert_id": {
             "type": "var",

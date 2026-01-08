@@ -1439,10 +1439,17 @@ app.get('/api/templates', (req, res) => {
           : [];
 
         // Extract dimensions from CSS filenames (e.g., "300x250.css" -> "300x250")
+        // This is the source of truth for available sizes
         const dimensions = files
           .filter(file => /^\d+x\d+\.css$/.test(file))
           .map(file => file.replace('.css', ''))
           .sort();
+
+        // Generate sizes array from CSS files (replaces template.json sizes)
+        const sizes = dimensions.map(dim => {
+          const [width, height] = dim.split('x').map(Number);
+          return { width, height, name: dim };
+        });
 
         // Get file metadata including last modified time
         const filesWithMeta = files.map(file => {
@@ -1484,7 +1491,9 @@ app.get('/api/templates', (req, res) => {
               ).lastModified
             : new Date().toISOString(),
           description: 'Template',
-          ...templateData
+          ...templateData,
+          // Override sizes from template.json with CSS-derived sizes (source of truth)
+          sizes: sizes.length > 0 ? sizes : templateData.sizes
         };
       });
 
@@ -1527,7 +1536,8 @@ app.get('/api/templates/folders', (req, res) => {
 app.get('/api/templates/:templateName/:fileName', (req, res) => {
   try {
     const { templateName, fileName } = req.params;
-    const filePath = path.join(templatesDir, templateName, fileName);
+    const templatePath = path.join(templatesDir, templateName);
+    const filePath = path.join(templatePath, fileName);
 
     // Security check: ensure the path is within templates directory
     const resolvedPath = path.resolve(filePath);
@@ -1541,6 +1551,37 @@ app.get('/api/templates/:templateName/:fileName', (req, res) => {
     }
 
     const content = fs.readFileSync(filePath, 'utf8');
+
+    // For template.json, inject CSS-derived sizes (source of truth)
+    if (fileName === 'template.json') {
+      try {
+        const config = JSON.parse(content);
+
+        // Get sizes from CSS filenames
+        const files = fs.readdirSync(templatePath);
+        const dimensions = files
+          .filter(file => /^\d+x\d+\.css$/.test(file))
+          .map(file => file.replace('.css', ''))
+          .sort();
+
+        // Generate sizes array from CSS files
+        const sizes = dimensions.map(dim => {
+          const [width, height] = dim.split('x').map(Number);
+          return { width, height, name: dim };
+        });
+
+        // Override sizes if CSS files exist
+        if (sizes.length > 0) {
+          config.sizes = sizes;
+        }
+
+        return res.json({ content: JSON.stringify(config, null, 2) });
+      } catch (e) {
+        // If JSON parse fails, return raw content
+        console.warn(`Failed to parse template.json for ${templateName}:`, e);
+      }
+    }
+
     res.json({ content });
   } catch (error) {
     console.error('Error reading template file:', error);
