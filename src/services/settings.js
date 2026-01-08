@@ -205,18 +205,21 @@ class SettingsService {
   // Get creative parsing rules (object with field rules)
   // Returns default rules merged with any configured rules
   getCreativeParsingRules() {
-    // Default parsing rules
-    // Example filename: ERSTE_SZK_MC171_b_calculator_mockup_lakasfelujitas_n3_1200x628.png
+    // Default parsing rules - generic pattern, not brand-specific
+    // Example filenames:
+    //   NobilisTilia_RejuvenatingNAD_mc85_b_nobilisTemplates_packshot_emotional_evening_n1_970x250.png
+    //   ERSTE_SZA_MC287_b_BeErste3_Erstes-leszek_pro_n2_300x600.jpg
+    // Pattern: Brand_Product_MCnumber_Variant_..._nX_Dimensions.ext
     const defaults = {
-      Brand: { rule: 'fixed', value: 'ERSTE' },
-      Product: { rule: 'after_segment', afterValue: 'ERSTE', matchKeywords: false },
-      Type: { rule: 'extension_type' },
+      Brand: { rule: 'segment', index: 0 },           // First segment = brand
+      Product: { rule: 'segment', index: 1 },         // Second segment = product
+      Type: { rule: 'extension_type' },               // Based on file extension
       Visual_keyword: { rule: 'empty' },
-      MC_Number: { rule: 'pattern', pattern: 'MC(\\d+)', extractGroup: 1 },
-      MC_Variant: { rule: 'after_pattern', pattern: '^MC\\d+$' },
-      Version: { rule: 'pattern', pattern: '[nv](\\d+)', extractGroup: 1 },
-      File_dimensions: { rule: 'last_segment', pattern: '(\\d+)x(\\d+)' },
-      Visual_description: { rule: 'remaining' }
+      MC_Number: { rule: 'pattern', pattern: '[Mm][Cc](\\d+)', extractGroup: 1 },  // MC or mc followed by digits
+      MC_Variant: { rule: 'after_pattern', pattern: '^[Mm][Cc]\\d+$' },            // Segment after MC number
+      Version: { rule: 'pattern', pattern: '[nv](\\d+)', extractGroup: 1 },        // n1, n2, v1, v2, etc.
+      File_dimensions: { rule: 'last_segment', pattern: '(\\d+)x(\\d+)' },         // Last segment with WxH pattern
+      Visual_description: { rule: 'remaining' }       // Everything else
     };
 
     const configuredRules = this.settings?.creativeParsingRules;
