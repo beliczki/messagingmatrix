@@ -1066,18 +1066,23 @@ const MessageEditorDialog = ({
 
           // Use path-messagingmatrix for images and videos
           if ((config.type === 'image' || config.type === 'video') && value) {
-            const pathPrefix = config['path-messagingmatrix'] || '';
-            // If value is already a full URL, use it as-is
-            if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
-              // If it starts with /, it's a relative path, so prepend the path prefix if available
-              if (value.startsWith('/') && pathPrefix) {
-                value = pathPrefix + value;
-              } else if (!value.startsWith('http') && pathPrefix) {
+            // Special case: empty.png is a placeholder, serve from public folder
+            if (value.toLowerCase() === 'empty.png') {
+              value = '/empty.png';
+            } else {
+              const pathPrefix = config['path-messagingmatrix'] || '';
+              // If value is already a full URL, use it as-is
+              if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+                // If it starts with /, it's a relative path, so prepend the path prefix if available
+                if (value.startsWith('/') && pathPrefix) {
+                  value = pathPrefix + value;
+                } else if (!value.startsWith('http') && pathPrefix) {
+                  value = pathPrefix + value;
+                }
+              } else {
+                // It's a file ID or filename, prepend the path
                 value = pathPrefix + value;
               }
-            } else {
-              // It's a file ID or filename, prepend the path
-              value = pathPrefix + value;
             }
           }
         }
