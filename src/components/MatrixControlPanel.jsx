@@ -754,8 +754,8 @@ const MatrixControlPanel = ({
                 </button>
               </div>
 
-              {/* Navigation Pad - Only for tree views (not sankey) */}
-              {viewMode !== 'tree3' && (
+              {/* Navigation Pad - Only for tree2 view */}
+              {viewMode === 'tree2' && (
                 <div className="nav-pad">
                   <div></div>
                   <button className="nav-pad-btn" onClick={handleNavUp} title="Previous sibling"><ArrowUp size={16} /></button>
@@ -773,7 +773,12 @@ const MatrixControlPanel = ({
 
               <div className="zoom-info">
                 <Info size={14} />
-                <span>Press space for panning<br />and Zoom-scrolling</span>
+                <span>
+                  {viewMode === 'matrix'
+                    ? 'Press space for Zoom-scrolling'
+                    : <>Press space for panning<br />and Zoom-scrolling</>
+                  }
+                </span>
               </div>
             </div>
           )}
