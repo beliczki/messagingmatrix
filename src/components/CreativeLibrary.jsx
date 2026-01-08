@@ -152,14 +152,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     const loadTemplatesForMessages = async () => {
       if (!matrixData?.messages) return;
 
-      // Get unique templates from messages (default to 'html')
+      // Get unique templates from messages (only load explicitly set templates)
       const templates = new Set();
+      const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
+
       matrixData.messages.forEach(msg => {
-        const templateName = msg.template || 'html';
-        // Only load HTML-based templates
-        const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
-        if (!nonHtmlTemplates.includes(templateName)) {
-          templates.add(templateName);
+        // Skip messages without a template - don't default to 'html'
+        if (!msg.template) return;
+
+        // Only load HTML-based templates (skip Adobe PSD, Adobe AEP, etc.)
+        if (!nonHtmlTemplates.includes(msg.template)) {
+          templates.add(msg.template);
         }
       });
 
@@ -177,7 +180,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   // Helper to get template data for a creative
   const getTemplateForCreative = useCallback((creative) => {
     if (!creative?.isDynamic) return { html: '', config: null, css: null };
-    const templateName = creative.messageData?.template || 'html';
+    const templateName = creative.messageData?.template;
+    if (!templateName) return { html: '', config: null, css: null };
     return templatesCache[templateName] || { html: '', config: null, css: null };
   }, [templatesCache]);
 
@@ -628,13 +632,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             return; // Skip - this message uses a non-HTML template
           }
 
+          // Skip messages without a template set - don't default to HTML
+          // (Only generate HTML creatives if template is explicitly set to an HTML template name)
+          if (!message.template) {
+            return; // Skip - no template configured
+          }
+
           // Look up product from audiences based on message.audience
           // Only use actual product values - don't fallback to message name/number
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
           const product = audience?.product || '';
 
           // Get template-specific sizes for this message
-          const templateName = message.template || 'html';
+          const templateName = message.template; // template is guaranteed to be set (checked above)
           const templateSizes = getTemplateSizes(templateName);
 
           const messageCreatives = templateSizes.map((size) => ({
@@ -894,9 +904,21 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   }, [matrixData?.audiences, creatives]);
 
   // Set all products selected by default when availableProducts changes
+  // Also clean up stale products from localStorage that no longer exist
   useEffect(() => {
-    if (availableProducts.length > 0 && productFilter.length === 0) {
-      setProductFilter(availableProducts);
+    if (availableProducts.length > 0) {
+      if (productFilter.length === 0) {
+        // No filter set - select all products
+        setProductFilter(availableProducts);
+      } else {
+        // Validate existing filter - remove products that no longer exist
+        const validProducts = productFilter.filter(p => availableProducts.includes(p));
+        if (validProducts.length !== productFilter.length) {
+          // Some products were invalid - update filter
+          // If all were invalid, select all available
+          setProductFilter(validProducts.length > 0 ? validProducts : availableProducts);
+        }
+      }
     }
   }, [availableProducts, productFilter.length]);
 
