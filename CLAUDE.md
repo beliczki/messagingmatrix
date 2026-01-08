@@ -168,10 +168,45 @@ const handleDelete = (id) => {
 | `ESC` | Exit selection mode |
 | `Space` (hold) | Pan mode |
 
-### Templates
-- Location: `src/templates/html/`
-- Preview uses `previewService.js`
-- CSS injection for size-specific styles
+### Templates & Asset Loading
+
+**Location**: `src/templates/{templateName}/`
+
+Each template folder contains:
+- `index.html` - Template HTML with placeholders `{{placeholder_name}}`
+- `template.json` - Config with placeholder bindings and path prefixes
+- `main.css` - Main stylesheet
+- `{width}x{height}.css` - Size-specific styles
+- `empty.png` - Transparent placeholder image (REQUIRED for each template)
+
+**How image/video assets load:**
+
+1. **Message has value** (e.g., `image1: "abc123"` or `image1: "empty.png"`):
+   - Uses `path-messagingmatrix` from template.json (e.g., `/api/drive/proxy/`)
+   - Result: `/api/drive/proxy/abc123` or `/api/drive/proxy/empty.png`
+
+2. **Message field is empty** (`image1: ""`):
+   - Template's hardcoded `url('empty.png')` in HTML stays as-is after placeholder replacement
+   - After population, regex fixes these to `/api/templates/{templateName}/empty.png`
+
+**Key files for template rendering:**
+- `CreativeLibraryItem.jsx` - Masonry view thumbnails
+- `CreativePreview.jsx` - Full preview modal
+- `MessageEditorDialog.jsx` - MC editor preview
+
+**When creating a new template:**
+1. Copy an existing template folder
+2. **MUST include `empty.png`** - transparent 1x1 pixel PNG placeholder
+3. Update `template.json` with correct bindings
+4. CSS files loaded via `/api/templates/{name}/{file}.css`
+
+**Template asset path resolution:**
+```
+Template HTML: url('empty.png')  →  /api/templates/{name}/empty.png
+Message value: "abc123"          →  /api/drive/proxy/abc123
+Message value: "empty.png"       →  /api/drive/proxy/empty.png (actual asset)
+Message value: ""                →  Template's empty.png stays, fixed by regex
+```
 
 ### Tasks & MC Status Sync
 **IMPORTANT: Tasks drive MC status**
