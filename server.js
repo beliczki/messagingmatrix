@@ -117,7 +117,9 @@ const allowedOrigins = [
   'https://erste.messagingmatrix.ai',
   'http://erste.messagingmatrix.ai',
   'https://telekom.messagingmatrix.ai',
-  'http://telekom.messagingmatrix.ai'
+  'http://telekom.messagingmatrix.ai',
+  'https://proficio.messagingmatrix.ai',
+  'http://proficio.messagingmatrix.ai'
 ];
 
 // Add development origins
