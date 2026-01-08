@@ -202,7 +202,18 @@ const CreativePreview = ({
     }
 
     // Populate template with message data
-    const populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
+    let populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
+
+    // Fix any remaining hardcoded empty.png references in template HTML
+    const tplName = creative.messageData?.template || 'html';
+    populatedHtml = populatedHtml.replace(
+      /url\(['"]?empty\.png['"]?\)/gi,
+      `url('/api/templates/${tplName}/empty.png')`
+    );
+    populatedHtml = populatedHtml.replace(
+      /src=['"]empty\.png['"]/gi,
+      `src="/api/templates/${tplName}/empty.png"`
+    );
 
     return (
       <div className="bg-gray-900 p-4 rounded-lg flex items-center justify-center">

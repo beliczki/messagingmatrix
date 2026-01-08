@@ -238,7 +238,18 @@ const CreativeLibraryItem = ({
           }
 
           // Populate template with message data
-          const populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
+          let populatedHtml = populateTemplate(htmlWithCss, creative.messageData);
+
+          // Fix any remaining hardcoded empty.png references in template HTML
+          const templateName = creative.messageData?.template || 'html';
+          populatedHtml = populatedHtml.replace(
+            /url\(['"]?empty\.png['"]?\)/gi,
+            `url('/api/templates/${templateName}/empty.png')`
+          );
+          populatedHtml = populatedHtml.replace(
+            /src=['"]empty\.png['"]/gi,
+            `src="/api/templates/${templateName}/empty.png"`
+          );
 
           return (
             <div className="w-full overflow-hidden">

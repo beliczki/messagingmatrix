@@ -1098,6 +1098,16 @@ const MessageEditorDialog = ({
     html = html.replace(/\{\{[^}]+\}\}/g, '');
     html = html.replace(/\[\[[^\]]+\]\]/g, '');
 
+    // Fix any remaining hardcoded empty.png references in template HTML
+    html = html.replace(
+      /url\(['"]?empty\.png['"]?\)/gi,
+      `url('/api/templates/${templateName}/empty.png')`
+    );
+    html = html.replace(
+      /src=['"]empty\.png['"]/gi,
+      `src="/api/templates/${templateName}/empty.png"`
+    );
+
     // Add size class to body tag for CSS-based text formatting
     // Handle both cases: body with existing class and body without class
     if (/<body[^>]*class=/i.test(html)) {
