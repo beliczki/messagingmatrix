@@ -2,8 +2,7 @@
     "default_size": "300x250",
     "sizes": [
         { "width": 300, "height": 250, "name": "Medium Rectangle" },
-        { "width": 300, "height": 600, "name": "Half Page" },
-        { "width": 1080, "height": 510, "name": "DooH Landscape" }
+        { "width": 300, "height": 600, "name": "Half Page" }
     ],
     "placeholders": {
         "advert_id": {
