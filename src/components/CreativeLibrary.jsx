@@ -52,6 +52,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [syncProgress, setSyncProgress] = useState(null); // { type: 'loading' | 'success' | 'error', message: string }
   const [hasAutoSynced, setHasAutoSynced] = useState(false);
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
+  const [pendingDriveChanges, setPendingDriveChanges] = useState(null); // { added: number, removed: number }
 
   // Filter states (load from localStorage if available)
   const [productFilter, setProductFilter] = useState(() => {
@@ -308,12 +309,26 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             }
           }
 
-          // Build creative object - use parsed data directly since it now contains all configured fields
+          // Build creative object with EXACT field order matching spreadsheet structure
           const creative = {
-            ...parsedData, // Include all parsed fields from configurable parser
             ID: maxId + index + 1,
+            Brand: parsedData.Brand || '',
+            Product: parsedData.Product || '',
+            Type: parsedData.Type || '',
+            Visual_keyword: parsedData.Visual_keyword || '',
+            Visual_description: parsedData.Visual_description || '',
+            MC_Number: parsedData.MC_Number || '',
+            MC_Variant: parsedData.MC_Variant || '',
+            Version: parsedData.Version || '',
+            File_format: parsedData.File_format || '',
             File_driveID: file.id || parsedData.File_driveID || '',
+            File_name: parsedData.File_name || file.name || '',
+            File_size: parsedData.File_size || '',
+            File_date: parsedData.File_date || '',
             File_dimensions: parsedData.File_dimensions || (bannerSize ? `${bannerSize.width}x${bannerSize.height}` : ''),
+            File_DirectLink: parsedData.File_DirectLink || '',
+            File_thumbnail: parsedData.File_thumbnail || '',
+            Is_Dynamic: parsedData.Is_Dynamic || 'FALSE'
           };
 
           return creative;
@@ -322,29 +337,31 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         updatedCreatives = [...updatedCreatives, ...parsedNewCreatives];
       }
 
-      // Update local state
+      // Update local state only (don't auto-save to prevent data loss race condition)
       matrixData.setCreatives(updatedCreatives);
 
-      // Check if matrix data is loaded before saving to spreadsheet
-      const canSave = (matrixData.audiences?.length > 0) ||
-                      (matrixData.topics?.length > 0) ||
-                      (matrixData.messages?.length > 0);
+      // Track pending changes with IDs for "Changes Only" view - user must explicitly save
+      // Get the IDs directly from the newly added creatives (last N items in updatedCreatives)
+      const addedIds = newCreatives.length > 0
+        ? updatedCreatives.slice(-newCreatives.length).map(c => String(c.ID))
+        : [];
+      // Get the IDs of removed creatives
+      const removedIds = deletedCreatives.map(c => String(c.ID));
 
-      if (canSave) {
-        // Save to spreadsheet
-        await matrixData.save(null, null, null, updatedCreatives);
-      } else {
-        console.warn('⚠️ Matrix data not loaded - creatives updated locally but not saved to spreadsheet');
-      }
-
-      const savedNote = canSave ? '' : '\n\n⚠️ Note: Changes not saved to spreadsheet (no matrix data loaded)';
-      setSyncProgress({
-        type: 'success',
-        message: `Successfully synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives${savedNote}`
+      setPendingDriveChanges({
+        added: newCreatives.length,
+        removed: deletedCreatives.length,
+        addedIds,
+        removedIds
       });
 
-      // Auto-dismiss after 3 seconds
-      setTimeout(() => setSyncProgress(null), 3000);
+      setSyncProgress({
+        type: 'success',
+        message: `Synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives\n\n⚠️ Changes are pending - click Save to persist to spreadsheet.`
+      });
+
+      // Auto-dismiss after 5 seconds (longer to give user time to read)
+      setTimeout(() => setSyncProgress(null), 5000);
 
     } catch (err) {
       console.error('Drive sync error:', err);
@@ -832,6 +849,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Save with progress tracking
   const handleSaveWithProgress = async () => {
+    // Safety check: don't save if matrix data isn't fully loaded
+    if (!matrixData?.isFullyLoaded) {
+      setSaveProgress({
+        step: 0,
+        total: 1,
+        message: 'Cannot save: Matrix data is still loading. Please wait for data to fully load.',
+        error: true
+      });
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setSaveProgress(null);
+      return;
+    }
+
     const steps = [
       'Preparing data for save...',
       'Saving creatives to spreadsheet...',
@@ -851,6 +881,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           await matrixData.save(null, null, null, matrixData.creatives);
         }
       }
+
+      // Clear pending drive changes after successful save
+      setPendingDriveChanges(null);
 
       // Keep success message visible for a moment
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -974,7 +1007,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       // Type filter
       let matchesType = true;
       if (typeFilter.length > 0) {
-        const isDynamicHTML = creative.isDynamic || creative.extension === 'html';
+        // Only check isDynamic flag - extension doesn't determine if it's a dynamic template
+        const isDynamicHTML = creative.isDynamic === true;
 
         if (typeFilter.includes('Dynamic HTML') && typeFilter.includes('Adobe generated')) {
           matchesType = true; // Both selected = show all
@@ -1352,6 +1386,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           assetsFolderId={assetsFolderId}
           onSyncCreatives={syncWithDrive}
           syncingCreatives={loadingDrive}
+          // Module-specific props
+          activeTabs={['creatives']}
+          pendingChanges={pendingDriveChanges}
+          isFullyLoaded={matrixData?.isFullyLoaded}
         />
         <AIAssistant
           moduleContext={{ module: 'creative-library' }}

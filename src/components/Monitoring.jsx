@@ -85,6 +85,9 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
           downloadFeedCSV={() => {}}
           changeTracking={matrixData?.changeTracking}
           originalState={matrixData?.originalState}
+          // Monitoring is read-only
+          activeTabs={[]}
+          isFullyLoaded={matrixData?.isFullyLoaded}
         />
         <AIAssistant
           moduleContext={{ module: 'monitoring' }}

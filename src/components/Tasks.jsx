@@ -528,6 +528,9 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
             onClearReload={clearAndReloadApp}
             changeTracking={matrixData?.changeTracking}
             originalState={matrixData?.originalState}
+            // Tasks saves to SQLite, not spreadsheet
+            activeTabs={['tasks']}
+            isFullyLoaded={matrixData?.isFullyLoaded}
           />
           <AIAssistant
             ref={claudeChatRef}

@@ -694,6 +694,9 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
           assetsFolderId={assetsFolderId}
           onSyncAssets={syncWithDrive}
           syncingAssets={loadingDrive}
+          // Module-specific props
+          activeTabs={['assets']}
+          isFullyLoaded={matrixData?.isFullyLoaded}
         />
         <AIAssistant
           moduleContext={{ module: 'assets' }}

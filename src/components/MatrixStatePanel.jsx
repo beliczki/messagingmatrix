@@ -53,7 +53,11 @@ const MatrixStatePanel = ({
   onSyncCreatives,
   onSyncAssets,
   syncingCreatives = false,
-  syncingAssets = false
+  syncingAssets = false,
+  // Module-specific props
+  activeTabs = null, // null = all tabs active, array = only these tabs are active for this module
+  pendingChanges = null, // { added: number, removed: number } - pending drive sync changes
+  isFullyLoaded = true // Whether matrix data is fully loaded
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -128,10 +132,18 @@ const MatrixStatePanel = ({
 
   // Get change count for a specific tab
   const getTabChangeCount = (tabId) => {
-    if (!changeTracking) return 0;
-    const tabChanges = changeTracking[tabId];
-    if (!tabChanges) return 0;
-    return (tabChanges.added?.length || 0) + (tabChanges.modified?.length || 0);
+    let count = 0;
+    if (changeTracking) {
+      const tabChanges = changeTracking[tabId];
+      if (tabChanges) {
+        count = (tabChanges.added?.length || 0) + (tabChanges.modified?.length || 0);
+      }
+    }
+    // Add pending Drive changes for creatives tab
+    if (tabId === 'creatives' && pendingChanges) {
+      count += (pendingChanges.added || 0) + (pendingChanges.removed || 0);
+    }
+    return count;
   };
 
   const tabs = [
@@ -180,14 +192,39 @@ const MatrixStatePanel = ({
     const data = getActiveTabData();
     const changes = getActiveTabChanges();
 
-    if (!changesOnly || !changes || !Array.isArray(data)) {
+    if (!changesOnly) {
       return data;
     }
 
-    const { added, modified } = changes;
-    const changedIds = new Set([...added, ...modified]);
+    if (!Array.isArray(data)) {
+      return data;
+    }
 
-    return data.filter(item => changedIds.has(String(item.id)));
+    // Collect all changed IDs from changeTracking
+    const changedIds = new Set();
+    if (changes) {
+      const { added, modified } = changes;
+      added?.forEach(id => changedIds.add(String(id)));
+      modified?.forEach(id => changedIds.add(String(id)));
+    }
+
+    // Add pending Drive sync changes for creatives tab
+    if (activeTab === 'creatives' && pendingChanges) {
+      if (pendingChanges.addedIds) {
+        pendingChanges.addedIds.forEach(id => changedIds.add(String(id)));
+      }
+    }
+
+    // If no changes to show, return empty array
+    if (changedIds.size === 0) {
+      return [];
+    }
+
+    // Note: creatives use uppercase 'ID' field, others use lowercase 'id'
+    return data.filter(item => {
+      const itemId = String(item.id ?? item.ID ?? '');
+      return changedIds.has(itemId);
+    });
   };
 
   // Render JSON with highlighted changes
@@ -196,16 +233,32 @@ const MatrixStatePanel = ({
       return JSON.stringify(data, null, 2);
     }
 
-    if (!changes) {
+    // Build sets for all added/modified IDs
+    const addedIds = new Set();
+    const modifiedIds = new Set();
+    let changedFields = {};
+
+    if (changes) {
+      changes.added?.forEach(id => addedIds.add(String(id)));
+      changes.modified?.forEach(id => modifiedIds.add(String(id)));
+      changedFields = changes.changedFields || {};
+    }
+
+    // Include pending Drive changes for creatives tab (treat as "added")
+    if (activeTab === 'creatives' && pendingChanges?.addedIds) {
+      pendingChanges.addedIds.forEach(id => addedIds.add(String(id)));
+    }
+
+    // If no changes at all, just return plain JSON
+    if (addedIds.size === 0 && modifiedIds.size === 0) {
       return data.map(item => JSON.stringify(item, null, 2)).join(',\n');
     }
 
-    const { added, modified, changedFields } = changes;
-
     return data.map((item) => {
-      const id = String(item.id);
-      const isAdded = added.includes(id);
-      const isModified = modified.includes(id);
+      // Note: creatives use uppercase 'ID' field, others use lowercase 'id'
+      const id = String(item.id ?? item.ID ?? '');
+      const isAdded = addedIds.has(id);
+      const isModified = modifiedIds.has(id);
       const itemChangedFields = changedFields[id] || [];
 
       if (!isAdded && !isModified) {
@@ -242,6 +295,8 @@ const MatrixStatePanel = ({
   };
 
   const changeCount = changeTracking?.totalChanges || 0;
+  const pendingCount = pendingChanges ? (pendingChanges.added || 0) + (pendingChanges.removed || 0) : 0;
+  const totalBadgeCount = changeCount + pendingCount;
 
   return (
     <>
@@ -257,18 +312,21 @@ const MatrixStatePanel = ({
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onSave(); }}
-          disabled={isSaving || saveProgress !== null}
+          disabled={isSaving || saveProgress !== null || !isFullyLoaded}
           className="bottom-panel-btn"
-          style={{ opacity: isSaving || saveProgress ? 0.7 : 1, position: 'relative' }}
+          style={{ opacity: isSaving || saveProgress || !isFullyLoaded ? 0.7 : 1, position: 'relative' }}
+          title={!isFullyLoaded ? 'Matrix data is still loading...' : undefined}
         >
           {saveProgress ? (
             <><Loader size={14} className="animate-spin" /> Saving...</>
           ) : isSaving ? (
             <><Loader size={14} className="animate-spin" /> Saving...</>
+          ) : !isFullyLoaded ? (
+            <><Loader size={14} className="animate-spin" /> Loading...</>
           ) : (
             <>Save</>
           )}
-          {changeCount > 0 && !isSaving && !saveProgress && (
+          {totalBadgeCount > 0 && !isSaving && !saveProgress && isFullyLoaded && (
             <span style={{
               position: 'absolute',
               top: '-6px',
@@ -283,7 +341,7 @@ const MatrixStatePanel = ({
               textAlign: 'center',
               boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
             }}>
-              {changeCount}
+              {totalBadgeCount}
             </span>
           )}
         </button>
@@ -441,37 +499,46 @@ const MatrixStatePanel = ({
 
                 {/* Vertical Tabs */}
                 <div className="dialog-tabs">
-                  {tabs.map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`dialog-tab ${activeTab === tab.id ? 'active' : ''}`}
-                    >
-                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '1rem', fontWeight: 500 }}>
-                        {tab.label}
-                        <span style={{
-                          fontSize: '11px',
-                          opacity: 0.7,
-                          fontWeight: 400
-                        }}>
-                          ({tab.count})
-                        </span>
-                        {tab.changes > 0 && (
+                  {tabs.map(tab => {
+                    // If activeTabs is set, dim icons/counters for tabs that aren't in the active list
+                    const isTabActive = !activeTabs || activeTabs.includes(tab.id);
+                    const dimmedOpacity = isTabActive ? 1 : 0.4;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`dialog-tab ${activeTab === tab.id ? 'active' : ''}`}
+                        title={!isTabActive ? 'Not affected by save from this module' : undefined}
+                      >
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '1rem', fontWeight: 500 }}>
+                          {tab.label}
                           <span style={{
-                            fontSize: '10px',
-                            background: '#ffcc00',
-                            color: '#000',
-                            padding: '1px 6px',
-                            borderRadius: '8px',
-                            fontWeight: 600
+                            fontSize: '11px',
+                            opacity: isTabActive ? 0.7 : 0.3,
+                            fontWeight: 400,
+                            transition: 'opacity 0.2s ease'
                           }}>
-                            {tab.changes}
+                            ({tab.count})
                           </span>
-                        )}
-                      </h3>
-                      <tab.icon size={18} />
-                    </button>
-                  ))}
+                          {tab.changes > 0 && (
+                            <span style={{
+                              fontSize: '10px',
+                              background: '#ffcc00',
+                              color: '#000',
+                              padding: '1px 6px',
+                              borderRadius: '8px',
+                              fontWeight: 600,
+                              opacity: dimmedOpacity,
+                              transition: 'opacity 0.2s ease'
+                            }}>
+                              {tab.changes}
+                            </span>
+                          )}
+                        </h3>
+                        <tab.icon size={18} style={{ opacity: dimmedOpacity, transition: 'opacity 0.2s ease' }} />
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Actions */}
@@ -502,18 +569,21 @@ const MatrixStatePanel = ({
                   </div>
                   <button
                     onClick={onSave}
-                    disabled={isSaving || saveProgress !== null}
+                    disabled={isSaving || saveProgress !== null || !isFullyLoaded}
                     className="btn btn-primary btn-lg"
-                    style={{ position: 'relative' }}
+                    style={{ position: 'relative', opacity: !isFullyLoaded ? 0.7 : 1 }}
+                    title={!isFullyLoaded ? 'Matrix data is still loading...' : undefined}
                   >
                     {saveProgress ? (
                       <><Loader size={14} className="animate-spin" /> {saveProgress.message}</>
                     ) : isSaving ? (
                       <><Loader size={14} className="animate-spin" /> Saving...</>
+                    ) : !isFullyLoaded ? (
+                      <><Loader size={14} className="animate-spin" /> Loading...</>
                     ) : (
                       <>Save to Sheets</>
                     )}
-                    {changeCount > 0 && !isSaving && !saveProgress && (
+                    {totalBadgeCount > 0 && !isSaving && !saveProgress && isFullyLoaded && (
                       <span style={{
                         position: 'absolute',
                         top: '-6px',
@@ -528,7 +598,7 @@ const MatrixStatePanel = ({
                         textAlign: 'center',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
                       }}>
-                        {changeCount}
+                        {totalBadgeCount}
                       </span>
                     )}
                   </button>

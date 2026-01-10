@@ -222,6 +222,9 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
           downloadFeedCSV={() => {}}
           changeTracking={matrixData?.changeTracking}
           originalState={matrixData?.originalState}
+          // Templates are stored as files, not in spreadsheet
+          activeTabs={[]}
+          isFullyLoaded={matrixData?.isFullyLoaded}
         />
       </div>
     </div>

@@ -642,6 +642,9 @@ export const useMatrix = (currentUser = null) => {
 
   prevDepsRef.current = { audiences, topics, messages, keywords, assets, creatives, textFormatting };
 
+  // Computed: Matrix data is fully loaded when not loading and has core data
+  const isFullyLoaded = !isLoading && audiences.length > 0 && topics.length > 0;
+
   // Check if arrays have actually changed OR if metadata has changed
   const shouldUpdate = !cachedMatrixResult ||
     cachedMatrixResult.audiences !== audiences ||
@@ -653,6 +656,7 @@ export const useMatrix = (currentUser = null) => {
     cachedMatrixResult.textFormatting !== textFormatting ||
     cachedMatrixResult.messagesByCell !== messagesByCell ||
     cachedMatrixResult.isLoading !== isLoading ||
+    cachedMatrixResult.isFullyLoaded !== isFullyLoaded ||
     cachedMatrixResult.isSaving !== isSaving ||
     cachedMatrixResult.error !== error ||
     cachedMatrixResult.lastSync !== lastSync ||
@@ -673,6 +677,7 @@ export const useMatrix = (currentUser = null) => {
       setAssets,
       setCreatives,
       isLoading,
+      isFullyLoaded,
       isSaving,
       error,
       lastSync,

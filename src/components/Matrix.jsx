@@ -2310,6 +2310,7 @@ const Matrix = ({
             downloadFeedCSV={downloadFeedCSV}
             changeTracking={matrixData?.changeTracking}
             originalState={matrixData?.originalState}
+            isFullyLoaded={matrixData?.isFullyLoaded}
           />
           <AIAssistant
             ref={claudeChatRef}
