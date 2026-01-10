@@ -177,10 +177,10 @@ const Matrix = ({
         break;
 
       case 'move':
-        // Undo move: move messages back to original audience
+        // Undo move: move messages back to original audience (and topic if changed)
         if (lastAction.movedMessages && lastAction.movedMessages.length > 0) {
-          lastAction.movedMessages.forEach(({ id, originalAudience }) => {
-            moveMessage(id, originalAudience);
+          lastAction.movedMessages.forEach(({ id, originalAudience, originalTopic }) => {
+            moveMessage(id, originalAudience, originalTopic || null);
           });
           console.log(`↩️ Undo move: moved ${lastAction.movedMessages.length} messages back`);
         }
@@ -1579,8 +1579,14 @@ const Matrix = ({
 
     // Check if moving to different topic
     if (sourceTopic !== topicKey) {
-      alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic.');
-      return;
+      // Allow cross-row move only if destination row is completely empty
+      const destRowHasMessages = messages.some(m =>
+        m.topic === topicKey && m.status !== 'deleted'
+      );
+      if (destRowHasMessages) {
+        alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic, or to a completely empty row.');
+        return;
+      }
     }
 
     if (isCopy) {
@@ -1613,19 +1619,22 @@ const Matrix = ({
         setSelectModeCell({ topic: topicKey, audience: audienceKey });
       }, 50);
     } else {
-      // Log for undo before moving (need original audiences)
+      // Log for undo before moving (need original audiences and topics)
       logAction({
         type: 'move',
         movedMessages: msgsToMove.map(m => ({
           id: m.id,
-          originalAudience: m.audience
+          originalAudience: m.audience,
+          originalTopic: m.topic
         })),
-        targetAudience: audienceKey
+        targetAudience: audienceKey,
+        targetTopic: topicKey
       });
 
-      // Batch move
+      // Batch move (pass topic if moving to different row)
+      const newTopic = sourceTopic !== topicKey ? topicKey : null;
       msgsToMove.forEach(msg => {
-        moveMessage(msg.id, audienceKey);
+        moveMessage(msg.id, audienceKey, newTopic);
       });
 
       // Clear selection and exit select mode after move
@@ -1822,9 +1831,15 @@ const Matrix = ({
 
       // Check if moving to different topic
       if (sourceTopic !== topic) {
-        alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic.');
-        draggedMsgRef.current = null;
-        return;
+        // Allow cross-row move only if destination row is completely empty
+        const destRowHasMessages = messages.some(m =>
+          m.topic === topic && m.status !== 'deleted'
+        );
+        if (destRowHasMessages) {
+          alert('Cannot move messages to a different row (topic). Messages can only be moved across columns within the same topic, or to a completely empty row.');
+          draggedMsgRef.current = null;
+          return;
+        }
       }
 
       // Perform batch operation using isCopyMode ref
@@ -1868,21 +1883,24 @@ const Matrix = ({
         setIsDraggingSelected(false);
         isCopyModeRef.current = false;
       } else {
-        // Log for undo before moving (need original audiences)
+        // Log for undo before moving (need original audiences and topics)
         logAction({
           type: 'move',
           movedMessages: msgsToMove.map(m => ({
             id: m.id,
-            originalAudience: m.audience
+            originalAudience: m.audience,
+            originalTopic: m.topic
           })),
-          targetAudience: audience
+          targetAudience: audience,
+          targetTopic: topic
         });
 
-        // Batch move
+        // Batch move (pass topic if moving to different row)
+        const newTopic = sourceTopic !== topic ? topic : null;
         msgsToMove.forEach(msg => {
-          moveMessage(msg.id, audience);
+          moveMessage(msg.id, audience, newTopic);
         });
-        console.log(`📦 Moved ${msgsToMove.length} messages to ${audience}`);
+        console.log(`📦 Moved ${msgsToMove.length} messages to ${audience}${newTopic ? ` (topic: ${newTopic})` : ''}`);
 
         // Clear selection and exit select mode after move
         setSelectedMessages(new Set());
@@ -1928,19 +1946,35 @@ const Matrix = ({
           targetAudience: audience
         });
       } else {
-        // Log for undo before moving
+        // Check if moving to different topic (row)
+        if (currentDraggedMsg.topic !== topic) {
+          // Allow cross-row move only if destination row is completely empty
+          const destRowHasMessages = messages.some(m =>
+            m.topic === topic && m.status !== 'deleted'
+          );
+          if (destRowHasMessages) {
+            alert('Cannot move message to a different row (topic). Messages can only be moved across columns within the same topic, or to a completely empty row.');
+            draggedMsgRef.current = null;
+            return;
+          }
+        }
+
+        // Log for undo before moving (include original topic for cross-row undo)
         logAction({
           type: 'move',
           movedMessages: [{
             id: currentDraggedMsg.id,
-            originalAudience: currentDraggedMsg.audience
+            originalAudience: currentDraggedMsg.audience,
+            originalTopic: currentDraggedMsg.topic
           }],
-          targetAudience: audience
+          targetAudience: audience,
+          targetTopic: topic
         });
 
-        // Regular drag = move (updates PMMID automatically)
-        moveMessage(currentDraggedMsg.id, audience);
-        console.log(`📦 Moved message ${currentDraggedMsg.id} to ${audience}`);
+        // Regular drag = move (pass topic if moving to different row)
+        const newTopic = currentDraggedMsg.topic !== topic ? topic : null;
+        moveMessage(currentDraggedMsg.id, audience, newTopic);
+        console.log(`📦 Moved message ${currentDraggedMsg.id} to ${audience}${newTopic ? ` (topic: ${newTopic})` : ''}`);
       }
 
       isCopyModeRef.current = false;
@@ -2168,6 +2202,7 @@ const Matrix = ({
             dragOriginCell={dragOriginCellUI}
             onMessageMouseDown={handleMessageMouseDown}
             onMessageMouseUp={handleMessageMouseUp}
+            staticTemplates={matrixData?.keywords?.messages?.template || []}
           />
         )}
       </div>

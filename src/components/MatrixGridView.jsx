@@ -30,7 +30,8 @@ const MessageCard = memo(({
   onMessageMouseUp,
   onEditMessage,
   setActiveTab,
-  lastClickRef
+  lastClickRef,
+  staticTemplates = []
 }) => {
   const status = (msg.status || 'INCOMING').toUpperCase();
   // Use lookAndFeel.statusColors with proper defaults
@@ -110,6 +111,20 @@ const MessageCard = memo(({
       <span className="mc-variant" style={{ fontSize: '0.7rem', opacity: 0.7 }}>
         {msg.variant || ''}
       </span>
+      {(!msg.template || staticTemplates.includes(msg.template)) && (
+        <span style={{
+          fontSize: '0.6rem',
+          opacity: 0.7,
+          marginLeft: '4px',
+          fontWeight: '700',
+          letterSpacing: '0.03em',
+          backgroundColor: 'rgba(0,0,0,0.2)',
+          padding: '1px 3px',
+          borderRadius: '2px'
+        }}>
+          IMG
+        </span>
+      )}
       {displayMode === 'informative' && msg.name && (
         <span style={{
           fontSize: '0.7rem',
@@ -169,7 +184,8 @@ const MatrixGridView = ({
   dragHoverCell,
   dragOriginCell,
   onMessageMouseDown,
-  onMessageMouseUp
+  onMessageMouseUp,
+  staticTemplates = []
 }) => {
   const scrollContainerRef = useRef(null);
   const tableRef = useRef(null);
@@ -608,6 +624,12 @@ const MatrixGridView = ({
 
           <tbody>
             {visibleTopics.map((topic, topicIndex) => {
+              // Check if this row is completely empty (for cross-row move feature)
+              const isRowEmpty = visibleAudiences.every(aud => {
+                const msgs = getMessages(topic.key, aud.key);
+                return filterMessages(msgs).length === 0;
+              });
+
               return (
                 <tr key={topic.key}>
                   {/* Topic cell - sticky left */}
@@ -700,13 +722,16 @@ const MatrixGridView = ({
                     const isHoverCell = dragHoverCell && dragHoverCell.topic === topic.key && dragHoverCell.audience === aud.key;
                     const isDragging = draggedMsg !== null || isDraggingSelected;
                     const isOriginCell = dragOriginCell && dragOriginCell.topic === topic.key && dragOriginCell.audience === aud.key;
-                    const isValidDropZone = isDragging && draggedMsg && draggedMsg.topic === topic.key && !isOriginCell;
+                    const isSameRowDrop = isDragging && draggedMsg && draggedMsg.topic === topic.key && !isOriginCell;
+                    const isCrossRowDrop = isDragging && draggedMsg && draggedMsg.topic !== topic.key && isRowEmpty;
+                    const isValidDropZone = isSameRowDrop || isCrossRowDrop;
 
                     // Drag-related background colors only (hover highlight handled via CSS)
                     let cellBgColor = 'var(--color-primary)';
                     if (isHoverCell && isOriginCell) {
                       cellBgColor = 'rgba(255,255,255,0.05)';
                     } else if (isHoverCell && isValidDropZone) {
+                      // Copy: blue, Move (same-row or cross-row): green
                       cellBgColor = isCopyMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(34, 197, 94, 0.3)';
                     } else if (isHoverCell && !isValidDropZone) {
                       cellBgColor = 'rgba(239, 68, 68, 0.2)';
@@ -762,6 +787,11 @@ const MatrixGridView = ({
                                 <Copy size={12} />
                                 <span>COPY</span>
                               </>
+                            ) : isCrossRowDrop ? (
+                              <>
+                                <Move size={12} />
+                                <span>MOVE TO ROW</span>
+                              </>
                             ) : (
                               <>
                                 <Move size={12} />
@@ -816,6 +846,7 @@ const MatrixGridView = ({
                               onEditMessage={onEditMessage}
                               setActiveTab={setActiveTab}
                               lastClickRef={lastClickRef}
+                              staticTemplates={staticTemplates}
                             />
                           ))}
 
@@ -855,49 +886,57 @@ const MatrixGridView = ({
                             </button>
                           )}
 
-                          {/* Selection mode: Move/Copy here button in empty cells - only in same row */}
-                          {isSelectMode && selectedMessages.size > 0 && cellMsgs.length === 0 && selectModeCell?.topic === topic.key && (
-                            <button
-                              onClick={() => onMoveOrCopyToCell(topic.key, aud.key, isCopyMode)}
-                              className="hidden group-hover/cell:flex"
-                              style={{
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '12px 20px',
-                                borderRadius: '8px',
-                                border: '2px dashed rgba(255,255,255,0.3)',
-                                background: 'transparent',
-                                color: 'rgba(255,255,255,0.5)',
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                gap: '6px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = 'rgba(255,255,255,0.9)';
-                                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
-                                e.currentTarget.style.background = 'transparent';
-                                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
-                              }}
-                            >
-                              {isCopyMode ? (
-                                <>
-                                  <Copy size={18} />
-                                  <span>Copy here</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Move size={18} />
-                                  <span>Move here</span>
-                                </>
-                              )}
-                            </button>
-                          )}
+                          {/* Selection mode: Move/Copy here button in empty cells - same row or empty destination row */}
+                          {isSelectMode && selectedMessages.size > 0 && cellMsgs.length === 0 && (selectModeCell?.topic === topic.key || isRowEmpty) && (() => {
+                            const isCrossRowTarget = selectModeCell?.topic !== topic.key && isRowEmpty;
+                            return (
+                              <button
+                                onClick={() => onMoveOrCopyToCell(topic.key, aud.key, isCopyMode)}
+                                className="hidden group-hover/cell:flex"
+                                style={{
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '12px 20px',
+                                  borderRadius: '8px',
+                                  border: '2px dashed rgba(255,255,255,0.3)',
+                                  background: 'transparent',
+                                  color: 'rgba(255,255,255,0.5)',
+                                  fontSize: '0.875rem',
+                                  fontWeight: '500',
+                                  gap: '6px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = 'rgba(255,255,255,0.9)';
+                                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
+                                  e.currentTarget.style.background = 'transparent';
+                                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                                }}
+                              >
+                                {isCopyMode ? (
+                                  <>
+                                    <Copy size={18} />
+                                    <span>Copy here</span>
+                                  </>
+                                ) : isCrossRowTarget ? (
+                                  <>
+                                    <Move size={18} />
+                                    <span>Move to row</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Move size={18} />
+                                    <span>Move here</span>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })()}
 
                           {/* Add message button - shows on cell hover, bigger when cell is empty (hidden in selection mode) */}
                           {!isSelectMode && !spacePressed && !isDraggingSelected && (

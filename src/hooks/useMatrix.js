@@ -445,15 +445,17 @@ export const useMatrix = (currentUser = null) => {
     ));
   }, []);
 
-  // Move message - updates audience and PMMID
-  const moveMessage = useCallback((id, newAudience) => {
+  // Move message - updates audience (and optionally topic) and PMMID
+  const moveMessage = useCallback((id, newAudience, newTopic = null) => {
     setMessages(prev => prev.map(m => {
       if (m.id === id) {
-        // Update PMMID with new audience key
-        const newPmmid = `a_${newAudience}-t_${m.topic}-m_${m.number}-v_${m.variant}-n_${m.version}`;
+        const topic = newTopic || m.topic;
+        // Update PMMID with new audience/topic key
+        const newPmmid = `a_${newAudience}-t_${topic}-m_${m.number}-v_${m.variant}-n_${m.version}`;
         return {
           ...m,
           audience: newAudience,
+          topic: topic,
           pmmid: newPmmid
         };
       }
