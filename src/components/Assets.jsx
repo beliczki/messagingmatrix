@@ -6,7 +6,7 @@ import CreativePreview from './CreativePreview';
 import AssetsMasonryView from './AssetsMasonryView';
 import MediaLibraryBase from './MediaLibraryBase';
 import MediaToolbar from './MediaToolbar';
-import { loadDriveAssets, parseDriveAssetData, isDriveEnabled } from '../utils/driveAssets';
+import { loadDriveAssets, parseDriveAssetData, isDriveEnabled, invalidateDriveCache } from '../utils/driveAssets';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import settings from '../services/settings';
 
@@ -101,16 +101,35 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         asset => asset.File_driveID && !driveDriveIds.has(asset.File_driveID)
       );
 
-      console.log(`🔄 Sync results: ${newAssets.length} new, ${deletedAssets.length} deleted`);
+      // Find modified assets (in both, but modifiedTime has changed)
+      const driveFileMap = new Map(driveFiles.map(file => [file.id, file]));
+      const modifiedAssets = (spreadsheetAssets || []).filter(asset => {
+        if (!asset.File_driveID || !spreadsheetDriveIds.has(asset.File_driveID)) return false;
+        const driveFile = driveFileMap.get(asset.File_driveID);
+        if (!driveFile) return false;
+        // Compare modification times - Drive file has been updated if times differ
+        const driveModTime = driveFile.modifiedTime;
+        const spreadsheetModTime = asset.File_date;
+        if (!driveModTime || !spreadsheetModTime) return false;
+        // Normalize to ISO strings for comparison (handles timezone differences)
+        const driveDate = new Date(driveModTime).toISOString();
+        const spreadsheetDate = new Date(spreadsheetModTime).toISOString();
+        return driveDate !== spreadsheetDate;
+      });
+
+      console.log(`🔄 Sync results: ${newAssets.length} new, ${modifiedAssets.length} modified, ${deletedAssets.length} deleted`);
       if (newAssets.length > 0) {
         console.log('🆕 New assets:', newAssets.map(f => f.name));
       }
       if (deletedAssets.length > 0) {
         console.log('🗑️ Deleted assets:', deletedAssets.map(a => a.File_name));
       }
+      if (modifiedAssets.length > 0) {
+        console.log('📝 Modified assets:', modifiedAssets.map(a => a.File_name));
+      }
 
       // If no changes, just inform user
-      if (newAssets.length === 0 && deletedAssets.length === 0) {
+      if (newAssets.length === 0 && deletedAssets.length === 0 && modifiedAssets.length === 0) {
         setSyncProgress({
           type: 'success',
           message: 'Spreadsheet is up to date with Google Drive. No changes found.'
@@ -130,6 +149,30 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       if (deletedAssets.length > 0) {
         const deletedIds = new Set(deletedAssets.map(a => a.File_driveID));
         updatedAssets = updatedAssets.filter(asset => !deletedIds.has(asset.File_driveID));
+      }
+
+      // Update modified assets with new metadata from Drive
+      if (modifiedAssets.length > 0) {
+        // Invalidate browser cache for modified files
+        await Promise.all(modifiedAssets.map(a => invalidateDriveCache(a.File_driveID)));
+
+        const modifiedIds = new Set(modifiedAssets.map(a => a.File_driveID));
+        updatedAssets = updatedAssets.map(asset => {
+          if (!modifiedIds.has(asset.File_driveID)) return asset;
+          const driveFile = driveFileMap.get(asset.File_driveID);
+          if (!driveFile) return asset;
+          const parsedAsset = parseDriveAssetData(driveFile);
+          // Update file metadata while preserving user-edited fields
+          return {
+            ...asset,
+            File_name: driveFile.name,
+            File_size: parsedAsset.size || '',
+            File_date: parsedAsset.File_date || '',
+            File_dimensions: parsedAsset.File_dimensions || '',
+            File_DirectLink: parsedAsset.File_DirectLink || '',
+            File_thumbnail: parsedAsset.thumbnail || ''
+          };
+        });
       }
 
       // Add new assets with incremental IDs
@@ -179,7 +222,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       const savedNote = canSave ? '' : '\n\n⚠️ Note: Changes not saved to spreadsheet (no matrix data loaded)';
       setSyncProgress({
         type: 'success',
-        message: `Successfully synced with Google Drive.\n\nAdded: ${newAssets.length} assets\nRemoved: ${deletedAssets.length} assets${savedNote}`
+        message: `Successfully synced with Google Drive.\n\nAdded: ${newAssets.length} assets\nUpdated: ${modifiedAssets.length} assets\nRemoved: ${deletedAssets.length} assets${savedNote}`
       });
 
       // Auto-dismiss after 3 seconds

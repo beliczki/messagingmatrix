@@ -19,7 +19,7 @@ html {
 }
 
 #logoWrapper > img {
-  height: 3rem;
+  height: 4rem;
 }
 
 #image4Container {
@@ -40,10 +40,11 @@ html {
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
-.campaignImage #imageWrapper div {
-  /*background-size: 210%;*/
-  background-position: -600px 0px;
+.campaignImage #backgroundContainer #imageWrapper div {
+  background-size: initial;
+  background-position: 0 -378px;
 }
+
 
 /* -----------------------------------------*/
 /* Disclaimer rotation                      */

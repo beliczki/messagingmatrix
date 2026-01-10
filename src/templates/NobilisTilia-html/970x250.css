@@ -1,17 +1,32 @@
 /* ------------------------------------------- */
-/* 300x250 - Size specific overrides           */
+/* 970x250 - Size specific overrides           */
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 
-/* Size is already set in main.css as default */
-/* Only add overrides here if needed */
+html {
+  font-size: 22px;
+}
+
+#adContainer {
+  width: 970px !important;
+  height: 250px !important;
+}
+#logoContainer {
+  top: 2rem;
+  left: 2rem;
+}
+
+#logoWrapper > img {
+  height: 5rem;
+  display: block;
+}
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
 .campaignImage #backgroundContainer #imageWrapper div {
   background-size: initial;
-  background-position: -944px -378px;
+  background-position: 0px 0px;
 }
 
 

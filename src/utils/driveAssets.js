@@ -6,6 +6,20 @@
 import { apiGet, authenticatedFetch } from './api.js';
 
 /**
+ * Force reload a Drive file to update browser cache
+ * Call this when a file has been modified in Drive
+ * @param {string} fileId - The Google Drive file ID
+ */
+export const invalidateDriveCache = async (fileId) => {
+  if (!fileId) return;
+  try {
+    await fetch(`/api/drive/proxy/${fileId}`, { cache: 'reload' });
+  } catch (e) {
+    // Ignore errors - this is just cache invalidation
+  }
+};
+
+/**
  * Load assets from Google Drive
  * @param {string} folderType - 'assets' or 'creatives'
  * @param {Object} options - Query options (pageSize, pageToken, orderBy)

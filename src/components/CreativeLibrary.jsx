@@ -13,7 +13,7 @@ import MediaLibraryBase from './MediaLibraryBase';
 import MediaToolbar from './MediaToolbar';
 import { processAssets } from '../utils/assetUtils';
 import { clearAndReloadApp } from '../utils/clearAndReload';
-import { loadDriveAssets, isDriveEnabled, parseDriveAssetData } from '../utils/driveAssets';
+import { loadDriveAssets, isDriveEnabled, parseDriveAssetData, invalidateDriveCache } from '../utils/driveAssets';
 import settings from '../services/settings';
 import { apiGet } from '../utils/api';
 
@@ -82,9 +82,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Load a single template by name
   const loadTemplate = useCallback(async (templateName) => {
-    if (templatesCache[templateName]) return templatesCache[templateName];
+    if (templatesCache[templateName]) {
+      return templatesCache[templateName];
+    }
 
     try {
+      // Get template metadata from /api/templates (has CSS-derived sizes via dimensions)
+      let templateMeta = null;
+      try {
+        const templatesResponse = await apiGet('/api/templates');
+        if (templatesResponse.ok) {
+          const allTemplates = await templatesResponse.json();
+          templateMeta = allTemplates.find(t => t.name === templateName);
+        }
+      } catch (e) {
+        console.warn(`Failed to get template metadata for ${templateName}:`, e);
+      }
+
       // Load template HTML
       const htmlResponse = await apiGet(`/api/templates/${templateName}/index.html`);
       let html = '';
@@ -110,6 +124,19 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         console.warn(`No template.json for ${templateName}:`, e);
       }
 
+      // Merge CSS-derived sizes from /api/templates into config
+      // Use sizes if available, otherwise convert dimensions array to sizes format
+      if (templateMeta?.sizes && templateMeta.sizes.length > 0) {
+        config = { ...config, sizes: templateMeta.sizes };
+      } else if (templateMeta?.dimensions && templateMeta.dimensions.length > 0) {
+        // Convert dimensions strings to sizes objects
+        const sizes = templateMeta.dimensions.map(dim => {
+          const [width, height] = dim.split('x').map(Number);
+          return { width, height, name: dim };
+        });
+        config = { ...config, sizes };
+      }
+
       // Load CSS files
       const cssMap = { main: '' };
       const mainCssResponse = await apiGet(`/api/templates/${templateName}/main.css`);
@@ -118,7 +145,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         cssMap.main = mainCssData.content || '';
       }
 
-      // Get sizes from config or use defaults
+      // Get sizes from config (now includes CSS-derived sizes) or use defaults
       const sizesToLoad = config?.sizes || defaultBannerSizes;
 
       // Load size-specific CSS files (silently skip missing ones)
@@ -256,8 +283,26 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         creative => creative.File_driveID && !driveDriveIds.has(creative.File_driveID)
       );
 
+      // Find modified creatives (in both, but modifiedTime has changed)
+      const driveFileMap = new Map(driveFiles.map(file => [file.id, file]));
+      const modifiedCreatives = spreadsheetCreatives.filter(creative => {
+        if (!creative.File_driveID || !spreadsheetDriveIds.has(creative.File_driveID)) return false;
+        const driveFile = driveFileMap.get(creative.File_driveID);
+        if (!driveFile) return false;
+        // Compare modification times - Drive file has been updated if times differ
+        const driveModTime = driveFile.modifiedTime;
+        const spreadsheetModTime = creative.File_date;
+        if (!driveModTime || !spreadsheetModTime) return false;
+        // Normalize to ISO strings for comparison
+        const driveDate = new Date(driveModTime).toISOString();
+        const spreadsheetDate = new Date(spreadsheetModTime).toISOString();
+        return driveDate !== spreadsheetDate;
+      });
+
+      console.log(`🔄 Sync results: ${newCreatives.length} new, ${modifiedCreatives.length} modified, ${deletedCreatives.length} deleted`);
+
       // If no changes, just inform user
-      if (newCreatives.length === 0 && deletedCreatives.length === 0) {
+      if (newCreatives.length === 0 && deletedCreatives.length === 0 && modifiedCreatives.length === 0) {
         setSyncProgress({
           type: 'success',
           message: 'Spreadsheet is up to date with Google Drive. No changes found.'
@@ -276,6 +321,35 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       if (deletedCreatives.length > 0) {
         const deletedIds = new Set(deletedCreatives.map(c => c.File_driveID));
         updatedCreatives = updatedCreatives.filter(creative => !deletedIds.has(creative.File_driveID));
+      }
+
+      // Update modified creatives with new metadata from Drive
+      if (modifiedCreatives.length > 0) {
+        // Invalidate browser cache for modified files
+        await Promise.all(modifiedCreatives.map(c => invalidateDriveCache(c.File_driveID)));
+
+        // Ensure settings are loaded for parsing
+        await settings.ensureInitialized();
+        const parsingRules = settings.getCreativeParsingRules();
+        const keywords = matrixData.keywords || {};
+
+        const modifiedIds = new Set(modifiedCreatives.map(c => c.File_driveID));
+        updatedCreatives = updatedCreatives.map(creative => {
+          if (!modifiedIds.has(creative.File_driveID)) return creative;
+          const driveFile = driveFileMap.get(creative.File_driveID);
+          if (!driveFile) return creative;
+          const parsedData = parseDriveAssetData(driveFile, parsingRules, keywords);
+          // Update file metadata while preserving user-edited fields
+          return {
+            ...creative,
+            File_name: driveFile.name,
+            File_size: parsedData.File_size || '',
+            File_date: parsedData.File_date || '',
+            File_dimensions: parsedData.File_dimensions || '',
+            File_DirectLink: parsedData.File_DirectLink || '',
+            File_thumbnail: parsedData.File_thumbnail || ''
+          };
+        });
       }
 
       // Add new creatives with incremental IDs
@@ -347,17 +421,21 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         : [];
       // Get the IDs of removed creatives
       const removedIds = deletedCreatives.map(c => String(c.ID));
+      // Get the IDs of modified creatives
+      const modifiedIds = modifiedCreatives.map(c => String(c.ID));
 
       setPendingDriveChanges({
         added: newCreatives.length,
+        modified: modifiedCreatives.length,
         removed: deletedCreatives.length,
         addedIds,
+        modifiedIds,
         removedIds
       });
 
       setSyncProgress({
         type: 'success',
-        message: `Synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives\n\n⚠️ Changes are pending - click Save to persist to spreadsheet.`
+        message: `Synced with Google Drive.\n\nAdded: ${newCreatives.length} creatives\nUpdated: ${modifiedCreatives.length} creatives\nRemoved: ${deletedCreatives.length} creatives\n\n⚠️ Changes are pending - click Save to persist to spreadsheet.`
       });
 
       // Auto-dismiss after 5 seconds (longer to give user time to read)
@@ -689,7 +767,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
 
     setCreatives([...spreadsheetCreatives, ...creativeList]);
-  }, [matrixData, getTemplateSizes]);
+  }, [matrixData, getTemplateSizes, templatesCache]);
 
   useEffect(() => {
     loadCreatives();
