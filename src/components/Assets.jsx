@@ -291,9 +291,9 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
     });
   }, [assets]);
 
-  // Filter assets based on filters
+  // Filter and sort assets based on filters
   const filteredByFilters = useMemo(() => {
-    return assets.filter(asset => {
+    const filtered = assets.filter(asset => {
       // Product filter
       if (productFilter.length > 0) {
         if (!asset.Product || !productFilter.includes(asset.Product)) {
@@ -316,6 +316,31 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       }
 
       return true;
+    });
+
+    // Sort: newest on top, then by MC number (larger first)
+    return filtered.sort((a, b) => {
+      // Get dates
+      const dateA = a.File_date || '';
+      const dateB = b.File_date || '';
+
+      // Compare dates (newest first)
+      if (dateA && dateB) {
+        const timeA = new Date(dateA).getTime();
+        const timeB = new Date(dateB).getTime();
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+          return timeB - timeA; // Descending (newest first)
+        }
+      } else if (dateA && !dateB) {
+        return -1; // A has date, B doesn't - A first
+      } else if (!dateA && dateB) {
+        return 1; // B has date, A doesn't - B first
+      }
+
+      // If dates are same or unavailable, sort by MC number (larger first)
+      const mcNumA = parseInt(a.MC_Number || '0', 10) || 0;
+      const mcNumB = parseInt(b.MC_Number || '0', 10) || 0;
+      return mcNumB - mcNumA; // Descending (larger first)
     });
   }, [assets, productFilter, typeFilter, sizeFilter]);
 

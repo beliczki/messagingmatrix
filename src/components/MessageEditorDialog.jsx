@@ -1779,7 +1779,7 @@ const MessageEditorDialog = ({
                   <AlertCircle size={18} className="template-warning-icon" />
                   <div className="template-warning-content">
                     <p className="template-warning-title">Non-HTML Template: {editingMessage?.template}</p>
-                    <p className="template-warning-text">Preview requires external tools (Adobe).</p>
+                    <p className="template-warning-text">Changing content requires external tools (Adobe).</p>
                   </div>
                   <button
                     onClick={() => setWarningDismissed(true)}

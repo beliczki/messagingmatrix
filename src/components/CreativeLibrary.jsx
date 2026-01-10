@@ -989,9 +989,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   // Type filter options (Adobe generated = Drive synced/static creatives)
   const typeOptions = ['Dynamic HTML', 'Adobe generated'];
 
-  // Filter creatives based on product and type
+  // Filter and sort creatives based on product and type
   const filteredByFilters = React.useMemo(() => {
-    return creatives.filter(creative => {
+    const filtered = creatives.filter(creative => {
       // Product filter
       let matchesProduct = productFilter.length === 0;
       if (!matchesProduct) {
@@ -1026,6 +1026,31 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       }
 
       return matchesProduct && matchesType && matchesSize;
+    });
+
+    // Sort: newest on top, then by MC number (larger first)
+    return filtered.sort((a, b) => {
+      // Get dates (from date field or File_date)
+      const dateA = a.date || a.File_date || '';
+      const dateB = b.date || b.File_date || '';
+
+      // Compare dates (newest first)
+      if (dateA && dateB) {
+        const timeA = new Date(dateA).getTime();
+        const timeB = new Date(dateB).getTime();
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+          return timeB - timeA; // Descending (newest first)
+        }
+      } else if (dateA && !dateB) {
+        return -1; // A has date, B doesn't - A first
+      } else if (!dateA && dateB) {
+        return 1; // B has date, A doesn't - B first
+      }
+
+      // If dates are same or unavailable, sort by MC number (larger first)
+      const mcNumA = parseInt(a.messageData?.number || a.MC_Number || '0', 10) || 0;
+      const mcNumB = parseInt(b.messageData?.number || b.MC_Number || '0', 10) || 0;
+      return mcNumB - mcNumA; // Descending (larger first)
     });
   }, [creatives, productFilter, typeFilter, sizeFilter]);
 
