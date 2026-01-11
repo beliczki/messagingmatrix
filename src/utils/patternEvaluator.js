@@ -36,12 +36,66 @@ export function evaluatePattern(pattern, context) {
 }
 
 /**
+ * Apply a modifier function to a value
+ * Supported modifiers:
+ *   - noext: Remove file extension (e.g., "video.mp4" -> "video")
+ *   - upper: Convert to uppercase
+ *   - lower: Convert to lowercase
+ *   - trim: Trim whitespace
+ * @param {string} value - The value to modify
+ * @param {string} modifier - The modifier name
+ * @returns {string} - Modified value
+ */
+function applyModifier(value, modifier) {
+  if (!value) return value;
+
+  switch (modifier.toLowerCase()) {
+    case 'noext':
+      // Remove file extension (last . and everything after)
+      const lastDot = value.lastIndexOf('.');
+      return lastDot > 0 ? value.substring(0, lastDot) : value;
+    case 'upper':
+      return value.toUpperCase();
+    case 'lower':
+      return value.toLowerCase();
+    case 'trim':
+      return value.trim();
+    default:
+      return value;
+  }
+}
+
+/**
  * Evaluates a single expression
  * @param {string} expression - The expression to evaluate (e.g., "Audience_Key" or "audiences[Audience_Key].Strategy")
+ *                              Supports pipe modifiers: "Video1|noext" removes file extension
  * @param {object} context - Context object containing data
  * @returns {string} - Evaluated value
  */
 function evaluateExpression(expression, context) {
+  // Check for pipe modifiers (e.g., "Video1|noext|upper")
+  const parts = expression.split('|');
+  const baseExpression = parts[0].trim();
+  const modifiers = parts.slice(1).map(m => m.trim());
+
+  // Evaluate the base expression
+  let value = evaluateBaseExpression(baseExpression, context);
+
+  // Apply modifiers in order
+  for (const modifier of modifiers) {
+    value = applyModifier(value, modifier);
+  }
+
+  return value;
+}
+
+/**
+ * Evaluates the base expression without modifiers
+ * @param {string} expression - The expression to evaluate
+ * @param {object} context - Context object containing data
+ * @returns {string} - Evaluated value
+ */
+function evaluateBaseExpression(expression, context) {
   // Handle simple variables first - try exact match first, then case-insensitive
   if (context.hasOwnProperty(expression)) {
     return String(context[expression] || '');
