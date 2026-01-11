@@ -841,6 +841,119 @@ app.post('/api/claude', verifyToken, async (req, res) => {
   }
 });
 
+// Gemini API endpoint (Google AI)
+app.post('/api/gemini', verifyToken, async (req, res) => {
+  try {
+    const { messages, model = 'gemini-2.0-flash', max_tokens = 4096 } = req.body;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Gemini API key not configured in .env' });
+    }
+
+    // Convert messages to Gemini format
+    // Gemini uses "parts" array with "text" field, alternating user/model roles
+    const contents = messages.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('\n') }]
+    }));
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          maxOutputTokens: max_tokens,
+          temperature: 0.7
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', errorText);
+      return res.status(response.status).json({ error: errorText });
+    }
+
+    const data = await response.json();
+
+    // Convert Gemini response to Claude-like format for frontend compatibility
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    res.json({
+      content: [{ type: 'text', text }],
+      model: model,
+      stop_reason: data.candidates?.[0]?.finishReason?.toLowerCase() || 'end_turn',
+      usage: {
+        input_tokens: data.usageMetadata?.promptTokenCount || 0,
+        output_tokens: data.usageMetadata?.candidatesTokenCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Gemini server error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Grok API endpoint (xAI) - OpenAI-compatible API
+app.post('/api/grok', verifyToken, async (req, res) => {
+  try {
+    const { messages, model = 'grok-3', max_tokens = 4096 } = req.body;
+
+    const apiKey = process.env.GROK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Grok API key not configured in .env' });
+    }
+
+    // Convert messages to OpenAI format (Grok uses OpenAI-compatible API)
+    const openAIMessages = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('\n')
+    }));
+
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens,
+        messages: openAIMessages,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Grok API error:', errorText);
+      return res.status(response.status).json({ error: errorText });
+    }
+
+    const data = await response.json();
+
+    // Convert OpenAI response to Claude-like format for frontend compatibility
+    const text = data.choices?.[0]?.message?.content || '';
+    res.json({
+      content: [{ type: 'text', text }],
+      model: model,
+      stop_reason: data.choices?.[0]?.finish_reason || 'end_turn',
+      usage: {
+        input_tokens: data.usage?.prompt_tokens || 0,
+        output_tokens: data.usage?.completion_tokens || 0
+      }
+    });
+  } catch (error) {
+    console.error('Grok server error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // AI Assistant Prompts endpoints
 const promptsDir = path.join(__dirname, 'AI'); // AI directory
 

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } f
 import { createPortal } from 'react-dom';
 import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, ChevronRight, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
 // X is already imported
-import { callClaudeAPI } from '../api/claude-proxy';
+import { callAIAPI } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
 
 // AI Provider configurations
@@ -23,11 +23,11 @@ const AI_PROVIDERS = {
     name: 'Gemini',
     icon: '🔵',
     models: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', isDefault: true },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', isDefault: true },
+      { id: 'gemini-2.0-flash-thinking-exp', name: 'Gemini 2.0 Flash Thinking' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ],
-    available: false,
-    comingSoon: true
+    available: true
   },
   grok: {
     id: 'grok',
@@ -35,10 +35,10 @@ const AI_PROVIDERS = {
     icon: '⚫',
     models: [
       { id: 'grok-3', name: 'Grok 3', isDefault: true },
-      { id: 'grok-3-mini', name: 'Grok 3 Mini' }
+      { id: 'grok-3-fast', name: 'Grok 3 Fast' },
+      { id: 'grok-2-1212', name: 'Grok 2' }
     ],
-    available: false,
-    comingSoon: true
+    available: true
   }
 };
 
@@ -283,7 +283,7 @@ ${emailSummaries}`;
       try {
         // Call Claude API with higher max_tokens for long email threads
         // Use selected model for email-to-task (higher token limit)
-        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 16384);
+        const data = await callAIAPI(apiKey, [userMessage], selectedModel, 16384);
         const responseText = data.content[0].text;
 
         // Add assistant response to chat
@@ -526,7 +526,7 @@ Respond ONLY with a JSON object in this exact format:
 
       try {
         // Call Claude API with selected model (increased tokens for 5 versions per field)
-        const data = await callClaudeAPI(apiKey, [userMessage], selectedModel, 4096);
+        const data = await callAIAPI(apiKey, [userMessage], selectedModel, 4096);
         const responseText = data.content[0].text;
 
         // Add assistant response to chat
@@ -1032,7 +1032,7 @@ ${appStateContext}`;
       ];
 
       // Call Claude API with selected model
-      const data = await callClaudeAPI(apiKey, apiMessages, selectedModel, 4096);
+      const data = await callAIAPI(apiKey, apiMessages, selectedModel, 4096);
 
       const responseText = data.content[0].text;
 
