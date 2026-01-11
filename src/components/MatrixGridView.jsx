@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Plus, Edit2, Eye, Copy, Move, X, Circle, CheckCircle2 } from 'lucide-react';
+import { Plus, Edit2, Eye, Copy, Move, X, Circle, CheckCircle2, Image, FileCode } from 'lucide-react';
 
 // Default status colors matching Settings.jsx defaults
 const DEFAULT_STATUS_COLORS = {
@@ -111,18 +111,34 @@ const MessageCard = memo(({
       <span className="mc-variant" style={{ fontSize: '0.7rem', opacity: 0.7 }}>
         {msg.variant || ''}
       </span>
-      {(!msg.template || staticTemplates.includes(msg.template)) && (
+      {!msg.template && (
         <span style={{
-          fontSize: '0.6rem',
-          opacity: 0.7,
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
           marginLeft: '4px',
-          fontWeight: '700',
-          letterSpacing: '0.03em',
-          backgroundColor: 'rgba(0,0,0,0.2)',
-          padding: '1px 3px',
-          borderRadius: '2px'
+          opacity: 0.7
         }}>
-          IMG
+          <FileCode size={12} />
+          <span style={{
+            position: 'absolute',
+            width: '100%',
+            height: '1px',
+            backgroundColor: 'currentColor',
+            transform: 'rotate(-45deg)',
+            top: '50%',
+            left: 0
+          }} />
+        </span>
+      )}
+      {msg.template && staticTemplates.includes(msg.template) && (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          marginLeft: '4px',
+          opacity: 0.7
+        }}>
+          <Image size={12} />
         </span>
       )}
       {displayMode === 'informative' && msg.name && (
