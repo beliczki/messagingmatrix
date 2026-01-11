@@ -27,6 +27,7 @@ html {
   left:auto;
   right:0px;
 }
+
 #textContainer #headlineWrapper {
   width:70%;
   margin-left:30%;
@@ -53,6 +54,15 @@ html {
   height: 160px;
 }
 
+.productHighlight #image2Wrapper {
+  top: 15px;
+  left: 100px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 125px;
+  height: 185px;
+}
+
 #image4Container {
   right: 10.2rem;
 }
@@ -60,6 +70,15 @@ html {
 #image6Wrapper {
   top: 40px;
   left: 220px;
+}
+
+.productHighlight #image6Wrapper {
+  top: 22px;
+  left: 165px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 6.5rem;
+  height: 6.5rem;
 }
 
 /* -----------------------------------------*/

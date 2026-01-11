@@ -15,21 +15,34 @@ html {
 /* Adjust text container for taller format */
 #textContainer {
   padding: 1.7rem;
-  height:50%;
+  height:49%;
 }
 
 #logoWrapper > img {
   height: 4rem;
 }
+.productHighlight #logoWrapper > img {
+  height: 3.4rem;
+}
 
 #image2Wrapper {
-    top: 113px;
-    left: 6px;
+  top: 113px;
+  left: 6px;
 }
 #image2Wrapper  > div {
   width: 160px;
   height: 230px;
 }
+
+.productHighlight #image2Wrapper {
+  top: 50px;
+  left: 50px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 200px;
+  height: 300px;
+}
+
 
 #image4Container {
   bottom: 3.8rem;
@@ -40,6 +53,14 @@ html {
   left: 97px;
 }
 
+.productHighlight #image6Wrapper {
+  top: 87px;
+  left: 155px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 6rem;
+  height: 6rem;
+}
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */

@@ -113,6 +113,10 @@ main {
   display: block;
 }
 
+.productHighlight #logoWrapper > img {
+  height: 4rem;
+}
+
 /* ----------------------- */
 /* Background Container    */
 /* Full size background    */
@@ -145,6 +149,30 @@ main {
   background-repeat: no-repeat;
 }
 
+#image2Wrapper {
+  position: absolute;
+  top: 37px;
+  left: 55px;
+}
+
+#image2Wrapper > div {
+  width: 80px;
+  height: 130px;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.productHighlight #image2Wrapper {
+  top: 5px;
+  left: 90px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 120px;
+  height: 165px;
+}
+
+
 #image4Container {
   position: absolute;
   bottom: 0.5rem;
@@ -157,20 +185,6 @@ main {
   width: 3rem;
   height: 3rem;
   background-size: contain;
-  background-position: center center;
-  background-repeat: no-repeat;
-}
-
-#image2Wrapper {
-  position: absolute;
-  top: 37px;
-  left: 55px;
-}
-
-#image2Wrapper > div {
-  width: 80px;
-  height: 130px;
-  background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
 }
@@ -188,6 +202,17 @@ main {
   background-position: center center;
   background-repeat: no-repeat;
 }
+
+.productHighlight #image6Wrapper {
+  top: 27px;
+  left: 175px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 7rem;
+  height: 7rem;
+}
+
+
 #buttonWrapper {
   margin-top:auto;
   margin-bottom:0.4rem;

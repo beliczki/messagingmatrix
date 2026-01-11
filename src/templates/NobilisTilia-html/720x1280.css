@@ -4,7 +4,7 @@
 /* ------------------------------------------- */
 
 html {
-  font-size: 48px;
+  font-size: 50px;
 }
 
 #adContainer {
@@ -14,7 +14,9 @@ html {
 
 /* Adjust text container for taller format */
 #textContainer {
+  box-sizing: border-box;
   padding: 1.2rem 2.5rem 2rem 2.5rem;
+  height: 46%;
 }
 
 #buttonWrapper {
@@ -34,6 +36,16 @@ html {
   height: 460px;
 }
 
+.productHighlight #image2Wrapper {
+  top: 100px;
+  left: 100px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 500px;
+  height: 700px;
+}
+
+
 #image4Container {
   bottom: 3.5rem;
 }
@@ -41,6 +53,15 @@ html {
 #image6Wrapper {
   top: 490px;
   left: 230px;
+}
+
+.productHighlight #image6Wrapper {
+  top: 200px;
+  left: 360px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 6rem;
+  height: 6rem;
 }
 
 /* -----------------------------------------*/

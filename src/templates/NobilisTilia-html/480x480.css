@@ -19,19 +19,41 @@ html {
 #logoWrapper > img {
   height: 3.3rem;
 }
+.productHighlight #logoWrapper > img {
+  height: 4rem;
+}
 
 #image2Wrapper {
   top: 90px;
   left: 66px;
 }
+
 #image2Wrapper  > div {
   width: 150px;
   height: 220px;
 }
 
+.productHighlight #image2Wrapper {
+  top: 25px;
+  left: 145px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 190px;
+  height: 280px;
+}
+
 #image6Wrapper {
   top: 150px;
   left: 320px;
+}
+
+.productHighlight #image6Wrapper {
+  top: 47px;
+  left: 260px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 6.5rem;
+  height: 6.5rem;
 }
 
 

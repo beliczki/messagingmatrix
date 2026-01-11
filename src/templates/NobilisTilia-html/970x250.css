@@ -36,24 +36,6 @@ html {
 #textContainer #headlineWrapper {margin-top:auto;}
 #textContainer #copyWrapper1 {margin-bottom:auto;}
 
-#image2Wrapper {
-  top: 25px;
-  left: 350px;
-}
-#image2Wrapper  > div {
-  width: 150px;
-  height: 220px;
-}
-
-#image4Container {
-  right: 10.2rem;
-}
-
-#image6Wrapper {
-  top: 70px;
-  left: 430px;
-}
-
 #buttonWrapper {
   width: max-content;
   margin-right: 0px;
@@ -64,6 +46,44 @@ html {
   display: inline;
   /*margin-right: 3rem;*/
 }	
+
+#image2Wrapper {
+  top: 25px;
+  left: 350px;
+}
+#image2Wrapper  > div {
+  width: 150px;
+  height: 220px;
+}
+
+.productHighlight #image2Wrapper {
+  top: 20px;
+  left: 250px;
+}
+.productHighlight #image2Wrapper > div {
+  width: 140px;
+  height: 230px;
+}
+
+
+#image4Container {
+  right: 10.2rem;
+}
+
+#image6Wrapper {
+  top: 70px;
+  left: 430px;
+}
+
+.productHighlight #image6Wrapper {
+  top: 45px;
+  left: 355px;
+}
+.productHighlight #image6Wrapper > div {
+  width: 6.5rem;
+  height: 6.5rem;
+}
+
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
