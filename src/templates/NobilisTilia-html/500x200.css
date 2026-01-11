@@ -22,14 +22,30 @@ html {
 
 #textContainer {
   text-align: right;
-  width:40%;
+  width:60%;
   height:100%;
   left:auto;
   right:0px;
 }
+#textContainer #headlineWrapper {
+  width:70%;
+  margin-left:30%;
+}
+#textContainer #copyWrapper1 {
+  margin-left:40%;
+  width:60%;
+}
+
+#buttonWrapper {
+  /*margin-right:3rem;*/
+  margin-bottom:0rem;
+}
+#buttonWrapper > span {
+  display: inline-block;
+}
 
 #image2Wrapper {
-  top: 30px;
+  top: 25px;
   left: 160px;
 }
 #image2Wrapper  > div {
@@ -37,8 +53,12 @@ html {
   height: 160px;
 }
 
+#image4Container {
+  right: 10.2rem;
+}
+
 #image6Wrapper {
-  top: 60px;
+  top: 40px;
   left: 220px;
 }
 

@@ -45,10 +45,25 @@ html {
   height: 220px;
 }
 
+#image4Container {
+  right: 10.2rem;
+}
+
 #image6Wrapper {
   top: 70px;
   left: 430px;
 }
+
+#buttonWrapper {
+  width: max-content;
+  margin-right: 0px;
+  margin-left: auto;
+  margin-bottom: 0px;
+}
+#buttonWrapper > span {
+  display: inline;
+  /*margin-right: 3rem;*/
+}	
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/

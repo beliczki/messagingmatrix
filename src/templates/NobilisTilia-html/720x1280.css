@@ -17,6 +17,10 @@ html {
   padding: 1.2rem 2.5rem 2rem 2.5rem;
 }
 
+#buttonWrapper {
+  margin-bottom:0rem;
+}
+
 #logoWrapper > img {
   height: 3.5rem;
 }
@@ -28,6 +32,10 @@ html {
 #image2Wrapper  > div {
   width: 320px;
   height: 460px;
+}
+
+#image4Container {
+  bottom: 3.5rem;
 }
 
 #image6Wrapper {

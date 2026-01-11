@@ -31,10 +31,15 @@ html {
   height: 230px;
 }
 
+#image4Container {
+  bottom: 3.8rem;
+}
+
 #image6Wrapper {
   top: 200px;
   left: 97px;
 }
+
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */

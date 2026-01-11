@@ -5,6 +5,7 @@
 
 :root {
   --skin: 167, 148, 136;
+  --green: 110, 168, 85;
   --white: 255, 255, 255;
   --black: 0, 0, 0;
 }
@@ -187,6 +188,17 @@ main {
   background-position: center center;
   background-repeat: no-repeat;
 }
+#buttonWrapper {
+  margin-top:auto;
+  margin-bottom:0.4rem;
+}
+#buttonWrapper > span {
+  padding:0.5rem 1.5rem 0.45rem 1.5rem;
+  background-color: rgb(var(--green));
+  border-top-right-radius: 0.5rem;
+  border-bottom-left-radius: 0.5rem;
+}
+
 
 /* ----------------------- */
 /* Empty states            */

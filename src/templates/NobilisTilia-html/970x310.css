@@ -46,9 +46,24 @@ html {
   height: 260px;
 }
 
+#image4Container {
+  right: 10.2rem;
+}
+
 #image6Wrapper {
   top: 100px;
   left: 450px;
+}
+#
+buttonWrapper {
+  width: max-content;
+  margin-right: 0px;
+  margin-left: auto;
+  margin-bottom: 0px;
+}
+#buttonWrapper > span {
+  display: inline;
+  /*margin-right: 3rem;*/
 }
 
 /* -----------------------------------------*/
