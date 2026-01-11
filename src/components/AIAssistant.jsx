@@ -13,8 +13,7 @@ const AI_PROVIDERS = {
     icon: '🟣',
     models: [
       { id: 'claude-sonnet-4-5-20250929', name: 'Claude 4.5 Sonnet', isDefault: true },
-      { id: 'claude-opus-4-5-20251101', name: 'Claude 4.5 Opus' },
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' }
+      { id: 'claude-opus-4-5-20251101', name: 'Claude 4.5 Opus' }
     ],
     available: true
   },
