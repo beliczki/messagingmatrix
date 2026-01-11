@@ -2346,10 +2346,7 @@ const MessageEditorDialog = ({
                                   } else {
                                     newClasses = [...selectedClasses, option];
                                   }
-                                  setEditingMessage({
-                                    ...editingMessage,
-                                    template_variant_classes: newClasses.join(' ')
-                                  });
+                                  updateField('template_variant_classes', newClasses.join(' '));
                                 }}
                                 className={`toggle-tag ${isSelected ? 'active' : ''}`}
                                 style={{ fontSize: 'var(--font-size-xs)' }}
