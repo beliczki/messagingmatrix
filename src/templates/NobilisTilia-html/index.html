@@ -15,8 +15,14 @@
   <body data-advert-name="{{advert_name}}">
     <div id="adContainer" class="template_variant_class {{template_variant_class}}">
       <div id="backgroundContainer">
-        <div id="imageWrapper">
+        <div id="imageWrapper" class="background">
           <div style="background-image:url('empty.png')" class="background_image_1" data-placeholder="{{background_image_1}}"></div>
+        </div>
+        <div id="image2Wrapper" class="product">
+          <div style="background-image:url('empty.png')" class="background_image_2" data-placeholder="{{background_image_2}}"></div>
+        </div>
+        <div id="image6Wrapper" class="sticker">
+          <div style="background-image:url('empty.png')" class="sticker_image_1" data-placeholder="{{sticker_image_1}}"></div>
         </div>
       </div>
       <main>
@@ -49,7 +55,7 @@
     <script>
     (function() {
     try {
-    console.log('DooH Template script starting...');
+    console.log('Template script starting...');
 
     // Apply data-placeholder attributes directly to elements
     function applyDataAttributes() {
@@ -81,7 +87,7 @@
     }
 
     } catch(globalError) {
-      console.error('DooH Template script error:', globalError);
+      console.error('Template script error:', globalError);
     }
     })();
     </script>

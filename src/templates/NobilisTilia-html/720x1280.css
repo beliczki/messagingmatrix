@@ -1,24 +1,25 @@
 /* ------------------------------------------- */
-/* 970x250 - Size specific overrides           */
+/* 300x600 - Size specific overrides           */
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 
 html {
-  font-size: 22px;
+  font-size: 56px;
 }
 
 #adContainer {
-  width: 970px !important;
-  height: 250px !important;
+  width: 720px !important;
+  height: 1280px !important;
 }
-#logoContainer {
-  top: 2rem;
-  left: 2rem;
+
+/* Adjust text container for taller format */
+#textContainer {
+  width:75%;
+  padding: 1.5rem;
 }
 
 #logoWrapper > img {
-  height: 5rem;
-  display: block;
+  height: 3rem;
 }
 
 /* -----------------------------------------*/
@@ -26,15 +27,15 @@ html {
 /* -----------------------------------------*/
 .campaignImage #backgroundContainer #imageWrapper div {
   background-size: initial;
-  background-position: -774px 0px;
+  background-position: 0px 0px;
 }
 
 
 /* Text format helpers */
-.sizebr.br300x250 {
+.sizebr.br300x600 {
   display: inline-block;
 }
 
-.size-300x250 .text-300x250 {
+.size-300x600 .text-300x600 {
   display: inline;
 }

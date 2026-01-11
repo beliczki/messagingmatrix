@@ -3,7 +3,7 @@
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 html {
-  font-size: 22px;
+  font-size: 25px;
 }
 
 #adContainer {
@@ -12,20 +12,35 @@ html {
 }
 
 #logoContainer {
-  top: 0.5rem;
-  left: 0.5rem;
+  top: 0.2rem;
+  left: 0.2rem;
 }
 
 #logoWrapper > img {
-  height: 3.5rem;
+  height: 3.3rem;
 }
+
+#image2Wrapper {
+    top: 53px;
+    left: 16px;
+}
+#image2Wrapper  > div {
+  width: 160px;
+  height: 230px;
+}
+
+#image6Wrapper {
+  top: 130px;
+  left: 207px;
+}
+
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
 .campaignImage #backgroundContainer #imageWrapper div {
   background-size: initial;
-  background-position: -384px -378px;
+  background-position: -1128px -640px;
 }
 
 

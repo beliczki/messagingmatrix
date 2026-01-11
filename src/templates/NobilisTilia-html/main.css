@@ -73,6 +73,31 @@ h1, h2, p {
   background-repeat: no-repeat;
 }
 
+#image2Wrapper {
+  position: absolute;
+  top: 37px;
+  left: 55px;
+}
+#image2Wrapper > div {
+  width: 80px;
+  height: 130px;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+#image6Wrapper {
+  position: absolute;
+  top: 87px;
+  left: 200px;
+}
+#image6Wrapper > div {
+  width: 5rem;
+  height: 5rem;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
 /* ----------------------- */
 /* Main Content Area       */
 /* ----------------------- */
@@ -90,38 +115,34 @@ main {
 
 #textContainer {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
-  width:50%;
-  height: 100%;
+  width: 100%;
+  height: 43%;
   padding: 1rem;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   z-index: 2;
+  text-align: center;
 }
 
 #headlineWrapper {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
+  text-shadow: 0px 0px 4px rgba(0,0,0,0.47);
 }
 
 
 #copyWrapper1 {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
+  text-shadow: 0px 0px 2px rgba(0,0,0,0.7);
 }
 
 
 /* ----------------------- */
 /* Disclaimer              */
 /* ----------------------- */
-
-#disclaimerWrapper1 {
-  font-size: 0.8rem;
-  line-height: 1.3;
-  margin-top: auto;
-  margin-bottom: 0;
-}
 
 #disclaimerWrapper1:has(> p[data=" "]),
 #disclaimerWrapper1:has(> p:empty) {
@@ -154,28 +175,16 @@ main {
 
 #image4Container {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 60%;
-  height: 80%;
+  bottom: 0.5rem;
+  right: 0.5rem;
   box-sizing: border-box;
-  overflow: hidden;
   z-index: 1;
 }
 
-#image4Wrapper {
-  position: absolute;
-  top: -50px;
-  left: -40px;
-  width: 130%;
-  height: 130%;
-  overflow: hidden;
-}
 
 #image4Wrapper > div {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-15deg);
+  width: 3rem;
+  height: 3rem;
   background-size: contain;
   background-position: center center;
   background-repeat: no-repeat;

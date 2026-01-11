@@ -236,13 +236,22 @@ const Matrix = ({
     }
   }, [urlMessageId, matrixData?.messages]);
 
-  // Sync URL when editingMessage changes (for closing)
-  // Only navigate away if editor was previously open (not on initial mount)
+  // Sync URL when editingMessage changes
   useEffect(() => {
-    if (!editingMessage && isEditMode && editorWasOpenedRef.current) {
-      navigate('/matrix', { replace: true });
+    if (!editingMessage) {
+      // Closing the editor - navigate to /matrix if we were in edit mode
+      if (isEditMode && editorWasOpenedRef.current) {
+        navigate('/matrix', { replace: true });
+      }
+    } else {
+      // Editor is open - ensure URL reflects the current message
+      const expectedPath = `/matrix/edit/${editingMessage.number}${editingMessage.variant || 'a'}`;
+      if (location.pathname !== expectedPath) {
+        navigate(expectedPath, { replace: true });
+      }
+      editorWasOpenedRef.current = true;
     }
-  }, [editingMessage]);
+  }, [editingMessage, location.pathname, navigate]);
 
   // Handle action=add_message URL parameter (from Tasks Create MC button)
   const addMessageActionProcessedRef = useRef(false);

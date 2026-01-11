@@ -1,14 +1,14 @@
 /* ------------------------------------------- */
-/* 480x300 - Size specific overrides           */
+/* 500x280 - Size specific overrides           */
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 html {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 #adContainer {
-  width: 480px !important;
-  height: 300px !important;
+  width: 500px !important;
+  height: 200px !important;
 }
 
 #logoContainer {
@@ -19,12 +19,13 @@ html {
 #logoWrapper > img {
   height: 3.5rem;
 }
+
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
 .campaignImage #backgroundContainer #imageWrapper div {
   background-size: initial;
-  background-position: -385px -928px
+  background-position: -1128px -378px;
 }
 
 
