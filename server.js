@@ -931,8 +931,16 @@ app.post('/api/grok', verifyToken, async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Grok API error:', errorText);
-      return res.status(response.status).json({ error: errorText });
+      console.error('Grok API error:', response.status, errorText);
+      // Try to parse as JSON for better error message
+      try {
+        const errorJson = JSON.parse(errorText);
+        return res.status(response.status).json({
+          error: `Grok API (${response.status}): ${errorJson.error?.message || errorJson.message || errorText}`
+        });
+      } catch {
+        return res.status(response.status).json({ error: `Grok API (${response.status}): ${errorText}` });
+      }
     }
 
     const data = await response.json();
