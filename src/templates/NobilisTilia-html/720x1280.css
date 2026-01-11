@@ -1,10 +1,10 @@
 /* ------------------------------------------- */
-/* 300x600 - Size specific overrides           */
+/* 720x1280 - Size specific overrides           */
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 
 html {
-  font-size: 56px;
+  font-size: 48px;
 }
 
 #adContainer {
@@ -14,12 +14,25 @@ html {
 
 /* Adjust text container for taller format */
 #textContainer {
-  width:75%;
-  padding: 1.5rem;
+  padding: 1.2rem 2.5rem 2rem 2.5rem;
 }
 
 #logoWrapper > img {
-  height: 3rem;
+  height: 3.5rem;
+}
+
+#image2Wrapper {
+  top: 320px;
+  left: 50px;
+}
+#image2Wrapper  > div {
+  width: 320px;
+  height: 460px;
+}
+
+#image6Wrapper {
+  top: 490px;
+  left: 230px;
 }
 
 /* -----------------------------------------*/
@@ -32,10 +45,10 @@ html {
 
 
 /* Text format helpers */
-.sizebr.br300x600 {
+.sizebr.br720x1280 {
   display: inline-block;
 }
 
-.size-300x600 .text-300x600 {
+.size-720x1280 .text-720x1280 {
   display: inline;
 }

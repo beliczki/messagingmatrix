@@ -22,16 +22,6 @@ html {
   height: 4rem;
 }
 
-
-
-/* -----------------------------------------*/
-/* positioning based on Image cropping  PSD */
-/* -----------------------------------------*/
-.campaignImage #backgroundContainer #imageWrapper div {
-  background-size: initial;
-  background-position: -774px -378px;
-}
-
 #image2Wrapper {
     top: 113px;
     left: 6px;
@@ -44,6 +34,14 @@ html {
 #image6Wrapper {
   top: 200px;
   left: 97px;
+}
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #backgroundContainer #imageWrapper div {
+  background-size: initial;
+  background-position: -774px -378px;
 }
 
 /* Text format helpers */

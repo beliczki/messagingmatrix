@@ -4,7 +4,7 @@
 /* ------------------------------------------- */
 
 html {
-  font-size: 24px;
+  font-size: 26px;
 }
 
 #adContainer {
@@ -13,13 +13,42 @@ html {
 }
 
 #logoContainer {
-  top: 2rem;
-  left: 2rem;
+  top: 1.8rem;
+  left: 1.5rem;
 }
 
 #logoWrapper > img {
-  height: 5rem;
+  height: 4rem;
   display: block;
+}
+
+#textContainer {
+  text-align: right;
+  width:50%;
+  height:100%;
+  left:auto;
+  right:0px;
+  display: flex;
+}
+#textContainer > div {
+  display: flex;
+  flex-direction: column;
+}
+#textContainer #headlineWrapper {margin-top:auto;}
+#textContainer #copyWrapper1 {margin-bottom:auto;}
+
+#image2Wrapper {
+  top: 38px;
+  left: 340px;
+}
+#image2Wrapper  > div {
+  width: 190px;
+  height: 260px;
+}
+
+#image6Wrapper {
+  top: 100px;
+  left: 450px;
 }
 
 /* -----------------------------------------*/
@@ -32,10 +61,10 @@ html {
 
 
 /* Text format helpers */
-.sizebr.br300x250 {
+.sizebr.br970x310 {
   display: inline-block;
 }
 
-.size-300x250 .text-300x250 {
+.size-970x310 .text-970x310 {
   display: inline;
 }

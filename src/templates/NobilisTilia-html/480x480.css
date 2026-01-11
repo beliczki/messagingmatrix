@@ -12,8 +12,8 @@ html {
 }
 
 #logoContainer {
-  top: 0.2rem;
-  left: 0.2rem;
+  top: 0.1rem;
+  left: 0.1rem;
 }
 
 #logoWrapper > img {
@@ -21,17 +21,17 @@ html {
 }
 
 #image2Wrapper {
-    top: 53px;
-    left: 16px;
+  top: 90px;
+  left: 66px;
 }
 #image2Wrapper  > div {
-  width: 160px;
-  height: 230px;
+  width: 150px;
+  height: 220px;
 }
 
 #image6Wrapper {
-  top: 130px;
-  left: 207px;
+  top: 150px;
+  left: 320px;
 }
 
 
@@ -45,10 +45,10 @@ html {
 
 
 /* Text format helpers */
-.sizebr.br300x250 {
+.sizebr.br480x480 {
   display: inline-block;
 }
 
-.size-300x250 .text-300x250 {
+.size-480x480 .text-480x480 {
   display: inline;
 }

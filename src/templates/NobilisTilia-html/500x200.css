@@ -3,7 +3,7 @@
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 html {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 #adContainer {
@@ -20,6 +20,28 @@ html {
   height: 3.5rem;
 }
 
+#textContainer {
+  text-align: right;
+  width:40%;
+  height:100%;
+  left:auto;
+  right:0px;
+}
+
+#image2Wrapper {
+  top: 30px;
+  left: 160px;
+}
+#image2Wrapper  > div {
+  width: 120px;
+  height: 160px;
+}
+
+#image6Wrapper {
+  top: 60px;
+  left: 220px;
+}
+
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
@@ -30,10 +52,10 @@ html {
 
 
 /* Text format helpers */
-.sizebr.br300x250 {
+.sizebr.br500x200 {
   display: inline-block;
 }
 
-.size-300x250 .text-300x250 {
+.size-500x200 .text-500x200 {
   display: inline;
 }

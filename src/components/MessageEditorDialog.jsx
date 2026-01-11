@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2, RefreshCw } from 'lucide-react';
 import AssetAutocomplete from './AssetAutocomplete';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
@@ -256,6 +256,9 @@ const MessageEditorDialog = ({
   useEffect(() => {
     localStorage.setItem('messageEditor_skipAnimation', skipAnimation);
   }, [skipAnimation]);
+
+  // Preview refresh key (increment to force iframe reload)
+  const [previewKey, setPreviewKey] = useState(0);
 
   // Status sync mode state (persisted to localStorage)
   const [statusSyncMode, setStatusSyncMode] = useState(() => {
@@ -795,7 +798,7 @@ const MessageEditorDialog = ({
     };
 
     loadTemplateCss();
-  }, [editingMessage?.template]);
+  }, [editingMessage?.template, previewKey]);
 
   // Load size-specific CSS when template or size changes
   useEffect(() => {
@@ -820,7 +823,7 @@ const MessageEditorDialog = ({
     };
 
     loadSizeCss();
-  }, [editingMessage?.template, previewSize]);
+  }, [editingMessage?.template, previewSize, previewKey]);
 
   // Load available dimensions when template changes
   useEffect(() => {
@@ -1730,6 +1733,13 @@ const MessageEditorDialog = ({
     <div className="dialog-preview">
       <div className="preview-header">
         <button
+          className="preview-reload-btn"
+          onClick={() => setPreviewKey(k => k + 1)}
+          title="Reload preview"
+        >
+          <RefreshCw size={14} />
+        </button>
+        <button
           className={`skip-animation-btn ${skipAnimation ? 'checked' : ''}`}
           onClick={() => setSkipAnimation(!skipAnimation)}
         >
@@ -1809,7 +1819,7 @@ const MessageEditorDialog = ({
                 boxShadow: 'var(--ui-shadow)'
               }}>
               <iframe
-                key={`${editingMessage.id}-${previewSize}-${mergedTextFormatting.map(r => r.text_formatted || '').join('')}`}
+                key={`${editingMessage.id}-${previewSize}-${previewKey}-${mergedTextFormatting.map(r => r.text_formatted || '').join('')}`}
                 srcDoc={generatePreviewHtml()}
                 style={{
                   width: `${width}px`,

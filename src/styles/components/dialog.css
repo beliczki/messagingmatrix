@@ -496,6 +496,30 @@
   opacity: 1;
 }
 
+/* --- Preview Reload Button --- */
+.preview-reload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--white-10);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-white);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.preview-reload-btn:hover {
+  background: var(--white-20);
+}
+
+.preview-reload-btn:active {
+  background: var(--white-30);
+}
+
 /* --- Skip Animation Button --- */
 .skip-animation-btn {
   display: flex;

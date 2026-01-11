@@ -4,7 +4,7 @@
 /* ------------------------------------------- */
 
 html {
-  font-size: 22px;
+  font-size: 26px;
 }
 
 #adContainer {
@@ -12,15 +12,43 @@ html {
   height: 250px !important;
 }
 #logoContainer {
-  top: 2rem;
-  left: 2rem;
+  top: 1.8rem;
+  left: 1.5rem;
 }
 
 #logoWrapper > img {
-  height: 5rem;
+  height: 4rem;
   display: block;
 }
 
+#textContainer {
+  text-align: right;
+  width:50%;
+  height:100%;
+  left:auto;
+  right:0px;
+  display: flex;
+}
+#textContainer > div {
+  display: flex;
+  flex-direction: column;
+}
+#textContainer #headlineWrapper {margin-top:auto;}
+#textContainer #copyWrapper1 {margin-bottom:auto;}
+
+#image2Wrapper {
+  top: 25px;
+  left: 350px;
+}
+#image2Wrapper  > div {
+  width: 150px;
+  height: 220px;
+}
+
+#image6Wrapper {
+  top: 70px;
+  left: 430px;
+}
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
 /* -----------------------------------------*/
@@ -31,10 +59,10 @@ html {
 
 
 /* Text format helpers */
-.sizebr.br300x250 {
+.sizebr.br970x250 {
   display: inline-block;
 }
 
-.size-300x250 .text-300x250 {
+.size-970x250 .text-970x250 {
   display: inline;
 }
