@@ -33,9 +33,7 @@ const AI_PROVIDERS = {
     name: 'Grok',
     icon: '⚫',
     models: [
-      { id: 'grok-3', name: 'Grok 3', isDefault: true },
-      { id: 'grok-3-fast', name: 'Grok 3 Fast' },
-      { id: 'grok-2-1212', name: 'Grok 2' }
+      { id: 'grok-4.1-thinking', name: 'Grok 4.1 Thinking', isDefault: true }
     ],
     available: true
   }
