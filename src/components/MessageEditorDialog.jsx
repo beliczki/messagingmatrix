@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2, RefreshCw } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2, RefreshCw, Image, Copy } from 'lucide-react';
 import AssetAutocomplete from './AssetAutocomplete';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
@@ -30,7 +30,16 @@ const MessageEditorDialog = ({
   selectedStatuses = [],
   creatives = [],
   lookAndFeel,
-  assets = []
+  assets = [],
+  // Asset generation props
+  onGenerateDescription,
+  onGenerateImage,
+  generatedDescription,
+  generatedImages = [],
+  isGeneratingDescription,
+  isGeneratingImage,
+  onApplyGeneratedImage,
+  onClearGeneratedAssets
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -92,6 +101,11 @@ const MessageEditorDialog = ({
 
   // Track hovered line for showing action buttons
   const [hoveredLine, setHoveredLine] = useState(null);
+
+  // Asset generation state
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageAspectRatio, setImageAspectRatio] = useState('1:1');
+  const [selectedImageField, setSelectedImageField] = useState('image1');
 
   // Capture original values when generatedVersions first appears
   useEffect(() => {
@@ -2885,6 +2899,228 @@ const MessageEditorDialog = ({
                         </p>
                       </div>
                     )}
+
+                    {/* Asset Generation Section */}
+                    <div style={{
+                      background: 'var(--white-05)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--white-10)',
+                      marginTop: '16px'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '16px'
+                      }}>
+                        <div>
+                          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Image size={18} style={{ color: 'white' }} />
+                            Asset Generation
+                          </h3>
+                          <p style={{ color: 'var(--white-50)', fontSize: '12px' }}>
+                            Generate descriptions and background images using AI
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Description Generation */}
+                      <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--white-10)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '16px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: 'white' }}>Generate Description</span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => onGenerateDescription?.('preview')}
+                              disabled={isGeneratingDescription}
+                              className="btn btn-secondary"
+                              style={{ padding: '8px 12px', fontSize: '12px' }}
+                            >
+                              {isGeneratingDescription ? <Loader size={12} className="animate-spin" /> : 'From Preview'}
+                            </button>
+                            {editingMessage?.image1 && editingMessage.image1 !== 'empty.png' && (
+                              <button
+                                type="button"
+                                onClick={() => onGenerateDescription?.('background')}
+                                disabled={isGeneratingDescription}
+                                className="btn btn-secondary"
+                                style={{ padding: '8px 12px', fontSize: '12px' }}
+                              >
+                                From Background
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Generated Description Display */}
+                        {generatedDescription && (
+                          <div style={{ marginTop: '12px' }}>
+                            <div style={{
+                              background: 'var(--white-05)',
+                              borderRadius: '6px',
+                              padding: '12px',
+                              fontSize: '12px',
+                              color: 'var(--white-80)',
+                              lineHeight: '1.5',
+                              maxHeight: '150px',
+                              overflowY: 'auto'
+                            }}>
+                              {generatedDescription}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(generatedDescription);
+                                }}
+                                className="btn btn-secondary"
+                                style={{ padding: '6px 12px', fontSize: '11px' }}
+                              >
+                                <Copy size={12} style={{ marginRight: '4px' }} />
+                                Copy
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Image Generation */}
+                      <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--white-10)' }}>
+                        <div style={{ paddingTop: '16px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: 'white', marginBottom: '8px', display: 'block' }}>
+                            Generate Image
+                          </span>
+
+                          {/* Prompt input */}
+                          <textarea
+                            value={imagePrompt}
+                            onChange={(e) => setImagePrompt(e.target.value)}
+                            placeholder="Describe the image you want to generate..."
+                            rows={2}
+                            className="form-textarea"
+                            style={{ marginBottom: '8px', fontSize: '12px' }}
+                          />
+
+                          {/* Generation options */}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+                            <select
+                              value={imageAspectRatio}
+                              onChange={(e) => setImageAspectRatio(e.target.value)}
+                              className="form-select"
+                              style={{ width: 'auto', padding: '6px 8px', fontSize: '12px' }}
+                            >
+                              <option value="1:1">1:1 (Square)</option>
+                              <option value="16:9">16:9 (Landscape)</option>
+                              <option value="9:16">9:16 (Portrait)</option>
+                              <option value="4:3">4:3</option>
+                              <option value="3:4">3:4</option>
+                            </select>
+
+                            <select
+                              value={selectedImageField}
+                              onChange={(e) => setSelectedImageField(e.target.value)}
+                              className="form-select"
+                              style={{ width: 'auto', padding: '6px 8px', fontSize: '12px' }}
+                            >
+                              <option value="image1">Image 1</option>
+                              <option value="image2">Image 2</option>
+                              <option value="image3">Image 3</option>
+                              <option value="image4">Image 4</option>
+                              <option value="image5">Image 5</option>
+                              <option value="image6">Image 6</option>
+                            </select>
+
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => onGenerateImage?.(imagePrompt, { aspectRatio: imageAspectRatio, mode: 'new' })}
+                                disabled={isGeneratingImage || !imagePrompt.trim()}
+                                className="btn btn-primary"
+                                style={{ padding: '8px 12px', fontSize: '12px' }}
+                              >
+                                {isGeneratingImage ? <Loader size={12} className="animate-spin" /> : 'Generate New'}
+                              </button>
+                              {editingMessage?.image1 && editingMessage.image1 !== 'empty.png' && (
+                                <button
+                                  type="button"
+                                  onClick={() => onGenerateImage?.(imagePrompt || 'Generate a similar image', { aspectRatio: imageAspectRatio, mode: 'similar' })}
+                                  disabled={isGeneratingImage}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '8px 12px', fontSize: '12px' }}
+                                >
+                                  Generate Similar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Generated Images Gallery */}
+                          {generatedImages.length > 0 && (
+                            <div style={{ marginTop: '12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'var(--white-50)' }}>
+                                  Generated Images ({generatedImages.length})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => onClearGeneratedAssets?.()}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '4px 8px', fontSize: '10px' }}
+                                >
+                                  Clear All
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {generatedImages.map((img, idx) => (
+                                  <div key={idx} style={{ position: 'relative' }}>
+                                    <img
+                                      src={`data:${img.mimeType};base64,${img.data}`}
+                                      alt={`Generated ${idx + 1}`}
+                                      style={{
+                                        width: '100px',
+                                        height: '100px',
+                                        objectFit: 'cover',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        border: '1px solid var(--white-20)'
+                                      }}
+                                    />
+                                    <div style={{
+                                      position: 'absolute',
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      padding: '4px',
+                                      background: 'rgba(0,0,0,0.8)',
+                                      borderBottomLeftRadius: '6px',
+                                      borderBottomRightRadius: '6px',
+                                      display: 'flex',
+                                      justifyContent: 'center'
+                                    }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => onApplyGeneratedImage?.(img, selectedImageField)}
+                                        style={{
+                                          fontSize: '10px',
+                                          padding: '2px 8px',
+                                          background: 'var(--primary)',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          color: 'white',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        Apply to {selectedImageField}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </>
                 );
               })()}

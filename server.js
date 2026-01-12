@@ -109,8 +109,8 @@ async function getAccessToken() {
   }
 }
 
-// Configure CORS dynamically based on environment
-const isDevelopment = process.env.NODE_ENV !== 'production';
+// Configure CORS - always include localhost for local development
+// In production, nginx proxies /api so localhost is never used cross-origin
 const allowedOrigins = [
   'https://messagingmatrix.ai',
   'http://messagingmatrix.ai',
@@ -119,18 +119,13 @@ const allowedOrigins = [
   'https://telekom.messagingmatrix.ai',
   'http://telekom.messagingmatrix.ai',
   'https://proficio.messagingmatrix.ai',
-  'http://proficio.messagingmatrix.ai'
+  'http://proficio.messagingmatrix.ai',
+  // Local development (safe - never used in production due to nginx proxy)
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
 ];
-
-// Add development origins
-if (isDevelopment) {
-  allowedOrigins.push(
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
-  );
-}
 
 // Add custom CORS origins from environment variable (comma-separated)
 if (process.env.CORS_ORIGINS) {
@@ -958,6 +953,324 @@ app.post('/api/grok', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Grok server error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// Streaming AI Endpoints (SSE)
+// ========================================
+
+// Claude streaming endpoint
+app.post('/api/claude/stream', verifyToken, async (req, res) => {
+  const { messages, model = 'claude-sonnet-4-5-20250929', max_tokens = 4096, temperature = 0.7 } = req.body;
+  const apiKey = process.env.VITE_ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API key not configured in .env' });
+  }
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens,
+        messages,
+        temperature,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      res.write(`data: ${JSON.stringify({ error: errorText })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              res.write(`data: ${JSON.stringify({ content: parsed.delta.text })}\n\n`);
+            } else if (parsed.type === 'message_stop') {
+              res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            }
+          } catch (e) {
+            // Skip unparseable lines
+          }
+        }
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Claude streaming error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+// Gemini streaming endpoint
+app.post('/api/gemini/stream', verifyToken, async (req, res) => {
+  const { messages, model = 'gemini-2.5-flash', max_tokens = 4096, temperature = 0.7 } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Gemini API key not configured in .env' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    // Convert messages to Gemini format
+    const contents = messages.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('\n') }]
+    }));
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: { maxOutputTokens: max_tokens, temperature }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      res.write(`data: ${JSON.stringify({ error: errorText })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Gemini streams JSON array chunks - parse each complete object
+      const jsonObjects = buffer.match(/\{[^{}]*"text"\s*:\s*"[^"]*"[^{}]*\}/g);
+      if (jsonObjects) {
+        for (const jsonStr of jsonObjects) {
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.text) {
+              res.write(`data: ${JSON.stringify({ content: parsed.text })}\n\n`);
+            }
+          } catch (e) {
+            // Try extracting text directly with regex
+            const textMatch = jsonStr.match(/"text"\s*:\s*"([^"]*)"/);
+            if (textMatch) {
+              res.write(`data: ${JSON.stringify({ content: textMatch[1] })}\n\n`);
+            }
+          }
+        }
+        buffer = '';
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Gemini streaming error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+// Grok streaming endpoint (OpenAI-compatible)
+app.post('/api/grok/stream', verifyToken, async (req, res) => {
+  const { messages, model = 'grok-4-1-fast-reasoning', max_tokens = 4096, temperature = 0.7 } = req.body;
+  const apiKey = process.env.GROK_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Grok API key not configured in .env' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    const openAIMessages = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('\n')
+    }));
+
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens,
+        messages: openAIMessages,
+        temperature,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      res.write(`data: ${JSON.stringify({ error: errorText })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            continue;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            }
+          } catch (e) {
+            // Skip unparseable lines
+          }
+        }
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Grok streaming error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+// Gemini Image Generation endpoint
+app.post('/api/gemini/image', verifyToken, async (req, res) => {
+  const { prompt, inputImage, aspectRatio = '1:1', imageSize = '1K', model = 'gemini-2.0-flash-exp-image-generation' } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Gemini API key not configured in .env' });
+  }
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required' });
+  }
+
+  try {
+    // Build the request parts
+    const parts = [{ text: prompt }];
+
+    // If input image provided, add it as reference (prepend so it comes before text)
+    if (inputImage) {
+      const matches = inputImage.match(/^data:(.+);base64,(.+)$/);
+      if (matches) {
+        parts.unshift({
+          inlineData: {
+            mimeType: matches[1],
+            data: matches[2]
+          }
+        });
+      }
+    }
+
+    console.log('[Gemini Image] Generating image with prompt:', prompt.substring(0, 100) + '...');
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE']
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Gemini Image] API error:', errorText);
+      return res.status(response.status).json({ error: errorText });
+    }
+
+    const data = await response.json();
+
+    // Extract generated image from response
+    const generatedParts = data.candidates?.[0]?.content?.parts || [];
+    const imagePart = generatedParts.find(p => p.inlineData);
+    const textPart = generatedParts.find(p => p.text);
+
+    if (!imagePart) {
+      console.error('[Gemini Image] No image in response:', JSON.stringify(data, null, 2));
+      return res.status(400).json({ error: 'No image generated in response', details: data });
+    }
+
+    console.log('[Gemini Image] Successfully generated image');
+
+    res.json({
+      image: {
+        mimeType: imagePart.inlineData.mimeType,
+        data: imagePart.inlineData.data
+      },
+      description: textPart?.text || '',
+      model
+    });
+
+  } catch (error) {
+    console.error('[Gemini Image] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

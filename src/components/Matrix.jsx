@@ -6,6 +6,7 @@ import settings from '../services/settings';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
 import { clearAndReloadApp } from '../utils/clearAndReload';
+import { generateImage, generateCreativeDescription } from '../api/claude-proxy';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import TreeView from './TreeView';
@@ -123,6 +124,12 @@ const Matrix = ({
   const [generatedContent, setGeneratedContent] = useState(null);
   const [generatedVersions, setGeneratedVersions] = useState(null); // { headline: [...], copy1: [...], etc }
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+
+  // Asset generation state
+  const [generatedDescription, setGeneratedDescription] = useState(null);
+  const [generatedImages, setGeneratedImages] = useState([]);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [orphanedMessages, setOrphanedMessages] = useState([]);
   const [showOrphanedDialog, setShowOrphanedDialog] = useState(false);
   const [correctingMessage, setCorrectingMessage] = useState(null);
@@ -1415,6 +1422,150 @@ const Matrix = ({
     });
   };
 
+  // Handle description generation for creative
+  const handleGenerateDescription = async (source = 'preview') => {
+    if (!editingMessage) return;
+
+    setIsGeneratingDescription(true);
+    setGeneratedDescription(null);
+
+    try {
+      let imageDataUrl;
+
+      // Helper to fetch image and convert to data URL
+      const fetchImageAsDataUrl = async (url) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      };
+
+      if (source === 'background') {
+        // Use the background image from message
+        const imageId = editingMessage.image1;
+        if (!imageId || imageId === 'empty.png') {
+          throw new Error('No background image available');
+        }
+        imageDataUrl = await fetchImageAsDataUrl(`/api/drive/proxy/${imageId}`);
+      } else {
+        // Try multiple sources for preview image:
+        // 1. Background image (image1) for HTML templates
+        // 2. Static creative from Drive (look up by MC number/variant)
+
+        const imageId = editingMessage.image1;
+        if (imageId && imageId !== 'empty.png' && !imageId.startsWith('data:')) {
+          // Has a valid image1 field - use it
+          imageDataUrl = await fetchImageAsDataUrl(`/api/drive/proxy/${imageId}`);
+        } else {
+          // Look for static creative in creatives array
+          const mcNumber = String(editingMessage.number);
+          const mcVariant = (editingMessage.variant || 'a').toLowerCase();
+          const creative = (matrixData?.creatives || []).find(c =>
+            String(c.MC_Number) === mcNumber &&
+            (c.MC_Variant || 'a').toLowerCase() === mcVariant &&
+            c.File_driveID
+          );
+
+          if (creative?.File_driveID) {
+            imageDataUrl = await fetchImageAsDataUrl(`/api/drive/proxy/${creative.File_driveID}`);
+          } else {
+            throw new Error('No image available to analyze. Upload a background image or link a static creative.');
+          }
+        }
+      }
+
+      const audience = audiences.find(a => a.key === editingMessage.audience);
+      const topic = topics.find(t => t.key === editingMessage.topic);
+
+      const result = await generateCreativeDescription(imageDataUrl, {
+        audienceName: audience?.name,
+        topicName: topic?.name,
+        templateName: editingMessage.template
+      });
+
+      // Extract description text from AI response
+      const descriptionText = result?.content?.[0]?.text || result?.content || 'No description generated';
+      setGeneratedDescription(descriptionText);
+
+    } catch (error) {
+      console.error('Description generation error:', error);
+      setGeneratedDescription(`Error: ${error.message}`);
+    } finally {
+      setIsGeneratingDescription(false);
+    }
+  };
+
+  // Handle image generation
+  const handleGenerateImage = async (prompt, options = {}) => {
+    if (!prompt?.trim()) return;
+
+    setIsGeneratingImage(true);
+
+    try {
+      // Get image generation model from settings
+      const aiModelsConfig = localStorage.getItem('ai_models_config');
+      const aiModels = aiModelsConfig ? JSON.parse(aiModelsConfig) : {};
+      const imageModel = aiModels.imageGeneration || 'gemini-2.0-flash-exp-image-generation';
+
+      const generateOptions = {
+        aspectRatio: options.aspectRatio || '1:1',
+        imageSize: '1K',
+        model: imageModel
+      };
+
+      // If mode is 'similar', include the reference image
+      if (options.mode === 'similar' && editingMessage?.image1 && editingMessage.image1 !== 'empty.png') {
+        const response = await fetch(`/api/drive/proxy/${editingMessage.image1}`);
+        const blob = await response.blob();
+        const inputImage = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+        generateOptions.inputImage = inputImage;
+      }
+
+      const result = await generateImage(prompt, generateOptions);
+
+      if (result?.image) {
+        // Add to generated images array (keep last 6)
+        setGeneratedImages(prev => [result.image, ...prev].slice(0, 6));
+      }
+
+    } catch (error) {
+      console.error('Image generation error:', error);
+      alert('Failed to generate image: ' + error.message);
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // Apply generated image to a message field
+  const handleApplyGeneratedImage = (img, fieldName) => {
+    if (!editingMessage || !img) return;
+
+    // Create a data URL from the generated image
+    const dataUrl = `data:${img.mimeType};base64,${img.data}`;
+
+    // For now, we'll store the base64 data URL directly
+    // In production, you'd want to upload to Drive and get an ID
+    // Update the message field
+    setEditingMessage(prev => ({
+      ...prev,
+      [fieldName]: dataUrl
+    }));
+  };
+
+  // Clear generated assets
+  const handleClearGeneratedAssets = () => {
+    setGeneratedDescription(null);
+    setGeneratedImages([]);
+  };
+
   // Handle zoom with mouse wheel (only with Space)
   const handleMatrixWheel = (e) => {
     if (spacePressed) {
@@ -2241,6 +2392,15 @@ const Matrix = ({
         creatives={matrixData?.creatives || []}
         lookAndFeel={lookAndFeel}
         assets={assets}
+        // Asset generation props
+        onGenerateDescription={handleGenerateDescription}
+        onGenerateImage={handleGenerateImage}
+        generatedDescription={generatedDescription}
+        generatedImages={generatedImages}
+        isGeneratingDescription={isGeneratingDescription}
+        isGeneratingImage={isGeneratingImage}
+        onApplyGeneratedImage={handleApplyGeneratedImage}
+        onClearGeneratedAssets={handleClearGeneratedAssets}
       />
 
       {/* Audience Edit Dialog */}

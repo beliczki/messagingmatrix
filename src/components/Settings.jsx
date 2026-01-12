@@ -113,6 +113,20 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [creativeStructure, setCreativeStructure] = useState('');
   const [creativeParsingRules, setCreativeParsingRules] = useState({});
   const [availableTemplateFolders, setAvailableTemplateFolders] = useState([]);
+  const [aiModels, setAiModels] = useState({
+    claude: [
+      { id: 'claude-sonnet-4-5-20250929', name: 'Claude 4.5 Sonnet', isDefault: true },
+      { id: 'claude-opus-4-5-20251101', name: 'Claude 4.5 Opus' }
+    ],
+    gemini: [
+      { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', isDefault: true },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }
+    ],
+    grok: [
+      { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', isDefault: true }
+    ],
+    imageGeneration: 'gemini-2.0-flash-exp-image-generation'
+  });
 
   useEffect(() => {
     loadConfig();
@@ -192,6 +206,22 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         setCreativeParsingRules(allConfig.creativeParsingRules && Object.keys(allConfig.creativeParsingRules).length > 0
           ? allConfig.creativeParsingRules
           : defaultParsingRules);
+        // Load AI models configuration
+        if (allConfig.aiModels && Object.keys(allConfig.aiModels).length > 0) {
+          setAiModels(allConfig.aiModels);
+          // Also update localStorage for AIAssistant
+          localStorage.setItem('ai_models_config', JSON.stringify(allConfig.aiModels));
+        } else {
+          // Try localStorage fallback
+          const localModels = localStorage.getItem('ai_models_config');
+          if (localModels) {
+            try {
+              setAiModels(JSON.parse(localModels));
+            } catch (e) {
+              console.error('Failed to parse local AI models config:', e);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading config:', error);
@@ -262,7 +292,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       await Promise.all(savePromises);
       console.log('✅ All AI prompts saved');
 
-      // Save email account settings and structure fields to SQLite
+      // Save email account settings, structure fields, and AI models to SQLite
       const sqliteConfigResponse = await apiPost('/api/config', {
         emailAccount,
         audienceStructure,
@@ -270,13 +300,18 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
         messagesStructure,
         creativeStructure,
         creativeParsingRules,
-        visibleTemplates: config.visibleTemplates || []
+        visibleTemplates: config.visibleTemplates || [],
+        aiModels
       });
 
       if (!sqliteConfigResponse.ok) {
         throw new Error('Failed to save SQLite configuration');
       }
-      console.log('✅ Email account and structure settings saved');
+      console.log('✅ Email account, structure settings, and AI models saved');
+
+      // Also save AI models to localStorage for AIAssistant to pick up immediately
+      localStorage.setItem('ai_models_config', JSON.stringify(aiModels));
+      console.log('✅ AI models saved to localStorage');
 
       setMessage({ type: 'success', text: 'Configuration, email settings, and AI prompts saved successfully' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
@@ -508,6 +543,16 @@ Guidelines for creating instructions:
                 }`}
               >
                 Prompts
+              </button>
+              <button
+                onClick={() => setActiveTab('models')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'models'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Models
               </button>
             </div>
           </div>
@@ -1978,6 +2023,275 @@ Guidelines for creating instructions:
               </div>
 
             </div>
+          </div>
+            </>
+          )}
+
+          {/* Models Tab */}
+          {activeTab === 'models' && (
+            <>
+          <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Sparkles size={24} className="text-blue-600" />
+                AI Model Configuration
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Configure the AI models available in the assistant. Changes are saved when you click the Save button.
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              {/* Claude Models */}
+              <div className="border-b border-gray-200 pb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                  Claude (Anthropic)
+                </h3>
+                <div className="space-y-3">
+                  {aiModels.claude.map((model, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={model.id}
+                        onChange={(e) => {
+                          const updated = [...aiModels.claude];
+                          updated[index] = { ...model, id: e.target.value };
+                          setAiModels({ ...aiModels, claude: updated });
+                        }}
+                        placeholder="Model ID (e.g., claude-sonnet-4-5-20250929)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={model.name}
+                        onChange={(e) => {
+                          const updated = [...aiModels.claude];
+                          updated[index] = { ...model, name: e.target.value };
+                          setAiModels({ ...aiModels, claude: updated });
+                        }}
+                        placeholder="Display Name"
+                        className="w-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                      <label className="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="claude-default"
+                          checked={model.isDefault}
+                          onChange={() => {
+                            const updated = aiModels.claude.map((m, i) => ({ ...m, isDefault: i === index }));
+                            setAiModels({ ...aiModels, claude: updated });
+                          }}
+                          className="text-blue-600"
+                        />
+                        Default
+                      </label>
+                      {aiModels.claude.length > 1 && (
+                        <button
+                          onClick={() => {
+                            const updated = aiModels.claude.filter((_, i) => i !== index);
+                            if (model.isDefault && updated.length > 0) {
+                              updated[0].isDefault = true;
+                            }
+                            setAiModels({ ...aiModels, claude: updated });
+                          }}
+                          className="text-red-500 hover:text-red-700 px-2"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setAiModels({
+                        ...aiModels,
+                        claude: [...aiModels.claude, { id: '', name: '', isDefault: false }]
+                      });
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-2"
+                  >
+                    + Add Claude model
+                  </button>
+                </div>
+              </div>
+
+              {/* Gemini Models */}
+              <div className="border-b border-gray-200 pb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                  Gemini (Google)
+                </h3>
+                <div className="space-y-3">
+                  {aiModels.gemini.map((model, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={model.id}
+                        onChange={(e) => {
+                          const updated = [...aiModels.gemini];
+                          updated[index] = { ...model, id: e.target.value };
+                          setAiModels({ ...aiModels, gemini: updated });
+                        }}
+                        placeholder="Model ID (e.g., gemini-3-pro-preview)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={model.name}
+                        onChange={(e) => {
+                          const updated = [...aiModels.gemini];
+                          updated[index] = { ...model, name: e.target.value };
+                          setAiModels({ ...aiModels, gemini: updated });
+                        }}
+                        placeholder="Display Name"
+                        className="w-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                      <label className="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="gemini-default"
+                          checked={model.isDefault}
+                          onChange={() => {
+                            const updated = aiModels.gemini.map((m, i) => ({ ...m, isDefault: i === index }));
+                            setAiModels({ ...aiModels, gemini: updated });
+                          }}
+                          className="text-blue-600"
+                        />
+                        Default
+                      </label>
+                      {aiModels.gemini.length > 1 && (
+                        <button
+                          onClick={() => {
+                            const updated = aiModels.gemini.filter((_, i) => i !== index);
+                            if (model.isDefault && updated.length > 0) {
+                              updated[0].isDefault = true;
+                            }
+                            setAiModels({ ...aiModels, gemini: updated });
+                          }}
+                          className="text-red-500 hover:text-red-700 px-2"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setAiModels({
+                        ...aiModels,
+                        gemini: [...aiModels.gemini, { id: '', name: '', isDefault: false }]
+                      });
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-2"
+                  >
+                    + Add Gemini model
+                  </button>
+                </div>
+              </div>
+
+              {/* Grok Models */}
+              <div className="pb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-gray-800"></span>
+                  Grok (xAI)
+                </h3>
+                <div className="space-y-3">
+                  {aiModels.grok.map((model, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={model.id}
+                        onChange={(e) => {
+                          const updated = [...aiModels.grok];
+                          updated[index] = { ...model, id: e.target.value };
+                          setAiModels({ ...aiModels, grok: updated });
+                        }}
+                        placeholder="Model ID (e.g., grok-4-1-fast-reasoning)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={model.name}
+                        onChange={(e) => {
+                          const updated = [...aiModels.grok];
+                          updated[index] = { ...model, name: e.target.value };
+                          setAiModels({ ...aiModels, grok: updated });
+                        }}
+                        placeholder="Display Name"
+                        className="w-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                      <label className="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="grok-default"
+                          checked={model.isDefault}
+                          onChange={() => {
+                            const updated = aiModels.grok.map((m, i) => ({ ...m, isDefault: i === index }));
+                            setAiModels({ ...aiModels, grok: updated });
+                          }}
+                          className="text-blue-600"
+                        />
+                        Default
+                      </label>
+                      {aiModels.grok.length > 1 && (
+                        <button
+                          onClick={() => {
+                            const updated = aiModels.grok.filter((_, i) => i !== index);
+                            if (model.isDefault && updated.length > 0) {
+                              updated[0].isDefault = true;
+                            }
+                            setAiModels({ ...aiModels, grok: updated });
+                          }}
+                          className="text-red-500 hover:text-red-700 px-2"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setAiModels({
+                        ...aiModels,
+                        grok: [...aiModels.grok, { id: '', name: '', isDefault: false }]
+                      });
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-2"
+                  >
+                    + Add Grok model
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Image Generation Model */}
+            <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-xl p-6 border border-pink-100">
+              <h3 className="font-semibold text-pink-800 mb-4 flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500"></span>
+                Image Generation (Gemini)
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={aiModels.imageGeneration || 'gemini-2.0-flash-exp-image-generation'}
+                    onChange={(e) => {
+                      setAiModels({ ...aiModels, imageGeneration: e.target.value });
+                    }}
+                    placeholder="Model ID (e.g., gemini-2.0-flash-exp-image-generation)"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 font-mono text-sm"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  Used for AI image generation in the MC Editor. Requires a Gemini model with image generation capabilities.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-6">
+              Note: Model changes will be saved to your configuration. The AI Assistant will use these models for all conversations.
+            </p>
           </div>
             </>
           )}

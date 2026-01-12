@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, ChevronRight, GripHorizontal, Image as ImageIcon, X, Paperclip } from 'lucide-react';
+import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, ChevronRight, GripHorizontal, Image as ImageIcon, X, Paperclip, Code, FileText, Check } from 'lucide-react';
 // X is already imported
-import { callAIAPI } from '../api/claude-proxy';
+import { callAIAPI, callAIAPIStream } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
+import { marked } from 'marked';
 
-// AI Provider configurations
-const AI_PROVIDERS = {
+// Default AI Provider configurations (fallback)
+const DEFAULT_AI_PROVIDERS = {
   claude: {
     id: 'claude',
     name: 'Claude',
@@ -32,10 +33,38 @@ const AI_PROVIDERS = {
     name: 'Grok',
     icon: '⚫',
     models: [
-      { id: 'grok-4.1-thinking', name: 'Grok 4.1 Thinking', isDefault: true }
+      { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', isDefault: true }
     ],
     available: true
   }
+};
+
+// Load AI providers from localStorage (configured in Settings) or use defaults
+const getAIProviders = () => {
+  try {
+    const savedModels = localStorage.getItem('ai_models_config');
+    if (savedModels) {
+      const parsed = JSON.parse(savedModels);
+      // Merge with defaults, updating models but keeping provider structure
+      return {
+        claude: {
+          ...DEFAULT_AI_PROVIDERS.claude,
+          models: parsed.claude || DEFAULT_AI_PROVIDERS.claude.models
+        },
+        gemini: {
+          ...DEFAULT_AI_PROVIDERS.gemini,
+          models: parsed.gemini || DEFAULT_AI_PROVIDERS.gemini.models
+        },
+        grok: {
+          ...DEFAULT_AI_PROVIDERS.grok,
+          models: parsed.grok || DEFAULT_AI_PROVIDERS.grok.models
+        }
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load AI models config:', e);
+  }
+  return DEFAULT_AI_PROVIDERS;
 };
 
 const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, setGeneratedVersions, setActiveEditorTab, setIsGeneratingContent }, ref) => {
@@ -85,6 +114,8 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   });
   const [isResizing, setIsResizing] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  // Load AI providers from config (can be updated in Settings)
+  const [aiProviders, setAiProviders] = useState(() => getAIProviders());
   const [selectedProvider, setSelectedProvider] = useState(() => {
     return localStorage.getItem('ai_assistant_provider') || 'claude';
   });
@@ -92,14 +123,60 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
     const saved = localStorage.getItem('ai_assistant_model');
     if (saved) return saved;
     // Default to first model of default provider
-    const provider = AI_PROVIDERS[localStorage.getItem('ai_assistant_provider') || 'claude'];
+    const providers = getAIProviders();
+    const provider = providers[localStorage.getItem('ai_assistant_provider') || 'claude'];
     const defaultModel = provider?.models.find(m => m.isDefault) || provider?.models[0];
     return defaultModel?.id || 'claude-sonnet-4-5-20250929';
   });
+  const [temperature, setTemperature] = useState(() => {
+    const saved = localStorage.getItem('ai_assistant_temperature');
+    return saved ? parseFloat(saved) : 0.7;
+  });
+
+  // Persist temperature
+  useEffect(() => {
+    localStorage.setItem('ai_assistant_temperature', temperature.toString());
+  }, [temperature]);
+
+  // Reload AI providers when localStorage changes (from Settings)
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'ai_models_config') {
+        setAiProviders(getAIProviders());
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Flat list of all models for simplified selector
+  const allModels = Object.values(aiProviders).flatMap(provider =>
+    provider.models.map(model => ({
+      ...model,
+      provider: provider.id,
+      providerIcon: provider.icon,
+      providerName: provider.name
+    }))
+  );
   const messagesEndRef = useRef(null);
   const resizeStartY = useRef(0);
   const resizeStartHeight = useRef(0);
   const modelDropdownRef = useRef(null);
+  const streamingMessageRef = useRef(null);
+
+  // Markdown rendering preference (persisted to localStorage)
+  const [renderMarkdown, setRenderMarkdown] = useState(() => {
+    const saved = localStorage.getItem('ai_assistant_render_markdown');
+    return saved !== 'false'; // Default to true
+  });
+  // Track streaming message content
+  const [streamingContent, setStreamingContent] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  // Persist markdown preference
+  useEffect(() => {
+    localStorage.setItem('ai_assistant_render_markdown', renderMarkdown.toString());
+  }, [renderMarkdown]);
 
   // Handle close with animation
   const handleClose = () => {
@@ -275,108 +352,114 @@ ${emailSummaries}`;
       };
       setMessages(prev => [...prev, userMessage]);
       setIsLoading(true);
+      setIsStreaming(true);
+      setStreamingContent('');
 
-      try {
-        // Call Claude API with higher max_tokens for long email threads
-        // Use selected model for email-to-task (higher token limit)
-        const data = await callAIAPI(apiKey, [userMessage], selectedModel, 16384);
-        const responseText = data.content[0].text;
+      let fullResponse = '';
 
-        // Add assistant response to chat
-        const assistantMessage = {
-          role: 'assistant',
-          content: responseText
-        };
-        setMessages(prev => [...prev, assistantMessage]);
+      // Use streaming API for email-to-task
+      await callAIAPIStream(
+        apiKey,
+        [userMessage],
+        selectedModel,
+        16384,
+        temperature,
+        // onChunk
+        (chunk) => {
+          fullResponse += chunk;
+          setStreamingContent(fullResponse);
+          scrollToBottom();
+        },
+        // onDone
+        () => {
+          setIsStreaming(false);
+          setStreamingContent('');
 
-        // Check if response was truncated
-        if (data.stop_reason === 'max_tokens') {
-          const warningMessage = {
-            role: 'system',
-            content: '⚠️ Warning: Response was truncated due to length. The task extraction may be incomplete. Consider processing fewer emails at once.'
+          const responseText = fullResponse;
+
+          // Add assistant response to chat
+          const assistantMessage = {
+            role: 'assistant',
+            content: responseText
           };
-          setMessages(prev => [...prev, warningMessage]);
-        }
+          setMessages(prev => [...prev, assistantMessage]);
 
-        // Extract JSON from the response - try multiple patterns
-        let jsonMatch = responseText.match(/```json\s*\n([\s\S]*?)\n```/);
-        if (!jsonMatch) {
-          // Try without newlines
-          jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/);
-        }
-        if (!jsonMatch) {
-          // Try to find JSON array directly (greedy to get the full array)
-          jsonMatch = responseText.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            jsonMatch = [null, jsonMatch[0]]; // Format to match other patterns
+          // Extract JSON from the response - try multiple patterns
+          let jsonMatch = responseText.match(/```json\s*\n([\s\S]*?)\n```/);
+          if (!jsonMatch) {
+            jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/);
           }
-        }
-        if (!jsonMatch) {
-          // Last resort: try to find anything between first [ and last ]
-          const firstBracket = responseText.indexOf('[');
-          const lastBracket = responseText.lastIndexOf(']');
-          if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-            jsonMatch = [null, responseText.substring(firstBracket, lastBracket + 1)];
-          }
-        }
-
-        if (jsonMatch) {
-          const jsonText = jsonMatch[1] || jsonMatch[0];
-          try {
-            const tasks = JSON.parse(jsonText.trim());
-
-            // Add email content and IDs to tasks
-            const enrichedTasks = tasks.map((task, idx) => {
-              const originalEmail = emails[idx];
-              return {
-                ...task,
-                id: `task-${Date.now()}-${idx}`,
-                emailUid: originalEmail?.uid || null,
-                emailBody: originalEmail?.body || '',
-                emailSubject: originalEmail?.subject || '',
-                emailDate: originalEmail?.date || null,
-                createdAt: new Date().toISOString()
-              };
-            });
-
-            // Automatically create tasks
-            if (onTasksCreated) {
-              onTasksCreated(enrichedTasks);
+          if (!jsonMatch) {
+            jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              jsonMatch = [null, jsonMatch[0]];
             }
+          }
+          if (!jsonMatch) {
+            const firstBracket = responseText.indexOf('[');
+            const lastBracket = responseText.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+              jsonMatch = [null, responseText.substring(firstBracket, lastBracket + 1)];
+            }
+          }
 
-            // Show success message
-            const successMessage = {
-              role: 'system',
-              content: `✅ Extracted and created ${enrichedTasks.length} task(s) from ${emails.length} email(s)!`
-            };
-            setMessages(prev => [...prev, successMessage]);
-          } catch (parseError) {
-            console.error('Error parsing tasks JSON:', parseError);
-            console.error('Attempted to parse:', jsonText);
-            console.error('Full response:', responseText);
+          if (jsonMatch) {
+            const jsonText = jsonMatch[1] || jsonMatch[0];
+            try {
+              const tasks = JSON.parse(jsonText.trim());
+
+              const enrichedTasks = tasks.map((task, idx) => {
+                const originalEmail = emails[idx];
+                return {
+                  ...task,
+                  id: `task-${Date.now()}-${idx}`,
+                  emailUid: originalEmail?.uid || null,
+                  emailBody: originalEmail?.body || '',
+                  emailSubject: originalEmail?.subject || '',
+                  emailDate: originalEmail?.date || null,
+                  createdAt: new Date().toISOString()
+                };
+              });
+
+              if (onTasksCreated) {
+                onTasksCreated(enrichedTasks);
+              }
+
+              const successMessage = {
+                role: 'system',
+                content: `✅ Extracted and created ${enrichedTasks.length} task(s) from ${emails.length} email(s)!`
+              };
+              setMessages(prev => [...prev, successMessage]);
+            } catch (parseError) {
+              console.error('Error parsing tasks JSON:', parseError);
+              const errorMessage = {
+                role: 'system',
+                content: `❌ Failed to parse tasks from response. Parse error: ${parseError.message}`
+              };
+              setMessages(prev => [...prev, errorMessage]);
+            }
+          } else {
             const errorMessage = {
               role: 'system',
-              content: `❌ Failed to parse tasks from response. Parse error: ${parseError.message}\n\nCheck browser console for details.`
+              content: '❌ No task data found in response. Please try again.'
             };
             setMessages(prev => [...prev, errorMessage]);
           }
-        } else {
+          setIsLoading(false);
+        },
+        // onError
+        (error) => {
+          console.error('Error processing emails:', error);
+          setIsStreaming(false);
+          setStreamingContent('');
           const errorMessage = {
-            role: 'system',
-            content: '❌ No task data found in response. Please try again.'
+            role: 'assistant',
+            content: `Error: ${error.message}`
           };
           setMessages(prev => [...prev, errorMessage]);
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Error processing emails:', error);
-        const errorMessage = {
-          role: 'assistant',
-          content: `Error: ${error.message}`
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      } finally {
-        setIsLoading(false);
-      }
+      );
     },
     generateMessageContent: async (contextData, callback) => {
       if (!isConfigured || isLoading) {
@@ -519,93 +602,110 @@ Respond ONLY with a JSON object in this exact format:
 
       setMessages(prev => [...prev, userMessage]);
       setIsLoading(true);
+      setIsStreaming(true);
+      setStreamingContent('');
 
-      try {
-        // Call Claude API with selected model (increased tokens for 5 versions per field)
-        const data = await callAIAPI(apiKey, [userMessage], selectedModel, 4096);
-        const responseText = data.content[0].text;
+      let fullResponse = '';
 
-        // Add assistant response to chat
-        const assistantMessage = {
-          role: 'assistant',
-          content: responseText
-        };
-        setMessages(prev => [...prev, assistantMessage]);
+      // Use streaming API for content generation
+      await callAIAPIStream(
+        apiKey,
+        [userMessage],
+        selectedModel,
+        4096,
+        temperature,
+        // onChunk
+        (chunk) => {
+          fullResponse += chunk;
+          setStreamingContent(fullResponse);
+          scrollToBottom();
+        },
+        // onDone
+        () => {
+          setIsStreaming(false);
+          setStreamingContent('');
 
-        // Extract JSON from the response - try multiple patterns
-        let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-        if (!jsonMatch) {
-          // Try without newlines
-          jsonMatch = responseText.match(/```json([\s\S]*?)```/);
-        }
-        if (!jsonMatch) {
-          // Try to find JSON object directly
-          jsonMatch = responseText.match(/\{[\s\S]*?"headline"[\s\S]*?\}/);
-          if (jsonMatch) {
-            jsonMatch = [null, jsonMatch[0]]; // Format to match other patterns
+          const responseText = fullResponse;
+
+          // Add assistant response to chat
+          const assistantMessage = {
+            role: 'assistant',
+            content: responseText
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+
+          // Extract JSON from the response - try multiple patterns
+          let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+          if (!jsonMatch) {
+            jsonMatch = responseText.match(/```json([\s\S]*?)```/);
           }
-        }
+          if (!jsonMatch) {
+            jsonMatch = responseText.match(/\{[\s\S]*?"headline"[\s\S]*?\}/);
+            if (jsonMatch) {
+              jsonMatch = [null, jsonMatch[0]];
+            }
+          }
 
-        if (jsonMatch) {
-          try {
-            const jsonText = jsonMatch[1].trim();
-            const generatedContent = JSON.parse(jsonText);
+          if (jsonMatch) {
+            try {
+              const jsonText = jsonMatch[1].trim();
+              const generatedContent = JSON.parse(jsonText);
 
-            // Validate that we have at least some content (arrays of versions)
-            const hasContent = generatedContent.headline?.length || generatedContent.copy1?.length || generatedContent.cta?.length;
-            if (hasContent) {
-              // Store the generated versions for display in the editor's Generate tab
-              if (setGeneratedVersions) {
-                setGeneratedVersions(generatedContent);
+              const hasContent = generatedContent.headline?.length || generatedContent.copy1?.length || generatedContent.cta?.length;
+              if (hasContent) {
+                if (setGeneratedVersions) {
+                  setGeneratedVersions(generatedContent);
+                }
+                if (setActiveEditorTab) {
+                  setActiveEditorTab('generate');
+                }
+                const successMessage = {
+                  role: 'system',
+                  content: '✅ Generated 5 versions for each field! Switch to Generate tab to apply.'
+                };
+                setMessages(prev => [...prev, successMessage]);
+              } else {
+                const errorMessage = {
+                  role: 'system',
+                  content: '❌ Generated content is empty. Please try again.'
+                };
+                setMessages(prev => [...prev, errorMessage]);
               }
-
-              // Switch to the Generate tab in the message editor
-              if (setActiveEditorTab) {
-                setActiveEditorTab('generate');
-              }
-
-              // Add success message
-              const successMessage = {
-                role: 'system',
-                content: '✅ Generated 5 versions for each field! Switch to Generate tab to apply.'
-              };
-              setMessages(prev => [...prev, successMessage]);
-            } else {
+            } catch (parseError) {
+              console.error('Error parsing JSON:', parseError);
               const errorMessage = {
                 role: 'system',
-                content: '❌ Generated content is empty. Please try again.'
+                content: '❌ Failed to parse generated content. Please try again.'
               };
               setMessages(prev => [...prev, errorMessage]);
             }
-          } catch (parseError) {
-            console.error('Error parsing JSON:', parseError);
-            console.error('Failed to parse JSON:', jsonMatch[1].substring(0, 100));
+          } else {
             const errorMessage = {
               role: 'system',
-              content: '❌ Failed to parse generated content. Please try again.'
+              content: '❌ Response did not contain expected JSON format. Please review the response above and try again.'
             };
             setMessages(prev => [...prev, errorMessage]);
           }
-        } else {
+          setIsLoading(false);
+        },
+        // onError
+        (error) => {
+          console.error('Error generating content:', error);
+          setIsStreaming(false);
+          setStreamingContent('');
           const errorMessage = {
-            role: 'system',
-            content: '❌ Response did not contain expected JSON format. Please review the response above and try again.'
+            role: 'assistant',
+            content: `Error: ${error.message}`
           };
           setMessages(prev => [...prev, errorMessage]);
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Error generating content:', error);
-        const errorMessage = {
-          role: 'assistant',
-          content: `Error: ${error.message}`
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      } finally {
-        setIsLoading(false);
-        setIsGenerating(false);
-        if (setIsGeneratingContent) {
-          setIsGeneratingContent(false);
-        }
+      );
+
+      // These are called in onDone/onError callbacks, but also set here for safety
+      setIsGenerating(false);
+      if (setIsGeneratingContent) {
+        setIsGeneratingContent(false);
       }
     },
     getIsGenerating: () => isGenerating
@@ -650,7 +750,7 @@ Respond ONLY with a JSON object in this exact format:
 
   // Handle model selection
   const handleSelectModel = (providerId, modelId) => {
-    const provider = AI_PROVIDERS[providerId];
+    const provider = aiProviders[providerId];
     if (!provider?.available) {
       // Show coming soon message
       return;
@@ -664,7 +764,7 @@ Respond ONLY with a JSON object in this exact format:
 
   // Get current provider and model display info
   const getCurrentProviderInfo = () => {
-    const provider = AI_PROVIDERS[selectedProvider] || AI_PROVIDERS.claude;
+    const provider = aiProviders[selectedProvider] || aiProviders.claude;
     const model = provider.models.find(m => m.id === selectedModel) || provider.models[0];
     return { provider, model };
   };
@@ -1003,148 +1103,164 @@ ${appStateContext}`;
       images: attachedImages.length > 0 ? attachedImages : undefined
     };
 
+    const savedUserInput = input.trim().toLowerCase();
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setAttachedImages([]);
     setIsLoading(true);
+    setIsStreaming(true);
+    setStreamingContent('');
 
-    try {
-      // Build context from matrix state
-      const contextPrompt = buildContextPrompt();
+    // Build context from matrix state
+    const contextPrompt = buildContextPrompt();
 
-      // Prepare messages for API - clean them to only include role and content
-      const cleanMessage = (msg) => ({
-        role: msg.role,
-        content: msg.content
-      });
+    // Prepare messages for API - clean them to only include role and content
+    const cleanMessage = (msg) => ({
+      role: msg.role,
+      content: msg.content
+    });
 
-      const apiMessages = [
-        {
-          role: 'user',
-          content: contextPrompt
-        },
-        ...messages.filter(m => m.role !== 'system').map(cleanMessage),
-        cleanMessage(userMessage)
-      ];
+    const apiMessages = [
+      {
+        role: 'user',
+        content: contextPrompt
+      },
+      ...messages.filter(m => m.role !== 'system').map(cleanMessage),
+      cleanMessage(userMessage)
+    ];
 
-      // Call Claude API with selected model
-      const data = await callAIAPI(apiKey, apiMessages, selectedModel, 4096);
+    let fullResponse = '';
 
-      const responseText = data.content[0].text;
+    // Use streaming API
+    await callAIAPIStream(
+      apiKey,
+      apiMessages,
+      selectedModel,
+      4096,
+      temperature,
+      // onChunk - called for each text chunk
+      (chunk) => {
+        fullResponse += chunk;
+        setStreamingContent(fullResponse);
+        scrollToBottom();
+      },
+      // onDone - called when stream completes
+      () => {
+        setIsStreaming(false);
+        setStreamingContent('');
 
-      const assistantMessage = {
-        role: 'assistant',
-        content: responseText
-      };
+        const assistantMessage = {
+          role: 'assistant',
+          content: fullResponse
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        setIsLoading(false);
 
-      setMessages(prev => [...prev, assistantMessage]);
+        // Process commands and suggestions after response is complete
+        const userInput = savedUserInput;
+        const isAddCommand = userInput.includes('add');
+        const isRemoveCommand = userInput.includes('remove');
 
-      // Check if user input contains "add" or "remove" keywords
-      const userInput = input.trim().toLowerCase();
-      const isAddCommand = userInput.includes('add');
-      const isRemoveCommand = userInput.includes('remove');
+        if (isAddCommand && pendingSuggestions) {
+          let addedAudiences = 0;
+          let addedTopics = 0;
+          const isAddAll = userInput.includes('add all');
 
-      if (isAddCommand && pendingSuggestions) {
-        // Execute add based on pending suggestions
-        let addedAudiences = 0;
-        let addedTopics = 0;
+          if (pendingSuggestions.suggestAudiences) {
+            pendingSuggestions.suggestAudiences.forEach(aud => {
+              if (isAddAll || userInput.includes(aud.name.toLowerCase())) {
+                if (onAddAudience) {
+                  onAddAudience(aud.name);
+                  addedAudiences++;
+                }
+              }
+            });
+          }
 
-        const isAddAll = userInput.includes('add all');
+          if (pendingSuggestions.suggestTopics) {
+            pendingSuggestions.suggestTopics.forEach(topic => {
+              if (isAddAll || userInput.includes(topic.name.toLowerCase())) {
+                if (onAddTopic) {
+                  onAddTopic(topic.name);
+                  addedTopics++;
+                }
+              }
+            });
+          }
 
-        if (pendingSuggestions.suggestAudiences) {
-          pendingSuggestions.suggestAudiences.forEach(aud => {
-            if (isAddAll || userInput.includes(aud.name.toLowerCase())) {
-              if (onAddAudience) {
-                onAddAudience(aud.name);
-                addedAudiences++;
+          if (addedAudiences > 0 || addedTopics > 0) {
+            const confirmationMessage = {
+              role: 'system',
+              content: `✅ Added to matrix: ${addedAudiences} audience(s) and ${addedTopics} topic(s).`
+            };
+            setMessages(prev => [...prev, confirmationMessage]);
+            setPendingSuggestions(null);
+          }
+        } else if (isRemoveCommand && matrixState) {
+          const { audiences = [], topics = [] } = matrixState;
+          let removed = [];
+
+          audiences.forEach(aud => {
+            if (userInput.includes(aud.name.toLowerCase()) || userInput.includes(aud.key.toLowerCase())) {
+              if (onDeleteAudience) {
+                onDeleteAudience(aud.id);
+                removed.push(`audience "${aud.name}"`);
               }
             }
           });
-        }
 
-        if (pendingSuggestions.suggestTopics) {
-          pendingSuggestions.suggestTopics.forEach(topic => {
-            if (isAddAll || userInput.includes(topic.name.toLowerCase())) {
-              if (onAddTopic) {
-                onAddTopic(topic.name);
-                addedTopics++;
+          topics.forEach(topic => {
+            if (userInput.includes(topic.name.toLowerCase()) || userInput.includes(topic.key.toLowerCase())) {
+              if (onDeleteTopic) {
+                onDeleteTopic(topic.id);
+                removed.push(`topic "${topic.name}"`);
               }
             }
           });
-        }
 
-        if (addedAudiences > 0 || addedTopics > 0) {
-          const confirmationMessage = {
-            role: 'system',
-            content: `✅ Added to matrix: ${addedAudiences} audience(s) and ${addedTopics} topic(s).`
-          };
-          setMessages(prev => [...prev, confirmationMessage]);
-          setPendingSuggestions(null); // Clear pending suggestions
-        }
-      } else if (isRemoveCommand && matrixState) {
-        // Handle remove command
-        const { audiences = [], topics = [] } = matrixState;
-        let removed = [];
-
-        // Try to find audience or topic by name or key
-        audiences.forEach(aud => {
-          if (userInput.includes(aud.name.toLowerCase()) || userInput.includes(aud.key.toLowerCase())) {
-            if (onDeleteAudience) {
-              onDeleteAudience(aud.id);
-              removed.push(`audience "${aud.name}"`);
-            }
+          if (removed.length > 0) {
+            const confirmationMessage = {
+              role: 'system',
+              content: `✅ Removed from matrix: ${removed.join(', ')}.`
+            };
+            setMessages(prev => [...prev, confirmationMessage]);
           }
-        });
+        }
 
-        topics.forEach(topic => {
-          if (userInput.includes(topic.name.toLowerCase()) || userInput.includes(topic.key.toLowerCase())) {
-            if (onDeleteTopic) {
-              onDeleteTopic(topic.id);
-              removed.push(`topic "${topic.name}"`);
-            }
+        // Parse and store any json-suggestions in the response
+        const jsonSuggestionsMatch = fullResponse.match(/```json-suggestions\n([\s\S]*?)\n```/);
+        if (jsonSuggestionsMatch) {
+          try {
+            const suggestions = JSON.parse(jsonSuggestionsMatch[1]);
+            setPendingSuggestions(suggestions);
+
+            const totalSuggestions =
+              (suggestions.suggestAudiences?.length || 0) +
+              (suggestions.suggestTopics?.length || 0);
+
+            const infoMessage = {
+              role: 'system',
+              content: `💡 ${totalSuggestions} suggestion(s) ready. Say "add all" to add everything, or "add [name]" to add specific items.`
+            };
+            setMessages(prev => [...prev, infoMessage]);
+          } catch (parseError) {
+            console.error('Error parsing json-suggestions:', parseError);
           }
-        });
-
-        if (removed.length > 0) {
-          const confirmationMessage = {
-            role: 'system',
-            content: `✅ Removed from matrix: ${removed.join(', ')}.`
-          };
-          setMessages(prev => [...prev, confirmationMessage]);
         }
+      },
+      // onError - called on error
+      (error) => {
+        console.error('Error calling AI API:', error);
+        setIsStreaming(false);
+        setStreamingContent('');
+        const errorMessage = {
+          role: 'assistant',
+          content: `Error: ${error.message}. Make sure your API key is valid.`
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        setIsLoading(false);
       }
-
-      // Parse and store any json-suggestions in the response
-      const jsonSuggestionsMatch = responseText.match(/```json-suggestions\n([\s\S]*?)\n```/);
-      if (jsonSuggestionsMatch) {
-        try {
-          const suggestions = JSON.parse(jsonSuggestionsMatch[1]);
-          setPendingSuggestions(suggestions);
-
-          // Show info message about pending suggestions
-          const totalSuggestions =
-            (suggestions.suggestAudiences?.length || 0) +
-            (suggestions.suggestTopics?.length || 0);
-
-          const infoMessage = {
-            role: 'system',
-            content: `💡 ${totalSuggestions} suggestion(s) ready. Say "add all" to add everything, or "add [name]" to add specific items.`
-          };
-          setMessages(prev => [...prev, infoMessage]);
-        } catch (parseError) {
-          console.error('Error parsing json-suggestions:', parseError);
-        }
-      }
-    } catch (error) {
-      console.error('Error calling Claude API:', error);
-      const errorMessage = {
-        role: 'assistant',
-        content: `Error: ${error.message}. Make sure your API key is valid.`
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+    );
   };
 
   const clearChat = () => {
@@ -1370,6 +1486,77 @@ ${appStateContext}`;
 
   return (
     <>
+      {/* Styles for markdown content and cursor blink */}
+      <style>{`
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+        .ai-markdown-content {
+          line-height: 1.5;
+        }
+        .ai-markdown-content p {
+          margin: 0 0 0.5em 0;
+        }
+        .ai-markdown-content p:last-child {
+          margin-bottom: 0;
+        }
+        .ai-markdown-content h1, .ai-markdown-content h2, .ai-markdown-content h3 {
+          margin: 0.5em 0 0.3em 0;
+          font-weight: 600;
+        }
+        .ai-markdown-content h1 { font-size: 1.3em; }
+        .ai-markdown-content h2 { font-size: 1.15em; }
+        .ai-markdown-content h3 { font-size: 1.05em; }
+        .ai-markdown-content ul, .ai-markdown-content ol {
+          margin: 0.3em 0;
+          padding-left: 1.5em;
+        }
+        .ai-markdown-content li {
+          margin: 0.2em 0;
+        }
+        .ai-markdown-content code {
+          background: rgba(255,255,255,0.15);
+          padding: 0.1em 0.3em;
+          border-radius: 3px;
+          font-family: monospace;
+          font-size: 0.9em;
+        }
+        .ai-markdown-content pre {
+          background: rgba(0,0,0,0.3);
+          padding: 0.5em;
+          border-radius: 4px;
+          overflow-x: auto;
+          margin: 0.5em 0;
+        }
+        .ai-markdown-content pre code {
+          background: transparent;
+          padding: 0;
+        }
+        .ai-markdown-content blockquote {
+          border-left: 3px solid rgba(255,255,255,0.3);
+          margin: 0.5em 0;
+          padding-left: 0.8em;
+          color: rgba(255,255,255,0.8);
+        }
+        .ai-markdown-content a {
+          color: #60a5fa;
+          text-decoration: underline;
+        }
+        .ai-markdown-content table {
+          border-collapse: collapse;
+          margin: 0.5em 0;
+          width: 100%;
+        }
+        .ai-markdown-content th, .ai-markdown-content td {
+          border: 1px solid rgba(255,255,255,0.2);
+          padding: 0.3em 0.5em;
+          text-align: left;
+        }
+        .ai-markdown-content th {
+          background: rgba(255,255,255,0.1);
+        }
+      `}</style>
       {/* Bottom Panel Button - Always visible */}
       <div
         className="bottom-panel"
@@ -1489,89 +1676,104 @@ ${appStateContext}`;
 
                 {/* Model Dropdown Menu */}
                 {showModelDropdown && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 4px)',
-                    right: 0,
-                    minWidth: '220px',
-                    background: 'rgba(30, 30, 35, 0.98)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: '8px',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                    zIndex: 1000,
-                    overflow: 'hidden'
-                  }}>
-                    {Object.values(AI_PROVIDERS).map((provider) => (
-                      <div key={provider.id}>
-                        {/* Provider Header */}
-                        <div style={{
-                          padding: '10px 14px 6px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: 'rgba(255,255,255,0.5)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          borderTop: provider.id !== 'claude' ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                        }}>
-                          <span>{provider.icon}</span>
-                          <span>{provider.name}</span>
-                          {provider.comingSoon && (
-                            <span style={{
-                              fontSize: '9px',
-                              padding: '2px 6px',
-                              background: 'rgba(255,255,255,0.1)',
-                              borderRadius: '4px',
-                              color: 'rgba(255,255,255,0.6)'
-                            }}>
-                              Coming Soon
-                            </span>
-                          )}
-                        </div>
-                        {/* Provider Models */}
-                        {provider.models.map((model) => (
-                          <button
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      right: 0,
+                      minWidth: '200px',
+                      background: 'var(--color-primary)',
+                      borderRadius: '8px',
+                      boxShadow: 'var(--ui-shadow)',
+                      zIndex: 1000,
+                      overflow: 'hidden'
+                    }}>
+                    {/* Flat model list */}
+                    <div style={{ padding: '4px 0' }}>
+                      {allModels.map((model) => {
+                        const isSelected = selectedModel === model.id;
+                        return (
+                          <div
                             key={model.id}
-                            onClick={() => handleSelectModel(provider.id, model.id)}
-                            disabled={!provider.available}
+                            onClick={() => handleSelectModel(model.provider, model.id)}
                             style={{
-                              width: '100%',
-                              padding: '10px 14px 10px 28px',
-                              background: selectedProvider === provider.id && selectedModel === model.id
-                                ? 'rgba(255,255,255,0.15)'
-                                : 'transparent',
-                              border: 'none',
-                              color: provider.available ? 'white' : 'rgba(255,255,255,0.4)',
-                              fontSize: '13px',
-                              textAlign: 'left',
-                              cursor: provider.available ? 'pointer' : 'not-allowed',
+                              padding: '8px 12px',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'space-between',
-                              opacity: provider.available ? 1 : 0.6
+                              gap: '10px',
+                              cursor: 'pointer',
+                              background: isSelected ? 'rgba(255,255,255,0.1)' : 'transparent',
+                              transition: 'background 0.15s'
                             }}
-                            onMouseEnter={(e) => {
-                              if (provider.available) {
-                                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background =
-                                selectedProvider === provider.id && selectedModel === model.id
-                                  ? 'rgba(255,255,255,0.15)'
-                                  : 'transparent';
-                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = isSelected ? 'rgba(255,255,255,0.1)' : 'transparent'}
                           >
-                            <span>{model.name}</span>
-                            {selectedProvider === provider.id && selectedModel === model.id && (
-                              <span style={{ color: 'rgba(100, 200, 100, 0.9)' }}>✓</span>
-                            )}
-                          </button>
-                        ))}
+                            <div style={{
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '3px',
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              background: isSelected ? 'white' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {isSelected && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
+                            </div>
+                            <span style={{ color: 'white', fontSize: '13px' }}>{model.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Temperature slider */}
+                    <div style={{
+                      borderTop: '1px solid rgba(255,255,255,0.2)',
+                      padding: '12px',
+                      background: 'rgba(0,0,0,0.15)'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px'
+                      }}>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Temperature
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'white', fontWeight: 500 }}>
+                          {temperature.toFixed(1)}
+                        </span>
                       </div>
-                    ))}
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={temperature}
+                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '100%',
+                          height: '4px',
+                          borderRadius: '2px',
+                          background: `linear-gradient(to right, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.8) ${temperature * 50}%, rgba(255,255,255,0.2) ${temperature * 50}%, rgba(255,255,255,0.2) 100%)`,
+                          appearance: 'none',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginTop: '4px',
+                        fontSize: '10px',
+                        color: 'rgba(255,255,255,0.4)'
+                      }}>
+                        <span>Precise</span>
+                        <span>Creative</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1762,10 +1964,45 @@ ${appStateContext}`;
                     borderRadius: '8px',
                     background: msg.role === 'user' ? 'rgba(255,255,255,0.2)' : msg.role === 'system' ? 'rgba(52,168,83,0.2)' : 'rgba(0,0,0,0.2)',
                     color: 'white',
-                    fontSize: '13px'
+                    fontSize: '13px',
+                    position: 'relative'
                   }}>
+                    {/* Markdown toggle for assistant messages */}
+                    {msg.role === 'assistant' && (
+                      <button
+                        onClick={() => setRenderMarkdown(!renderMarkdown)}
+                        title={renderMarkdown ? 'Show raw text' : 'Show formatted'}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: 0.6,
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.opacity = 1}
+                        onMouseLeave={(e) => e.target.style.opacity = 0.6}
+                      >
+                        {renderMarkdown ? <Code size={14} color="white" /> : <FileText size={14} color="white" />}
+                      </button>
+                    )}
                     {typeof msg.content === 'string' ? (
-                      <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{msg.content}</p>
+                      msg.role === 'assistant' && renderMarkdown ? (
+                        <div
+                          className="ai-markdown-content"
+                          style={{ paddingRight: '24px' }}
+                          dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }}
+                        />
+                      ) : (
+                        <p style={{ whiteSpace: 'pre-wrap', margin: 0, paddingRight: msg.role === 'assistant' ? '24px' : 0 }}>{msg.content}</p>
+                      )
                     ) : (
                       <div>
                         {msg.content.find(c => c.type === 'text') && (
@@ -1791,7 +2028,61 @@ ${appStateContext}`;
                 </div>
               ))}
 
-              {isLoading && (
+              {/* Streaming message display */}
+              {isStreaming && streamingContent && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                  <div style={{
+                    maxWidth: '80%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.2)',
+                    color: 'white',
+                    fontSize: '13px',
+                    position: 'relative'
+                  }}>
+                    <button
+                      onClick={() => setRenderMarkdown(!renderMarkdown)}
+                      title={renderMarkdown ? 'Show raw text' : 'Show formatted'}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: 0.6
+                      }}
+                    >
+                      {renderMarkdown ? <Code size={14} color="white" /> : <FileText size={14} color="white" />}
+                    </button>
+                    {renderMarkdown ? (
+                      <div
+                        className="ai-markdown-content"
+                        style={{ paddingRight: '24px' }}
+                        dangerouslySetInnerHTML={{ __html: marked.parse(streamingContent) }}
+                      />
+                    ) : (
+                      <p style={{ whiteSpace: 'pre-wrap', margin: 0, paddingRight: '24px' }}>{streamingContent}</p>
+                    )}
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '16px',
+                      background: 'white',
+                      marginLeft: '2px',
+                      animation: 'blink 1s infinite'
+                    }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Loading indicator (only shown before streaming starts) */}
+              {isLoading && !isStreaming && !streamingContent && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                   <div style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
                     <Loader size={16} className="animate-spin" style={{ color: 'white' }} />
