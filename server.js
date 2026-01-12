@@ -963,7 +963,9 @@ app.post('/api/grok', verifyToken, async (req, res) => {
 
 // Claude streaming endpoint
 app.post('/api/claude/stream', verifyToken, async (req, res) => {
-  const { messages, model = 'claude-sonnet-4-5-20250929', max_tokens = 4096, temperature = 0.7 } = req.body;
+  const { messages, model = 'claude-sonnet-4-5-20250929', max_tokens = 4096, temperature: rawTemp = 0.7 } = req.body;
+  // Claude only accepts temperature 0-1, clamp if UI sends higher value
+  const temperature = Math.min(Math.max(rawTemp, 0), 1);
   const apiKey = process.env.VITE_ANTHROPIC_API_KEY;
 
   if (!apiKey) {
