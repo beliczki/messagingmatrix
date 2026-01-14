@@ -132,6 +132,7 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
     const saved = localStorage.getItem('ai_assistant_temperature');
     return saved ? parseFloat(saved) : 0.7;
   });
+  const [debugMode, setDebugMode] = useState(false);
 
   // Persist temperature
   useEffect(() => {
@@ -1073,6 +1074,86 @@ ${appStateContext}`;
     return matrixContextFull;
   };
 
+  // Get individual context sections for collapsible display
+  const getContextSections = () => {
+    const data = matrixData || matrixState || {};
+    const { audiences = [], topics = [], messages = [], keywords = {}, assets = [], creatives = [], textFormatting = [] } = data;
+    const activeMessages = messages.filter(m => m.status !== 'deleted');
+
+    const sections = {};
+
+    // Client Context
+    const clientContext = customPrompts['client-context'] || '';
+    if (clientContext) {
+      sections.clientContext = { label: 'Client Context', content: clientContext };
+    }
+
+    // Module Instructions
+    const module = moduleContext?.module || (editingMessage ? 'message-generation' : (taskContext ? 'tasks' : 'matrix'));
+    const moduleInstructions = customPrompts[module] || customPrompts['matrix'] || '';
+    if (moduleInstructions) {
+      sections.moduleInstructions = { label: 'Module Instructions', content: moduleInstructions };
+    }
+
+    // Data Structure
+    if (dataStructureDoc) {
+      sections.dataStructure = { label: 'Data Structure', content: dataStructureDoc };
+    }
+
+    // Data sections
+    if (audiences.length > 0) {
+      sections.audiences = { label: `Audiences (${audiences.length})`, content: JSON.stringify(audiences, null, 2) };
+    }
+    if (topics.length > 0) {
+      sections.topics = { label: `Topics (${topics.length})`, content: JSON.stringify(topics, null, 2) };
+    }
+    if (activeMessages.length > 0) {
+      sections.messages = { label: `Messages (${activeMessages.length})`, content: JSON.stringify(activeMessages, null, 2) };
+
+      // By Audience
+      const byAudience = {};
+      activeMessages.forEach(msg => {
+        const audienceKey = msg.audience || 'unassigned';
+        if (!byAudience[audienceKey]) byAudience[audienceKey] = [];
+        byAudience[audienceKey].push(msg);
+      });
+      let byAudienceContent = '';
+      Object.keys(byAudience).forEach(audienceKey => {
+        const audienceName = audiences.find(a => a.key === audienceKey)?.name || audienceKey;
+        byAudienceContent += `**${audienceName}** (${byAudience[audienceKey].length} messages):\n${JSON.stringify(byAudience[audienceKey], null, 2)}\n\n`;
+      });
+      sections.messagesByAudience = { label: 'Messages by Audience', content: byAudienceContent };
+
+      // By Topic
+      const byTopic = {};
+      activeMessages.forEach(msg => {
+        const topicKey = msg.topic || 'unassigned';
+        if (!byTopic[topicKey]) byTopic[topicKey] = [];
+        byTopic[topicKey].push(msg);
+      });
+      let byTopicContent = '';
+      Object.keys(byTopic).forEach(topicKey => {
+        const topicName = topics.find(t => t.key === topicKey)?.name || topicKey;
+        byTopicContent += `**${topicName}** (${byTopic[topicKey].length} messages):\n${JSON.stringify(byTopic[topicKey], null, 2)}\n\n`;
+      });
+      sections.messagesByTopic = { label: 'Messages by Topic', content: byTopicContent };
+    }
+    if (Object.keys(keywords).length > 0) {
+      sections.keywords = { label: `Keywords (${Object.keys(keywords).length})`, content: JSON.stringify(keywords, null, 2) };
+    }
+    if (assets.length > 0) {
+      sections.assets = { label: `Assets (${assets.length})`, content: JSON.stringify(assets, null, 2) };
+    }
+    if (creatives.length > 0) {
+      sections.creatives = { label: `Creatives (${creatives.length})`, content: JSON.stringify(creatives, null, 2) };
+    }
+    if (textFormatting.length > 0) {
+      sections.textFormatting = { label: `Text Formatting (${textFormatting.length})`, content: JSON.stringify(textFormatting, null, 2) };
+    }
+
+    return sections;
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && attachedImages.length === 0) || !isConfigured || isLoading) return;
 
@@ -1726,57 +1807,20 @@ ${appStateContext}`;
                         );
                       })}
                     </div>
-
-                    {/* Temperature slider */}
-                    <div style={{
-                      borderTop: '1px solid rgba(255,255,255,0.2)',
-                      padding: '12px',
-                      background: 'rgba(0,0,0,0.15)'
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Temperature
-                        </span>
-                        <span style={{ fontSize: '12px', color: 'white', fontWeight: 500 }}>
-                          {temperature.toFixed(1)}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                        value={temperature}
-                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          width: '100%',
-                          height: '4px',
-                          borderRadius: '2px',
-                          background: `linear-gradient(to right, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.8) ${temperature * 50}%, rgba(255,255,255,0.2) ${temperature * 50}%, rgba(255,255,255,0.2) 100%)`,
-                          appearance: 'none',
-                          cursor: 'pointer'
-                        }}
-                      />
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        marginTop: '4px',
-                        fontSize: '10px',
-                        color: 'rgba(255,255,255,0.4)'
-                      }}>
-                        <span>Precise</span>
-                        <span>Creative</span>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Debug Mode Toggle - styled like skip-animation-btn */}
+              <button
+                className={`skip-animation-btn ${debugMode ? 'checked' : ''}`}
+                onClick={() => setDebugMode(!debugMode)}
+              >
+                <div className="checkbox-box">
+                  <Check size={12} />
+                </div>
+                <span>Debug</span>
+              </button>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
@@ -2125,6 +2169,49 @@ ${appStateContext}`;
                 flexDirection: 'column',
                 overflow: 'hidden'
               }}>
+                {/* Temperature Slider */}
+                <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '8px'
+                  }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Temperature
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'white', fontWeight: 500 }}>
+                      {temperature.toFixed(1)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={temperature}
+                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: '4px',
+                      borderRadius: '2px',
+                      background: `linear-gradient(to right, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.8) ${temperature * 50}%, rgba(255,255,255,0.2) ${temperature * 50}%, rgba(255,255,255,0.2) 100%)`,
+                      appearance: 'none',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginTop: '4px',
+                    fontSize: '9px',
+                    color: 'rgba(255,255,255,0.4)'
+                  }}>
+                    <span>Precise</span>
+                    <span>Creative</span>
+                  </div>
+                </div>
+
                 <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '16px', flexShrink: 0 }}>Context Parts</h3>
                 <div style={{
                   display: 'flex',
@@ -2137,176 +2224,179 @@ ${appStateContext}`;
                   ...scrollbarStyles
                 }}>
                   {[
-                    { key: 'clientContext', label: 'Client Context', description: 'Client-specific instructions', anchor: '# CLIENT' },
-                    { key: 'moduleInstructions', label: 'Module Instructions', description: 'AI behavior instructions', anchor: 'IMPORTANT' },
-                    { key: 'dataStructure', label: 'Data Structure', description: 'Schema documentation', anchor: '# Data Structure' },
-                    { key: 'audiences', label: 'Audiences', description: 'All audience data', count: audiences.length, anchor: '### ALL AUDIENCES' },
-                    { key: 'topics', label: 'Topics', description: 'All topic data', count: topics.length, anchor: '### ALL TOPICS' },
-                    { key: 'messages', label: 'Messages', description: 'All message data', count: messages.length, anchor: '### ALL MESSAGES' },
-                    { key: 'messagesByAudience', label: 'By Audience', description: 'Grouped by audience', indent: true, anchor: '### MESSAGES GROUPED BY AUDIENCE' },
-                    { key: 'messagesByTopic', label: 'By Topic', description: 'Grouped by topic', indent: true, anchor: '### MESSAGES GROUPED BY TOPIC' },
-                    { key: 'keywords', label: 'Keywords', description: 'Keyword categories', count: Object.keys(keywords).length, anchor: '### ALL KEYWORDS' },
-                    { key: 'assets', label: 'Assets', description: 'Asset library data', count: assets.length, anchor: '### ALL ASSETS' },
-                    { key: 'creatives', label: 'Creatives', description: 'Creative library data', count: creatives.length, anchor: '### ALL CREATIVES' },
-                    { key: 'textFormatting', label: 'Text Formatting', description: 'Formatting rules', count: textFormatting.length, anchor: '### ALL TEXT FORMATTING' }
-                  ].map(({ key, label, description, indent, count, anchor }) => (
-                    <label
+                    { key: 'clientContext', label: 'Client Context' },
+                    { key: 'moduleInstructions', label: 'Module Instructions' },
+                    { key: 'dataStructure', label: 'Data Structure' },
+                    { key: 'audiences', label: 'Audiences', count: audiences.length },
+                    { key: 'topics', label: 'Topics', count: topics.length },
+                    { key: 'messages', label: 'Messages', count: messages.length },
+                    { key: 'messagesByAudience', label: 'By Audience', indent: true },
+                    { key: 'messagesByTopic', label: 'By Topic', indent: true },
+                    { key: 'keywords', label: 'Keywords', count: Object.keys(keywords).length },
+                    { key: 'assets', label: 'Assets', count: assets.length },
+                    { key: 'creatives', label: 'Creatives', count: creatives.length },
+                    { key: 'textFormatting', label: 'Text Formatting', count: textFormatting.length }
+                  ].map(({ key, label, indent, count }) => (
+                    <div
                       key={key}
+                      onClick={() => {
+                        // Clicking row scrolls to anchor (if section is enabled)
+                        if (contextParts[key]) {
+                          const scrollContainer = document.getElementById('context-preview-scroll');
+                          const sectionEl = document.getElementById(`context-section-${key}`);
+                          if (scrollContainer && sectionEl) {
+                            const containerRect = scrollContainer.getBoundingClientRect();
+                            const sectionRect = sectionEl.getBoundingClientRect();
+                            const scrollTop = scrollContainer.scrollTop + (sectionRect.top - containerRect.top) - 8;
+                            scrollContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
+                          }
+                        }
+                      }}
                       style={{
                         display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '10px',
-                        padding: '8px 10px',
-                        paddingLeft: indent ? '24px' : '10px',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        paddingLeft: indent ? '20px' : '8px',
                         background: contextParts[key] ? 'rgba(255,255,255,0.1)' : 'transparent',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        cursor: contextParts[key] ? 'pointer' : 'default',
                         transition: 'background 0.15s',
                         borderLeft: indent ? '2px solid rgba(255,255,255,0.2)' : 'none',
-                        marginLeft: indent ? '10px' : '0'
+                        marginLeft: indent ? '8px' : '0'
                       }}
                       onMouseEnter={(e) => {
-                        if (!contextParts[key]) e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                        if (contextParts[key]) e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                        else e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
                       }}
                       onMouseLeave={(e) => {
-                        if (!contextParts[key]) e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.background = contextParts[key] ? 'rgba(255,255,255,0.1)' : 'transparent';
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={contextParts[key]}
-                        onChange={() => toggleContextPart(key)}
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          marginTop: '2px',
-                          accentColor: '#3b82f6',
-                          cursor: 'pointer'
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleContextPart(key);
                         }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {label}
-                          {count !== undefined && (
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '1px 6px',
-                              background: 'rgba(255,255,255,0.15)',
-                              borderRadius: '10px',
-                              color: 'rgba(255,255,255,0.8)'
-                            }}>
-                              {count}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{description}</div>
-                      </div>
-                      {contextParts[key] && (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const preEl = document.getElementById('context-preview-pre');
-                            if (preEl && anchor) {
-                              // Use Range API to find text position
-                              const textNode = preEl.firstChild;
-                              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-                                const text = textNode.textContent || '';
-                                const anchorIndex = text.indexOf(anchor);
-                                if (anchorIndex !== -1) {
-                                  // Create a range to the anchor position
-                                  const range = document.createRange();
-                                  range.setStart(textNode, anchorIndex);
-                                  range.setEnd(textNode, anchorIndex + anchor.length);
-
-                                  // Get the bounding rect of the range
-                                  const rect = range.getBoundingClientRect();
-                                  const preRect = preEl.getBoundingClientRect();
-
-                                  // Calculate scroll position relative to the pre element
-                                  const scrollOffset = rect.top - preRect.top + preEl.scrollTop - 50;
-                                  preEl.scrollTop = Math.max(0, scrollOffset);
-                                }
-                              }
-                            }
-                          }}
+                        style={{
+                          padding: '3px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={contextParts[key]}
+                          onChange={() => {}}
                           style={{
-                            background: 'transparent',
-                            border: 'none',
-                            padding: '4px',
+                            width: '14px',
+                            height: '14px',
+                            accentColor: '#3b82f6',
                             cursor: 'pointer',
-                            color: 'rgba(255,255,255,0.4)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            marginTop: '2px',
-                            transition: 'color 0.15s'
+                            pointerEvents: 'none'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
-                          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
-                          title={`Jump to ${label}`}
-                        >
-                          <ChevronRight size={14} />
-                        </button>
+                        />
+                      </div>
+                      <span style={{ fontSize: '12px', color: 'white', flex: 1 }}>{label}</span>
+                      {count !== undefined && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '1px 5px',
+                          background: 'rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          {count}
+                        </span>
                       )}
-                    </label>
+                      {contextParts[key] && (
+                        <ChevronRight size={12} style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
 
-              {/* Context Preview - Right Side */}
+              {/* Context Preview - Right Side with Anchored Sections */}
               {(() => {
                 const contextText = buildContextPrompt();
                 const charCount = contextText.length;
-                // Estimate tokens: ~3.5 chars per token (JSON/code is denser than prose)
                 const estimatedTokens = Math.ceil(charCount / 3.5);
+                const sections = getContextSections();
+                const sectionOrder = ['clientContext', 'moduleInstructions', 'dataStructure', 'audiences', 'topics', 'messages', 'messagesByAudience', 'messagesByTopic', 'keywords', 'assets', 'creatives', 'textFormatting'];
+
                 return (
                   <div style={{
                     flex: 1,
-                    background: 'rgba(0,0,0,0.2)',
-                    borderRadius: '8px',
-                    padding: '16px',
                     minWidth: 0,
                     display: 'flex',
-                    flexDirection: 'column'
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '8px',
+                    padding: '16px'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexShrink: 0 }}>
                       <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'white', margin: 0 }}>Context Preview</h3>
                       <div style={{
                         display: 'flex',
                         gap: '12px',
                         fontSize: '12px',
-                        color: 'rgba(255,255,255,0.6)',
-                        background: 'rgba(0,0,0,0.2)',
-                        padding: '4px 10px',
-                        borderRadius: '4px'
+                        color: 'rgba(255,255,255,0.6)'
                       }}>
                         <span><strong style={{ color: 'rgba(255,255,255,0.9)' }}>{charCount.toLocaleString()}</strong> chars</span>
                         <span>~<strong style={{ color: 'rgba(255,255,255,0.9)' }}>{estimatedTokens.toLocaleString()}</strong> tokens</span>
                       </div>
                     </div>
-                    <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '16px' }}>
-                      This is the context that will be sent with your next message to the AI assistant.
-                    </p>
-                    <pre
-                      id="context-preview-pre"
+
+                    {/* Scrollable Content with Section Anchors */}
+                    <div
+                      id="context-preview-scroll"
                       style={{
                         flex: 1,
-                        fontSize: '11px',
-                        lineHeight: '16px',
-                        fontFamily: 'monospace',
-                        background: 'rgba(0,0,0,0.2)',
-                        padding: '16px',
-                        borderRadius: '6px',
                         overflow: 'auto',
-                        whiteSpace: 'pre-wrap',
-                        color: 'rgba(255,255,255,0.9)',
-                        margin: 0,
                         scrollbarWidth: 'thin',
                         scrollbarColor: 'rgba(255,255,255,0.3) transparent'
                       }}
                     >
-                      {contextText}
-                    </pre>
+                      <pre style={{
+                        fontSize: '10px',
+                        lineHeight: '14px',
+                        fontFamily: 'monospace',
+                        margin: 0,
+                        whiteSpace: 'pre-wrap',
+                        color: 'rgba(255,255,255,0.8)'
+                      }}>
+                        {sectionOrder.map(key => {
+                          const section = sections[key];
+                          if (!section || !contextParts[key]) return null;
+                          const sectionChars = section.content.length;
+                          const sectionTokens = Math.ceil(sectionChars / 3.5);
+
+                          return (
+                            <span key={key}>
+                              <span
+                                id={`context-section-${key}`}
+                                style={{
+                                  display: 'block',
+                                  color: '#60a5fa',
+                                  fontWeight: 600,
+                                  marginTop: key === 'clientContext' ? 0 : '24px',
+                                  marginBottom: '8px',
+                                  paddingBottom: '4px',
+                                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                                }}
+                              >
+                                {section.label} <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.4)', fontSize: '9px' }}>({sectionChars.toLocaleString()} chars)</span>
+                              </span>
+                              {section.content}
+                              {'\n'}
+                            </span>
+                          );
+                        })}
+                      </pre>
+                    </div>
                   </div>
                 );
               })()}
@@ -2325,6 +2415,54 @@ ${appStateContext}`;
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Debug Panel - Show API parameters when debug mode is on */}
+                {debugMode && (() => {
+                  const contextText = buildContextPrompt();
+                  const contextChars = contextText.length;
+                  const contextTokens = Math.ceil(contextChars / 3.5);
+                  const provider = getCurrentProviderInfo();
+
+                  return (
+                    <div style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      fontSize: '11px',
+                      fontFamily: 'monospace'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px',
+                        paddingBottom: '8px',
+                        borderBottom: '1px solid rgba(59, 130, 246, 0.2)'
+                      }}>
+                        <span style={{ color: '#60a5fa', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          API Request Parameters
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', color: 'rgba(255,255,255,0.8)' }}>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>provider:</span>
+                        <span>{provider.provider.id}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>model:</span>
+                        <span>{selectedModel}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>max_tokens:</span>
+                        <span>4096</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>temperature:</span>
+                        <span>{temperature.toFixed(1)}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>messages:</span>
+                        <span>{messages.length + 1} items (context + {messages.length} history)</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>context:</span>
+                        <span>{contextChars.toLocaleString()} chars / ~{contextTokens.toLocaleString()} tokens</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>attachments:</span>
+                        <span>{attachedImages.length} images</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Image Previews */}
                 {attachedImages.length > 0 && (
                   <div style={{

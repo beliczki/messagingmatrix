@@ -209,6 +209,14 @@
   flex-shrink: 0;
 }
 
+/* --- Token Expiry Counter --- */
+.token-expiry {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: auto;
+  font-weight: normal;
+}
+
 /* --- Profile Item --- */
 .nav-item.profile-item {
   margin-top: var(--space-4);

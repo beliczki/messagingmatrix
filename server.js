@@ -848,11 +848,45 @@ app.post('/api/gemini', verifyToken, async (req, res) => {
     }
 
     // Convert messages to Gemini format
-    // Gemini uses "parts" array with "text" field, alternating user/model roles
-    const contents = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('\n') }]
-    }));
+    // Gemini uses "parts" array with text and inline_data, alternating user/model roles
+    const contents = messages.map(msg => {
+      const role = msg.role === 'assistant' ? 'model' : 'user';
+
+      // Handle string content (simple text)
+      if (typeof msg.content === 'string') {
+        return { role, parts: [{ text: msg.content }] };
+      }
+
+      // Handle array content (text + images)
+      const parts = msg.content.map(c => {
+        if (c.type === 'text') {
+          return { text: c.text };
+        }
+        if (c.type === 'image' && c.source) {
+          // Convert Claude-style image format to Gemini inline_data format
+          return {
+            inline_data: {
+              mime_type: c.source.media_type,
+              data: c.source.data
+            }
+          };
+        }
+        // Fallback for unknown types
+        return { text: c.text || '' };
+      }).filter(p => p.text || p.inline_data);
+
+      return { role, parts };
+    });
+
+    // Log what's being sent (for debugging)
+    const hasImage = contents.some(c => c.parts.some(p => p.inline_data));
+    console.log(`[Gemini] Model: ${model}, Has image: ${hasImage}, Parts: ${contents[0]?.parts?.length || 0}`);
+    if (contents[0]?.parts) {
+      contents[0].parts.forEach((p, i) => {
+        if (p.text) console.log(`[Gemini] Part ${i}: text (${p.text.substring(0, 100)}...)`);
+        if (p.inline_data) console.log(`[Gemini] Part ${i}: image (${p.inline_data.mime_type}, ${Math.round(p.inline_data.data.length / 1024)}KB)`);
+      });
+    }
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -1542,7 +1576,13 @@ app.post('/api/shares', async (req, res) => {
     const processedAssets = [];
 
     for (const creative of creatives) {
-      if (creative.isDynamic && creative.messageData && templateData.templateHtml && templateData.templateCss) {
+      // Use template data from the creative itself (attached by CreativeShare.jsx)
+      const creativeTemplateHtml = creative.templateHtml || templateData.templateHtml;
+      const creativeTemplateCss = creative.templateCss || templateData.templateCss;
+      const creativeTemplateConfig = creative.templateConfig || templateData.templateConfig;
+      const creativeTemplateName = creative.templateName || templateData.templateName || 'html';
+
+      if (creative.isDynamic && creative.messageData && creativeTemplateHtml && creativeTemplateCss) {
         try {
           // Generate folder name: MC{{Number}}_{{Variant}}_{{Dimensions}}_{{Version}}
           const mcNumber = creative.messageData.number || '0';
@@ -1558,11 +1598,11 @@ app.post('/api/shares', async (req, res) => {
           // Get CSS for this size
           const sizeKey = dimensions;
           let combinedCss = '';
-          if (templateData.templateCss.main) {
-            combinedCss += templateData.templateCss.main + '\n';
+          if (creativeTemplateCss.main) {
+            combinedCss += creativeTemplateCss.main + '\n';
           }
-          if (templateData.templateCss[sizeKey]) {
-            combinedCss += templateData.templateCss[sizeKey];
+          if (creativeTemplateCss[sizeKey]) {
+            combinedCss += creativeTemplateCss[sizeKey];
           }
 
           // Save CSS file
@@ -1570,9 +1610,9 @@ app.post('/api/shares', async (req, res) => {
 
           // Build imageBaseUrls from template config
           const templateImageBaseUrls = {};
-          if (templateData.templateConfig && templateData.templateConfig.placeholders) {
-            Object.keys(templateData.templateConfig.placeholders).forEach(placeholderName => {
-              const config = templateData.templateConfig.placeholders[placeholderName];
+          if (creativeTemplateConfig && creativeTemplateConfig.placeholders) {
+            Object.keys(creativeTemplateConfig.placeholders).forEach(placeholderName => {
+              const config = creativeTemplateConfig.placeholders[placeholderName];
               if (config.type === 'image' || config.type === 'video') {
                 const binding = config['binding-messagingmatrix'];
                 if (binding) {
@@ -1585,9 +1625,9 @@ app.post('/api/shares', async (req, res) => {
 
           // Populate template with message data (with text formatting)
           let populatedHtml = populateTemplate(
-            templateData.templateHtml,
+            creativeTemplateHtml,
             creative.messageData,
-            templateData.templateConfig,
+            creativeTemplateConfig,
             templateImageBaseUrls, // Use template-based URLs instead of config
             dimensions,
             textFormatting
@@ -1610,8 +1650,7 @@ app.post('/api/shares', async (req, res) => {
           fs.writeFileSync(path.join(adDir, 'index.html'), populatedHtml, 'utf8');
 
           // Copy and populate manifest.json
-          const templateName = templateData.templateName || 'html';
-          const manifestSourcePath = path.join(templatesDir, templateName, 'manifest.json');
+          const manifestSourcePath = path.join(templatesDir, creativeTemplateName, 'manifest.json');
 
           if (fs.existsSync(manifestSourcePath)) {
             try {
@@ -2960,7 +2999,7 @@ app.post('/api/users/login', (req, res) => {
       email: user.email,
       role: user.role,
       iat: Math.floor(Date.now() / 1000), // Issued at
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // Expires in 24 hours
+      exp: Math.floor(Date.now() / 1000) + (5 * 24 * 60 * 60) // Expires in 5 days
     };
 
     // Create JWT: base64(header).base64(payload).signature

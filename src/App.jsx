@@ -118,6 +118,46 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
   // Get username (part before @)
   const userName = currentUser?.email?.split('@')[0] || 'User';
 
+  // Token expiry countdown
+  const [tokenExpiry, setTokenExpiry] = useState('');
+  useEffect(() => {
+    const updateExpiry = () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setTokenExpiry('');
+        return;
+      }
+      try {
+        const [, payload] = token.split('.');
+        const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+        const exp = decoded.exp * 1000;
+        const now = Date.now();
+        const remaining = exp - now;
+
+        if (remaining <= 0) {
+          setTokenExpiry('expired');
+          return;
+        }
+
+        const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+        const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+
+        if (days > 0) {
+          setTokenExpiry(`${days}d ${hours}h`);
+        } else {
+          const mins = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+          setTokenExpiry(`${hours}h ${mins}m`);
+        }
+      } catch {
+        setTokenExpiry('');
+      }
+    };
+
+    updateExpiry();
+    const interval = setInterval(updateExpiry, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-primary)' }}>
       {/* Hamburger Button */}
@@ -228,6 +268,7 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
           >
             <div className="profile-avatar">{userInitials}</div>
             <span>{userName}</span>
+            {tokenExpiry && <span className="token-expiry">{tokenExpiry}</span>}
           </button>
 
           {/* Logout */}

@@ -107,15 +107,29 @@ const CreativeShare = ({
         setIsCreating(true);
         setCreationStatus('Creating share...');
 
+        // Prepare creatives with their template data attached
+        // This is needed because functions (like getTemplateForCreative) can't be serialized
+        const creativesWithTemplates = selectedCreatives.map(creative => {
+          if (creative.isDynamic && creative.messageData) {
+            const templateName = creative.messageData.template;
+            const templateData = templatesCache[templateName] || {};
+            return {
+              ...creative,
+              templateHtml: templateData.html || '',
+              templateCss: templateData.css || {},
+              templateConfig: templateData.config || null,
+              templateName: templateName
+            };
+          }
+          return creative;
+        });
+
         const result = await createPreview(
           Array.from(selectedCreativeIds),
-          selectedCreatives,
+          creativesWithTemplates,
           shareTitle,
           selectedBaseColor,
-          {
-            templatesCache,
-            getTemplateForCreative
-          },
+          {}, // Template data is now on each creative
           textFormatting
         );
 
