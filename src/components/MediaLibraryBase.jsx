@@ -523,6 +523,7 @@ const MediaLibraryBase = ({
     setColumnHeights(heights);
     chunkBoundaries.current = chunks;
     processedItems.current.clear();
+    itemPositions.current.clear(); // Clear cached heights to avoid size contamination on filter change
     placeholdersBuiltUpTo.current = visibleItems.length; // Track how many placeholders we've built
 
     // Set visible range
