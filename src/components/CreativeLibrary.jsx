@@ -733,10 +733,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             return; // Skip - no template configured
           }
 
-          // Look up product from audiences based on message.audience
+          // Look up product from audiences or topics based on message
           // Only use actual product values - don't fallback to message name/number
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
-          const product = audience?.product || '';
+          const topic = (matrixData?.topics || []).find(t => t.key === message.topic);
+          const product = audience?.product || topic?.product || '';
 
           // Get template-specific sizes for this message
           const templateName = message.template; // template is guaranteed to be set (checked above)
@@ -980,7 +981,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   };
 
-  // Get unique products from both matrixData audiences and creatives
+  // Get unique products from matrixData audiences, topics, and creatives
   const availableProducts = React.useMemo(() => {
     const products = new Set();
 
@@ -988,6 +989,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     if (matrixData?.audiences) {
       matrixData.audiences.forEach(aud => {
         if (aud.product) products.add(aud.product);
+      });
+    }
+
+    // Add products from topics
+    if (matrixData?.topics) {
+      matrixData.topics.forEach(topic => {
+        if (topic.product) products.add(topic.product);
       });
     }
 
@@ -1012,7 +1020,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       if (b === 'N/A') return -1;
       return a.localeCompare(b);
     });
-  }, [matrixData?.audiences, creatives]);
+  }, [matrixData?.audiences, matrixData?.topics, creatives]);
 
   // Set all products selected by default when availableProducts changes
   // Also clean up stale products from localStorage that no longer exist
