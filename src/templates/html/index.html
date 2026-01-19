@@ -8,14 +8,15 @@
     <meta name="advert_mc" content="{{advert_mc}}">
     <meta name="advert_variant" content="{{advert_variant}}">
     <meta name="advert_name" content="{{advert_name}}" />
+    <meta name="pmmid" content="{{pmmid}}" />
     <meta name="click_url" content="{{click_url}}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css" />
-    <link rel="stylesheet" href="[[css]]" />
+    <link rel="stylesheet" href="300x250.css" />
     <!-- AdForm DHTML Library (may not load in sandboxed iframes - that's OK) -->
-    <script src="https://s1.adform.net/banners/scripts/rmb/Adform.DHTML.js" onerror="console.log('AdForm lib failed to load (expected in preview)')"></script>
+    <!--<script src="https://s1.adform.net/banners/scripts/rmb/Adform.DHTML.js" onerror="console.log('AdForm lib failed to load (expected in preview)')"></script>-->
     <!-- THM data (date-dependent content) -->
     <script>
       // Fallback THM data in case thm.js doesn't load
@@ -24,6 +25,12 @@
       }
     </script>
     <script src="thm.js" onerror="console.log('thm.js failed to load')"></script>
+
+    <!-- Adform Dynamic Ads helper (required for Adform.DynAdsHelper.getVars) -->
+    <!--<script src="https://s1.adform.net/banners/scripts/components/Adform.DynAdsHelper-2.js"></script>-->
+
+    <script type="text/javascript" src="dynamic.content.js?v=1"></script>
+
     <style>
       /* Preloader styles */
       #preloader {
@@ -60,7 +67,7 @@
       }
     </style>
   </head>
-  <body data-advert-name="{{advert_name}}">
+  <body data-pmmid="{{pmmid}}">
     <!-- Preloader with S and dot -->
     <div id="preloader">
       <svg viewBox="397 0 116 151" xmlns="http://www.w3.org/2000/svg">
@@ -302,21 +309,21 @@
       // 2. Set up click tracking
       setupClickHandler(variables);
 
-      // 3. Update body data attribute
-      var advertName = variables.advert_name || document.body.getAttribute('data-advert-name') || '';
+      // 3. Update body data attribute with PMMID
+      var pmmid = variables.pmmid || document.body.getAttribute('data-pmmid') || '';
       // Clean up any remaining placeholder markers
-      if (advertName.indexOf('{{') !== -1) {
-        advertName = '';
+      if (pmmid.indexOf('{{') !== -1) {
+        pmmid = '';
       }
-      document.body.setAttribute('data-advert-name', advertName);
-      console.log('Advert name:', advertName);
+      document.body.setAttribute('data-pmmid', pmmid);
+      console.log('PMMID:', pmmid);
 
-      // 4. Check for SZK or HK and update THM if needed
-      if (shouldUpdateThm(advertName)) {
-        console.log('THM trigger detected in advert name - updating THM');
-        updateThmFromInterests(advertName);
+      // 4. Check PMMID for SZK or HK and update THM if needed
+      if (shouldUpdateThm(pmmid)) {
+        console.log('THM trigger detected in PMMID - updating THM');
+        updateThmFromInterests(pmmid);
       } else {
-        console.log('No SZK/HK in advert name - skipping THM update');
+        console.log('No SZK/HK in PMMID - skipping THM update');
       }
 
       // 5. Handle directpixel if provided (AdForm tracking)
@@ -339,7 +346,9 @@
     // ============================================================
     // PHASE 4: CONTENT REPLACEMENT
     // ============================================================
-    function replaceContent(variables) {
+    /*function replaceContent(variables) {
+
+
       console.log('replaceContent called');
 
       // Image mappings: variable name -> CSS selector
@@ -410,34 +419,34 @@
         }
       }
 
-    }
+    }*/
 
     // ============================================================
     // PHASE 5: THM LOGIC (date-dependent content)
     // ============================================================
 
-    // Check if advert name contains SZK or HK and return the THM key to use
-    function getThmKey(advertName) {
-      if (!advertName) return null;
-      if (advertName.indexOf('SZK') !== -1) return 'SZK_THM';
-      if (advertName.indexOf('HK') !== -1) return 'HK_THM';
+    // Check if PMMID contains SZK_ or HK_ and return the THM key to use
+    function getThmKey(pmmid) {
+      if (!pmmid) return null;
+      if (pmmid.indexOf('SZK_') !== -1) return 'SZK_THM';
+      if (pmmid.indexOf('HK_') !== -1) return 'HK_THM';
       return null;
     }
 
-    function shouldUpdateThm(advertName) {
-      return getThmKey(advertName) !== null;
+    function shouldUpdateThm(a) {
+      return getThmKey(a) !== null;
     }
 
-    function updateThmFromInterests(advertName) {
+    function updateThmFromInterests(pmmid) {
       try {
         if (!document.interests) {
           console.error('THM: document.interests not found');
           return;
         }
 
-        var thmKey = getThmKey(advertName);
+        var thmKey = getThmKey(pmmid);
         if (!thmKey) {
-          console.error('THM: No THM key found for advert name:', advertName);
+          console.error('THM: No THM key found for PMMID:', pmmid);
           return;
         }
 
