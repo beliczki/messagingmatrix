@@ -425,11 +425,11 @@
     // PHASE 5: THM LOGIC (date-dependent content)
     // ============================================================
 
-    // Check if PMMID contains SZK_ or HK_ and return the THM key to use
+    // Check if PMMID contains _SZK_ or _HK_ and return the THM key to use
     function getThmKey(pmmid) {
       if (!pmmid) return null;
-      if (pmmid.indexOf('SZK_') !== -1) return 'SZK_THM';
-      if (pmmid.indexOf('HK_') !== -1) return 'HK_THM';
+      if (pmmid.indexOf('_SZK_') !== -1) return 'SZK_THM';
+      if (pmmid.indexOf('_HK_') !== -1) return 'HK_THM';
       return null;
     }
 
