@@ -1082,7 +1082,9 @@ const MessageEditorDialog = ({
             'disclaimer_style': editingMessage.disclaimer_style,
             // CSS field
             'css_styles': editingMessage.css,
-            'css': editingMessage.css
+            'css': editingMessage.css,
+            // PMMID for THM lookup
+            'pmmid': generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))
           };
 
           value = fieldMap[fieldName] || value;
