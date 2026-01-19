@@ -1017,6 +1017,11 @@ const MessageEditorDialog = ({
 
     // Populate template with message data using template.json bindings
     const templateName = editingMessage.template || 'html';
+
+    // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
+    const baseTag = `<base href="/api/templates/${templateName}/">`;
+    html = html.replace(/<head>/i, `<head>\n${baseTag}`);
+
     if (templateConfig && templateConfig.placeholders) {
       Object.keys(templateConfig.placeholders).forEach(placeholderName => {
         const config = templateConfig.placeholders[placeholderName];
