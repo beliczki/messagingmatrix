@@ -236,6 +236,10 @@ const CreativeLibraryItem = ({
 
           // Fix any remaining hardcoded empty.png references in template HTML
           const templateName = creative.messageData?.template || 'html';
+
+          // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
+          const baseTag = `<base href="/api/templates/${templateName}/">`;
+          populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
           populatedHtml = populatedHtml.replace(
             /url\(['"]?empty\.png['"]?\)/gi,
             `url('/api/templates/${templateName}/empty.png')`

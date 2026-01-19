@@ -773,6 +773,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
             textFormatting={textFormatting}
             customMainCss={templateMainCss}
             customSizeCss={templateSizeCss}
+            templateName={template.name}
             className="inline-block"
           />
         ) : (

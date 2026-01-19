@@ -20,7 +20,8 @@ const TemplatePreview = ({
   templateConfig = null,
   textFormatting = [],
   customMainCss = null,
-  customSizeCss = null
+  customSizeCss = null,
+  templateName = 'html'
 }) => {
   // Helper function to build full image URL using template.json path-messagingmatrix parameter
   const buildImageUrl = (imageKey, filename) => {
@@ -62,6 +63,11 @@ const TemplatePreview = ({
     if (!html) return html;
 
     let result = html;
+
+    // Inject base tag for relative URL resolution (scripts, images, etc.)
+    // This ensures relative paths like "thm.js" resolve to /api/templates/{templateName}/thm.js
+    const baseTag = `<base href="/api/templates/${templateName}/">`;
+    result = result.replace(/<head>/i, `<head>\n${baseTag}`);
 
     // Inject CSS inline - replace <link> tags with <style> tags
     // Use custom CSS props if provided, otherwise fall back to hardcoded imports
