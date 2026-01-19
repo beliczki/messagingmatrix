@@ -10,6 +10,7 @@ const FeedTableView = ({
   feedPatterns,
   statusFilters,
   productFilters,
+  mcFilter,
   textFormatting,
   getStatusColors,
   onMessageClick
@@ -83,6 +84,10 @@ const FeedTableView = ({
 
   // Filter messages
   const filteredMessages = messages.filter(msg => {
+    // Only show messages with dynamic (HTML) templates
+    // Exclude messages without template or with non-HTML templates like 'Adobe PSD'
+    if (!msg.template || msg.template === 'Adobe PSD') return false;
+
     // Filter by status if any status filters are selected
     if (statusFilters.length > 0) {
       const msgStatus = (msg.status || 'INCOMING').toUpperCase();
@@ -102,6 +107,24 @@ const FeedTableView = ({
         (topicProduct && productFilters.includes(topicProduct));
 
       if (!matchesProduct) return false;
+    }
+
+    // Filter by MC text filter (same logic as MatrixGridView)
+    if (mcFilter && mcFilter.trim()) {
+      const lowerFilter = mcFilter.toLowerCase();
+      const searchableFields = [
+        String(msg.number || ''),
+        msg.variant || '',
+        msg.name || '',
+        msg.headline || '',
+        msg.copy1 || '',
+        msg.copy2 || '',
+        msg.image1 || '',
+        msg.image2 || '',
+        msg.image3 || ''
+      ].join(' ').toLowerCase();
+
+      if (!searchableFields.includes(lowerFilter)) return false;
     }
 
     return true;

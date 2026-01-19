@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon } from 'lucide-react';
 import settings from '../services/settings';
+import sheetsService from '../services/sheets';
+import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
 import { generatePMMID, generateTopicKey, generateTraffickingFields, evaluatePattern } from '../utils/patternEvaluator';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
 import { clearAndReloadApp } from '../utils/clearAndReload';
@@ -510,6 +513,10 @@ const Matrix = ({
       return {};
     }
   });
+
+  // Feed export state
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState(null); // 'success' | 'error' | null
 
   // Matrix view controls state
   const [isPanning, setIsPanning] = useState(false);
@@ -1228,6 +1235,11 @@ const Matrix = ({
     });
   }, [messages, mcFilter, filteredAudiences, filteredTopics, statusFilters]);
 
+  // Count messages with dynamic templates (for feed view export)
+  const dynamicTemplateMessageCount = useMemo(() => {
+    return filteredMessages.filter(m => m.template && m.template !== 'Adobe PSD').length;
+  }, [filteredMessages]);
+
   // Track filtered array changes using module-level refs
   const filteredAudiencesChanged = persistentMatrixRefs.prevFilteredAudiences !== filteredAudiences;
   const filteredTopicsChanged = persistentMatrixRefs.prevFilteredTopics !== filteredTopics;
@@ -1276,6 +1288,104 @@ const Matrix = ({
       // Show error for 3 seconds
       await new Promise(resolve => setTimeout(resolve, 3000));
       setSaveProgress(null);
+    }
+  };
+
+  // Handle export filtered feed (called from toolbar)
+  const handleExportFilteredFeed = async () => {
+    if (isExporting || dynamicTemplateMessageCount === 0) return;
+
+    setIsExporting(true);
+    setExportStatus(null);
+
+    try {
+      // Build columns from feedStructure
+      const columns = feedStructure.split(',').map(col => col.trim());
+
+      // Helper for default pattern (same as FeedTableView)
+      const getDefaultPatternForExport = (name) => {
+        const cleanName = name.replace(/^[^:]+:/, '');
+        const cleanNameLower = cleanName.toLowerCase();
+        const commonMappings = {
+          'headline_text_1': '{{headline}}', 'headline_text': '{{headline}}', 'headline': '{{headline}}',
+          'copy_text_1': '{{copy1}}', 'copy1': '{{copy1}}', 'copy_text_2': '{{copy2}}', 'copy2': '{{copy2}}',
+          'click_text': '{{cta}}', 'cta_text_1': '{{cta}}', 'cta': '{{cta}}',
+          'flash_text': '{{flash}}', 'sticker_text_1': '{{flash}}', 'flash': '{{flash}}',
+          'disclaimer_text': '{{disclaimer}}', 'disclaimer': '{{disclaimer}}',
+          'headline_style_1': '{{headline_style}}', 'headline_style': '{{headline_style}}',
+          'copy_style_1': '{{copy1_style}}', 'copy1_style': '{{copy1_style}}',
+          'copy_style_2': '{{copy2_style}}', 'copy2_style': '{{copy2_style}}',
+          'flash_style': '{{flash_style}}', 'sticker_style_1': '{{flash_style}}',
+          'cta_style': '{{cta_style}}', 'cta_style_1': '{{cta_style}}',
+          'disclaimer_style': '{{disclaimer_style}}', 'css_styles': '{{css}}', 'css': '{{css}}',
+          'template_variant_class': '{{template_variant_classes}}', 'template_variant_classes': '{{template_variant_classes}}',
+          'messaging_card_id': '{{number}}', 'messaging_card_variant': '{{variant}}',
+          'advert_name': '{{name}}', 'name': '{{name}}', 'number': '{{number}}', 'variant': '{{variant}}',
+          'landingurl': '{{landingUrl}}', 'clicktag': '{{landingUrl}}',
+          'background_image_1': '{{image1}}', 'image1': '{{image1}}',
+          'background_image_2': '{{image2}}', 'image2': '{{image2}}',
+          'background_image_3': '{{image3}}', 'image3': '{{image3}}',
+          'background_image_4': '{{image4}}', 'image4': '{{image4}}',
+          'sticker_image_1': '{{image6}}', 'image6': '{{image6}}',
+          'background_image_logo': '{{image5}}', 'image5': '{{image5}}'
+        };
+        return commonMappings[cleanNameLower] || `{{${cleanNameLower}}}`;
+      };
+
+      // Filter to only dynamic template messages (same as FeedTableView)
+      const dynamicTemplateMessages = filteredMessages.filter(msg =>
+        msg.template && msg.template !== 'Adobe PSD'
+      );
+
+      if (dynamicTemplateMessages.length === 0) {
+        console.warn('No messages with dynamic templates to export');
+        setExportStatus('error');
+        return;
+      }
+
+      // Build export data from filtered messages
+      const exportData = dynamicTemplateMessages.map(msg => {
+        const row = {};
+        columns.forEach(colName => {
+          const pattern = feedPatterns[colName] || getDefaultPatternForExport(colName);
+          const context = {
+            ...msg,
+            audiences,
+            topics,
+            Audience_Key: msg.audience,
+            Topic_Key: msg.topic,
+            Number: msg.number || '',
+            Variant: msg.variant || '',
+            Version: msg.version || '',
+            status: (msg.status || 'INCOMING').toUpperCase()
+          };
+          row[colName] = evaluatePattern(pattern, context) || '';
+        });
+        return row;
+      });
+
+      console.log('📤 [Matrix] Exporting filtered feed:', exportData.length, 'rows');
+      await sheetsService.writeFilteredFeed(columns, exportData);
+
+      // Create XLSX file and download
+      const wsData = [columns, ...exportData.map(row => columns.map(col => row[col] || ''))];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'filtered_feed');
+      const xlsxBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([xlsxBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const timestamp = new Date().toISOString().slice(0, 10);
+      saveAs(blob, `filtered_feed_${timestamp}.xlsx`);
+
+      console.log('📥 [Matrix] XLSX downloaded');
+      setExportStatus('success');
+    } catch (error) {
+      console.error('Export filtered feed failed:', error);
+      setExportStatus('error');
+    } finally {
+      setIsExporting(false);
+      // Clear status after 3 seconds
+      setTimeout(() => setExportStatus(null), 3000);
     }
   };
 
@@ -2240,13 +2350,18 @@ const Matrix = ({
           products: productFilters.length,
           audiences: filteredAudiences.length,
           topics: filteredTopics.length,
-          messages: filteredMessages.length
+          messages: filteredMessages.length,
+          dynamicTemplateMessages: dynamicTemplateMessageCount
         }}
         // View variant props
         treeOrientation={treeOrientation}
         onTreeOrientationChange={setTreeOrientation}
         sankeyVariant={sankeyVariant}
         onSankeyVariantChange={setSankeyVariant}
+        // Feed export props
+        onExportFilteredFeed={handleExportFilteredFeed}
+        isExporting={isExporting}
+        exportStatus={exportStatus}
       />
 
       {/* Matrix / Feed / Tree View - Fullscreen */}
@@ -2314,6 +2429,7 @@ const Matrix = ({
             feedPatterns={feedPatterns}
             statusFilters={statusFilters}
             productFilters={productFilters}
+            mcFilter={mcFilter}
             textFormatting={textFormatting}
             getStatusColors={getStatusColors}
             onMessageClick={(msg) => openMessageEditor(msg)}

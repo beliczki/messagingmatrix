@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Filter, Minus, Plus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Square, GripHorizontal, List, PocketKnife, Check, ChevronDown, X, Info } from 'lucide-react';
+import { Filter, Minus, Plus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Square, GripHorizontal, List, PocketKnife, Check, ChevronDown, X, Info, Upload } from 'lucide-react';
 
 // Grid 2x2 (informative view)
 const Grid2x2Icon = ({ size = 18 }) => (
@@ -102,7 +102,11 @@ const MatrixControlPanel = ({
   treeOrientation = 'vertical',
   onTreeOrientationChange,
   sankeyVariant = 'sankey',
-  onSankeyVariantChange
+  onSankeyVariantChange,
+  // Feed export props
+  onExportFilteredFeed,
+  isExporting = false,
+  exportStatus = null // 'success' | 'error' | null
 }) => {
   // Load saved toolbar state from localStorage
   const [isOpen, setIsOpen] = useState(() => {
@@ -607,6 +611,51 @@ const MatrixControlPanel = ({
               </span>
             </div>
           </div>
+
+          {/* Feed Export Section - Only for feed view */}
+          {viewMode === 'feed' && onExportFilteredFeed && (
+            <div className="feed-export-section" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+              <button
+                onClick={onExportFilteredFeed}
+                disabled={isExporting || (filteredCounts.dynamicTemplateMessages || 0) === 0}
+                className="export-filtered-feed-btn"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  width: '100%',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: isExporting || (filteredCounts.dynamicTemplateMessages || 0) === 0 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  backgroundColor: isExporting
+                    ? 'rgba(255,255,255,0.1)'
+                    : exportStatus === 'success'
+                      ? '#22c55e'
+                      : exportStatus === 'error'
+                        ? '#ef4444'
+                        : (filteredCounts.dynamicTemplateMessages || 0) === 0
+                          ? 'rgba(255,255,255,0.1)'
+                          : '#3b82f6',
+                  color: isExporting || (filteredCounts.dynamicTemplateMessages || 0) === 0 ? 'rgba(255,255,255,0.5)' : 'white'
+                }}
+              >
+                <Upload size={16} />
+                {isExporting
+                  ? 'Exporting...'
+                  : exportStatus === 'success'
+                    ? 'Exported!'
+                    : exportStatus === 'error'
+                      ? 'Export Failed'
+                      : `Export Filtered Feed (${filteredCounts.dynamicTemplateMessages || 0})`
+                }
+              </button>
+            </div>
+          )}
 
           {/* Sliders - Only for tree and sankey views */}
           {(viewMode === 'tree2' || viewMode === 'tree3') && (

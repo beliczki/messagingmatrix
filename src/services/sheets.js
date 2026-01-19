@@ -760,6 +760,31 @@ class SheetsService {
     await this.write('Keywords', keywordRows);
   }
 
+  // Write feed data to filtered_feed sheet
+  async writeFilteredFeed(columns, data) {
+    if (!columns || columns.length === 0 || !data || data.length === 0) {
+      console.warn('writeFilteredFeed: No data to write');
+      return { success: false, error: 'No data to export' };
+    }
+
+    console.log(`📤 [writeFilteredFeed] Exporting ${data.length} rows with ${columns.length} columns`);
+
+    // Build rows: header + data rows
+    const rows = [
+      columns, // Header row
+      ...data.map(row => columns.map(col => row[col] || ''))
+    ];
+
+    try {
+      await this.write('filtered_feed', rows);
+      console.log(`✅ [writeFilteredFeed] Successfully exported ${data.length} rows to filtered_feed sheet`);
+      return { success: true, rowCount: data.length };
+    } catch (error) {
+      console.error('❌ [writeFilteredFeed] Failed:', error);
+      throw error;
+    }
+  }
+
   // Get spreadsheet URL
   getUrl() {
     return `https://docs.google.com/spreadsheets/d/${this.spreadsheetId}/edit`;

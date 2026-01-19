@@ -14,22 +14,44 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css" />
-    <link rel="stylesheet" href="300x250.css" />
-    <!-- AdForm DHTML Library (may not load in sandboxed iframes - that's OK) -->
-    <!--<script src="https://s1.adform.net/banners/scripts/rmb/Adform.DHTML.js" onerror="console.log('AdForm lib failed to load (expected in preview)')"></script>-->
-    <!-- THM data (date-dependent content) -->
-    <script>
-      // Fallback THM data in case thm.js doesn't load
-      if (typeof document.interests === 'undefined') {
-        document.interests = {};
-      }
-    </script>
-    <script src="thm.js" onerror="console.log('thm.js failed to load')"></script>
 
-    <!-- Adform Dynamic Ads helper (required for Adform.DynAdsHelper.getVars) -->
-    <!--<script src="https://s1.adform.net/banners/scripts/components/Adform.DynAdsHelper-2.js"></script>-->
+    <!-- THM data (date-dependent content) - loaded as JSON -->
+    <script>
+      // Initialize THM data container
+      document.interests = {};
+
+      // Load THM JSON file - store promise for async access
+      document.interestsReady = fetch('thm.json')
+        .then(function(response) {
+          if (!response.ok) throw new Error('thm.json not found');
+          return response.json();
+        })
+        .then(function(data) {
+          document.interests = data;
+          console.log('THM data loaded:', Object.keys(data));
+          return data;
+        })
+        .catch(function(err) {
+          console.log('thm.json failed to load:', err.message);
+          return {};
+        });
+    </script>
 
     <script type="text/javascript" src="dynamic.content.js?v=1"></script>
+
+
+
+
+    <!-- UNCOMMENT THESE FOR ADFORM UPLOAD -->
+    <!-- 
+    <link rel="stylesheet" href="300x250.css" />
+    <script src="https://s1.adform.net/banners/scripts/rmb/Adform.DHTML.js" onerror="console.log('AdForm lib failed to load (expected in preview)')"></script>
+    <script src="https://s1.adform.net/banners/scripts/components/Adform.DynAdsHelper-2.js"></script>
+    -->
+    <!-- UNCOMMENT THESE FOR ADFORM UPLOAD -->
+
+
+
 
     <style>
       /* Preloader styles */
@@ -163,13 +185,19 @@
     var preloaderStarted = false;
     var savedClasses = [];
     var hasAnimatedClass = false;
+    var classesSaved = false;
     var adContainer = document.getElementById('adContainer');
 
-    // Save template variant classes immediately (before any modifications)
-    if (adContainer) {
+    // Function to save classes - called AFTER dynamic content is loaded
+    // This ensures we capture actual values, not placeholders like {{template_variant_class}}
+    function saveClassesForPreloader() {
+      if (classesSaved || !adContainer) return;
+      classesSaved = true;
+
       var classList = Array.prototype.slice.call(adContainer.classList);
       classList.forEach(function(cls) {
-        if (cls !== 'template_variant_class') {
+        // Skip the static class and any remaining placeholders
+        if (cls !== 'template_variant_class' && cls.indexOf('{{') === -1) {
           // Check for "animated" class - will be added back after preloader
           if (cls === 'animated') {
             hasAnimatedClass = true;
@@ -182,6 +210,11 @@
       // Remove classes until preload complete (prevents animations from starting)
       adContainer.className = 'template_variant_class';
       console.log('Saved classes:', savedClasses.join(', '), hasAnimatedClass ? '(+ animated deferred)' : '');
+    }
+
+    // For local preview (non-Adform), save classes immediately since React has already populated values
+    if (!isAdformContext && adContainer) {
+      saveClassesForPreloader();
     }
 
     // Set body size class
@@ -304,6 +337,12 @@
       // In local preview, React has already populated the content, and applyDataAttributes() handles images
       if (isAdformContext) {
         replaceContent(variables);
+      }
+
+      // 1.5 Save classes NOW (after Adform has replaced placeholders with actual values)
+      // This must happen after replaceContent and before startPreloaderTracking
+      if (isAdformContext) {
+        saveClassesForPreloader();
       }
 
       // 2. Set up click tracking
@@ -438,59 +477,64 @@
     }
 
     function updateThmFromInterests(pmmid) {
-      try {
-        if (!document.interests) {
-          console.error('THM: document.interests not found');
-          return;
-        }
-
-        var thmKey = getThmKey(pmmid);
-        if (!thmKey) {
-          console.error('THM: No THM key found for PMMID:', pmmid);
-          return;
-        }
-
-        var thmData = document.interests[thmKey];
-        if (!thmData) {
-          console.error('THM: No data found for key:', thmKey);
-          return;
-        }
-
-        console.log('THM using key:', thmKey, 'data:', thmData);
-        var thmElement = document.querySelector('.thm');
-
-        if (!thmElement) {
-          console.error('THM: .thm element not found');
-          return;
-        }
-
-        var now = new Date();
-        // For testing: now.setDate(now.getDate() + 1);
-
-        var intervals = Object.keys(thmData);
-        for (var i = 0; i < intervals.length; i++) {
-          var interval = intervals[i];
-          var intervalDates = interval.split('_');
-
-          var startDate = Date.parse(intervalDates[0]);
-          var endDate = Date.parse(intervalDates[1]);
-
-          var startDateLaterThanNow = now > startDate;
-          var endDateEarlierThanNow = now <= endDate;
-
-          if (startDateLaterThanNow && endDateEarlierThanNow) {
-            var newValue = thmData[interval];
-            thmElement.innerHTML = newValue;
-            console.log('THM updated to:', newValue, '(from', thmKey + ')');
+      // Wait for THM JSON to be loaded before processing
+      var processThm = function() {
+        try {
+          var thmKey = getThmKey(pmmid);
+          if (!thmKey) {
+            console.error('THM: No THM key found for PMMID:', pmmid);
             return;
           }
-        }
 
-        if (!thmElement.innerHTML || !thmElement.innerHTML.trim().length) {
-          console.error('THM: No matching interval found for', thmKey);
+          var thmData = document.interests[thmKey];
+          if (!thmData) {
+            console.error('THM: No data found for key:', thmKey);
+            return;
+          }
+
+          console.log('THM using key:', thmKey, 'data:', thmData);
+          var thmElement = document.querySelector('.thm');
+
+          if (!thmElement) {
+            console.error('THM: .thm element not found');
+            return;
+          }
+
+          var now = new Date();
+          // For testing: now.setDate(now.getDate() + 1);
+
+          var intervals = Object.keys(thmData);
+          for (var i = 0; i < intervals.length; i++) {
+            var interval = intervals[i];
+            var intervalDates = interval.split('_');
+
+            var startDate = Date.parse(intervalDates[0]);
+            var endDate = Date.parse(intervalDates[1]);
+
+            var startDateLaterThanNow = now > startDate;
+            var endDateEarlierThanNow = now <= endDate;
+
+            if (startDateLaterThanNow && endDateEarlierThanNow) {
+              var newValue = thmData[interval];
+              thmElement.innerHTML = newValue;
+              console.log('THM updated to:', newValue, '(from', thmKey + ')');
+              return;
+            }
+          }
+
+          if (!thmElement.innerHTML || !thmElement.innerHTML.trim().length) {
+            console.error('THM: No matching interval found for', thmKey);
+          }
+        } catch(error) {
+          console.error('THM error:', error);
         }
-      } catch(error) {
-        console.error('THM error:', error);
+      };
+
+      // Wait for JSON to load if promise exists
+      if (document.interestsReady) {
+        document.interestsReady.then(processThm);
+      } else {
+        processThm();
       }
     }
 

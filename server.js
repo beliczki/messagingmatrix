@@ -2027,6 +2027,17 @@ app.get('/api/templates/:templateName/:fileName', (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
+    const ext = path.extname(fileName).toLowerCase();
+
+    // Serve .json files (like thm.json) as raw JSON for iframe fetch requests
+    // Exception: template.json needs special processing below
+    if (ext === '.json' && fileName !== 'template.json') {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.setHeader('Content-Type', 'application/json');
+      return res.send(content);
+    }
+
+    // For editor requests (CSS, JS, HTML, etc.), return JSON wrapped content
     const content = fs.readFileSync(filePath, 'utf8');
 
     // For template.json, inject CSS-derived sizes (source of truth)
