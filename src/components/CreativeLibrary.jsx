@@ -1145,6 +1145,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     localStorage.setItem('creativeLibrary_bgColor', bgColor);
   }, [bgColor]);
 
+  // Reset bgColor when lookAndFeel changes (instance switch)
+  useEffect(() => {
+    if (lookAndFeel?.headerColor) {
+      setBgColor(lookAndFeel.headerColor);
+      setSelectedBaseColor(lookAndFeel.headerColor);
+    }
+  }, [lookAndFeel?.headerColor]);
+
   // Type filter options (Adobe generated = Drive synced/static creatives)
   const typeOptions = ['Dynamic HTML', 'Adobe generated'];
 

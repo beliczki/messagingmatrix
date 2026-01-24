@@ -4063,7 +4063,7 @@ async function getCachedDriveFile(fileId, metadata) {
     console.warn(`Failed to cache ${fileId}:`, error.message);
   }
 
-  return fileData;
+  return { data: fileData, filename, fromCache: false };
 }
 
 // Proxy endpoint to serve Drive files (supports both file IDs and filenames)
