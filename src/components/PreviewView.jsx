@@ -51,9 +51,12 @@ const LazyIframe = ({ src, width, height, title, className, style }) => {
     return () => observer.disconnect();
   }, []);
 
+  // Don't render iframe if no valid src (would load current page)
+  const hasValidSrc = src && src.startsWith('/');
+
   return (
     <div ref={containerRef} style={{ width, height, ...style }} className={className}>
-      {isVisible ? (
+      {isVisible && hasValidSrc ? (
         <iframe
           src={src}
           width={width}
@@ -62,7 +65,9 @@ const LazyIframe = ({ src, width, height, title, className, style }) => {
           style={{ border: 0, display: 'block' }}
         />
       ) : (
-        <div className="w-full h-full bg-white/5" />
+        <div className="w-full h-full bg-white/5 flex items-center justify-center text-white/30 text-sm">
+          {!hasValidSrc ? 'No preview' : ''}
+        </div>
       )}
     </div>
   );
