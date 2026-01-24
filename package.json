@@ -18,7 +18,10 @@
     "build": "vite build",
     "lint": "eslint . --max-warnings 0",
     "preview": "vite preview",
-    "update": "bash update.sh"
+    "update": "bash update.sh",
+    "instance:save": "node scripts/instance-switch.js save",
+    "instance:load": "node scripts/instance-switch.js load",
+    "instance:list": "node scripts/instance-switch.js list"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
