@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Image as ImageIcon, Info } from 'lucide-react';
+import { Image as ImageIcon, Info, ChevronUp, ChevronDown } from 'lucide-react';
 import PageHeader from './PageHeader';
 import { filterAssets, calculatePlaceholderHeight } from '../utils/assetUtils';
 
@@ -56,6 +56,18 @@ const MediaLibraryBase = ({
   viewModes = [
     { value: 'grid', label: 'Grid View' },
     { value: 'list', label: 'List View' }
+  ],
+
+  // Sorting (for list view headers)
+  sortColumn = null, // 'name' | 'size' | 'template' | 'date' | 'product'
+  sortDirection = 'asc', // 'asc' | 'desc'
+  onSort = null, // (column) => void - called when header clicked
+  listColumns = [ // Column definitions for list view
+    { key: 'name', label: 'Item' },
+    { key: 'size', label: 'Size' },
+    { key: 'template', label: 'Template' },
+    { key: 'date', label: 'Date' },
+    { key: 'product', label: 'Tags' }
   ]
 }) => {
   // View state
@@ -157,7 +169,11 @@ const MediaLibraryBase = ({
       return { columns: existingColumns, heights: existingHeights, chunks: existingChunks };
     }
 
-    const columns = { ...existingColumns };
+    // Deep copy columns to avoid mutating original arrays
+    const columns = {};
+    Object.keys(existingColumns).forEach(key => {
+      columns[key] = [...existingColumns[key]];
+    });
     const heights = { ...existingHeights };
     const chunks = new Map(existingChunks);
     const effectiveColumnWidth = colWidth || 300;
@@ -688,18 +704,32 @@ const MediaLibraryBase = ({
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Item</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Size</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Template</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Tags</th>
+                    {listColumns.map(col => (
+                      <th
+                        key={col.key}
+                        className={`text-left py-3 px-4 font-semibold text-gray-700 ${onSort ? 'cursor-pointer hover:bg-gray-100 select-none' : ''}`}
+                        onClick={() => onSort && onSort(col.key)}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>{col.label}</span>
+                          {onSort && sortColumn === col.key && (
+                            sortDirection === 'asc'
+                              ? <ChevronUp size={16} className="text-blue-600" />
+                              : <ChevronDown size={16} className="text-blue-600" />
+                          )}
+                          {onSort && sortColumn !== col.key && (
+                            <div className="w-4" /> // Spacer to maintain alignment
+                          )}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {/* Spacer for items before loaded range */}
                   {loadedStart > 0 && (
                     <tr>
-                      <td colSpan="4" style={{ height: `${loadedStart * 120}px`, padding: 0, border: 0 }}></td>
+                      <td colSpan={listColumns.length} style={{ height: `${loadedStart * 120}px`, padding: 0, border: 0 }}></td>
                     </tr>
                   )}
 

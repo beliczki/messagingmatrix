@@ -12,12 +12,12 @@ html {
   height: 250px !important;
 }
 #logoContainer {
-  top: 1.8rem;
-  left: 1.5rem;
+  top: 5px;
+  left: 5px;
 }
 
 #logoWrapper > img {
-  height: 4rem;
+  height: 100px;
   display: block;
 }
 
@@ -33,8 +33,20 @@ html {
   display: flex;
   flex-direction: column;
 }
-#textContainer #headlineWrapper {margin-top:auto;}
-#textContainer #copyWrapper1 {margin-bottom:auto;}
+#textContainer #headlineWrapper {
+  margin-top:auto;
+  width:85%;
+  margin-left:15%;
+}
+#textContainer #copyWrapper1 {
+  margin-bottom:auto;
+  margin-left:15%;
+  width:85%;
+}
+
+
+
+
 
 #buttonWrapper {
   width: max-content;
@@ -49,7 +61,7 @@ html {
 
 #image2Wrapper {
   top: 25px;
-  left: 350px;
+  left: 330px;
 }
 #image2Wrapper  > div {
   width: 150px;
@@ -67,12 +79,17 @@ html {
 
 
 #image4Container {
-  right: 10.2rem;
+  right: 448px;
+  bottom: 15px;
+}
+#image4Container div {
+  width: 65px;
+  height: 65px;
 }
 
 #image6Wrapper {
-  top: 70px;
-  left: 430px;
+  top: 50px;
+  left: 400px;
 }
 
 .productHighlight #image6Wrapper {

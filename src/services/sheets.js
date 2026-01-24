@@ -251,7 +251,7 @@ class SheetsService {
   }
 
   // Save all data
-  async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null, creativesData = null) {
+  async saveAll(audiences, topics, messages, feedData = null, feedFields = null, assetsData = null, creativesData = null, textFormattingData = null) {
     // SAFETY GUARD: Prevent saving empty matrix data (could wipe spreadsheet)
     const hasData = (audiences && audiences.length > 0) ||
                     (topics && topics.length > 0) ||
@@ -470,9 +470,61 @@ class SheetsService {
       console.log('⚠️ No creativesData to save, skipping Creatives sheet');
     }
 
+    // Include text formatting if provided
+    if (textFormattingData && textFormattingData.length > 0) {
+      const textFormattingRows = [
+        ['ID', 'Text_original', 'Text_formatted', 'Formatting_Scope', 'Formatting_MC_Scope'],
+        ...textFormattingData.map(rule => [
+          rule.id || '',
+          rule.text_original || '',
+          rule.text_formatted || '',
+          // Convert array back to comma-separated string for spreadsheet
+          Array.isArray(rule.formatting_scope) ? rule.formatting_scope.join(',') : (rule.formatting_scope || ''),
+          Array.isArray(rule.formatting_mc_scope) ? rule.formatting_mc_scope.join(',') : (rule.formatting_mc_scope || '')
+        ])
+      ];
+      console.log('📋 Adding textformats write to promises array');
+      promises.push(this.write('textformats', textFormattingRows));
+    }
+
     console.log('📋 Executing', promises.length, 'write promises');
     await Promise.all(promises);
     console.log('✅ [saveAll] All write promises completed');
+  }
+
+  // Save ONLY assets to spreadsheet (does not touch Audiences, Topics, Messages)
+  async saveAssetsOnly(assetsData) {
+    if (!assetsData || assetsData.length === 0) {
+      console.warn('⚠️ [sheets.saveAssetsOnly] No assets to save');
+      return;
+    }
+
+    console.log(`💾 [sheets.saveAssetsOnly] Saving ${assetsData.length} assets (ONLY Assets sheet)`);
+
+    const assetsRows = [
+      ['ID', 'Brand', 'Product', 'Type', 'Visual_keyword', 'Visual_description', 'Placeholder_name', 'Version', 'File_format', 'File_driveID', 'File_name', 'File_size', 'File_date', 'File_dimensions', 'File_DirectLink', 'File_thumbnail'],
+      ...assetsData.map(asset => [
+        asset.ID || '',
+        asset.Brand || '',
+        asset.Product || '',
+        asset.Type || '',
+        asset.Visual_keyword || '',
+        asset.Visual_description || '',
+        asset.Placeholder_name || '',
+        asset.Version || '',
+        asset.File_format || '',
+        asset.File_driveID || '',
+        asset.File_name || '',
+        asset.File_size || '',
+        asset.File_date || '',
+        asset.File_dimensions || '',
+        asset.File_DirectLink || '',
+        asset.File_thumbnail || ''
+      ])
+    ];
+
+    await this.write('Assets', assetsRows);
+    console.log('✅ [sheets.saveAssetsOnly] Assets sheet updated');
   }
 
   // Helper function to create a column map from header row

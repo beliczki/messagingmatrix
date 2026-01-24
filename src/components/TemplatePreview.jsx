@@ -115,25 +115,28 @@ const TemplatePreview = ({
           // Text fields that should get span-based formatting
           const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
 
+          // Extract template sizes from config for span generation
+          const templateSizes = templateConfig?.sizes?.map(s => s.name || `${s.width}x${s.height}`) || null;
+
           // Map all message fields including style and CSS with span-formatted text
           const fieldMap = {
             'headline': textFields.includes('headline') && msg.headline
-              ? applyTextFormattingSpans(msg.headline, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.headline, textFormatting, msg.id, templateSizes)
               : msg.headline,
             'copy1': textFields.includes('copy1') && msg.copy1
-              ? applyTextFormattingSpans(msg.copy1, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.copy1, textFormatting, msg.id, templateSizes)
               : msg.copy1,
             'copy2': textFields.includes('copy2') && msg.copy2
-              ? applyTextFormattingSpans(msg.copy2, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.copy2, textFormatting, msg.id, templateSizes)
               : msg.copy2,
             'flash': textFields.includes('flash') && msg.flash
-              ? applyTextFormattingSpans(msg.flash, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.flash, textFormatting, msg.id, templateSizes)
               : msg.flash,
             'cta': textFields.includes('cta') && msg.cta
-              ? applyTextFormattingSpans(msg.cta, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.cta, textFormatting, msg.id, templateSizes)
               : msg.cta,
             'disclaimer': textFields.includes('disclaimer') && msg.disclaimer
-              ? applyTextFormattingSpans(msg.disclaimer, textFormatting, msg.id)
+              ? applyTextFormattingSpans(msg.disclaimer, textFormatting, msg.id, templateSizes)
               : msg.disclaimer,
             'image1': msg.image1,
             'image2': msg.image2,

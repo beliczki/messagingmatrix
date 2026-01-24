@@ -3,7 +3,7 @@
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 html {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 #adContainer {
@@ -12,12 +12,12 @@ html {
 }
 
 #logoContainer {
-  top: 0.5rem;
-  left: 0.5rem;
+  top: 0px;
+  left: 0px;
 }
 
 #logoWrapper > img {
-  height: 3.5rem;
+  height: 60px;
 }
 
 #textContainer {
@@ -26,6 +26,7 @@ html {
   height:100%;
   left:auto;
   right:0px;
+  padding: 1rem 1.5rem 1.8rem 1.5rem;
 }
 
 #textContainer #headlineWrapper {
@@ -33,8 +34,8 @@ html {
   margin-left:30%;
 }
 #textContainer #copyWrapper1 {
-  margin-left:40%;
-  width:60%;
+  margin-left:35%;
+  width:65%;
 }
 
 #buttonWrapper {
@@ -64,22 +65,45 @@ html {
 }
 
 #image4Container {
-  right: 10.2rem;
+  right: 222px;
+  bottom: 20px;
+}
+#image4Wrapper > div {
+  width: 50px;
+  height: 50px;
+}
+.productHighlight #image4Container {
+  right: 252px;
+  bottom: 20px;
+}
+.model #image4Container {
+  right: 162px;
+  bottom: 20px;
 }
 
 #image6Wrapper {
   top: 40px;
-  left: 220px;
+  left: 200px;
 }
 
 .productHighlight #image6Wrapper {
-  top: 22px;
+  top: 28px;
   left: 165px;
 }
 .productHighlight #image6Wrapper > div {
-  width: 6.5rem;
-  height: 6.5rem;
+  width: 7.5rem;
+  height: 7.5rem;
 }
+
+.model #image6Wrapper {
+  top: 68px;
+  left: 175px;
+}
+.model #image6Wrapper > div {
+  width: 7.5rem;
+  height: 7.5rem;
+}
+
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */

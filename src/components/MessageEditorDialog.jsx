@@ -666,8 +666,13 @@ const MessageEditorDialog = ({
     // If no formatting rules, return empty (don't show scopes)
     if (rules.length === 0) return [];
 
+    // Use template dimensions if available, otherwise fall back to defaults
+    const sizes = availableDimensions.length > 0
+      ? availableDimensions
+      : ['300x250', '300x600', '640x360', '970x250', '1080x1080'];
+
     // Always return all scopes when formatting exists
-    return ['default', '300x250', '300x600', '640x360', '970x250', '1080x1080', 'allSizes'];
+    return ['default', ...sizes, 'allSizes'];
   };
 
   // Check if a specific scope has custom formatting (different from default)
@@ -1051,7 +1056,8 @@ const MessageEditorDialog = ({
           const getFieldValue = (field) => {
             const value = previewOverrides[field] !== undefined ? previewOverrides[field] : editingMessage[field];
             if (textFields.includes(field) && value) {
-              return applyTextFormattingSpans(value, mergedTextFormatting, msgIdentifiers);
+              // Pass availableDimensions so spans are generated for template-specific sizes
+              return applyTextFormattingSpans(value, mergedTextFormatting, msgIdentifiers, availableDimensions);
             }
             return value;
           };
@@ -1141,10 +1147,18 @@ const MessageEditorDialog = ({
     // Note: When scoped rules exist, text-{size} spans are generated for all sizes
     // When all-sizes rule exists, only text-allSizes span is generated
     // So we don't need to worry about conflicts between them
+    // Generate CSS dynamically based on available template dimensions
+    const sizes = availableDimensions.length > 0
+      ? availableDimensions
+      : ['300x250', '300x600', '640x360', '970x250', '1080x1080'];
+
+    const sizeClasses = sizes.map(s => `.text-${s}`).join(', ');
+    const sizeRules = sizes.map(s => `body.size-${s} .text-${s} { display: inline; }`).join('\n        ');
+
     const textFormattingCSS = `
       <style>
         /* Text formatting - hide all spans by default */
-        .text-default, .text-allSizes, .text-300x250, .text-300x600, .text-640x360, .text-970x250, .text-1080x1080 {
+        .text-default, .text-allSizes, ${sizeClasses} {
           display: none;
         }
         /* Show default text when no size class on body */
@@ -1152,11 +1166,7 @@ const MessageEditorDialog = ({
         /* When body has size class, hide default and show formatted text */
         body[class*="size-"] .text-default { display: none; }
         body[class*="size-"] .text-allSizes { display: inline; }
-        body.size-300x250 .text-300x250 { display: inline; }
-        body.size-300x600 .text-300x600 { display: inline; }
-        body.size-640x360 .text-640x360 { display: inline; }
-        body.size-970x250 .text-970x250 { display: inline; }
-        body.size-1080x1080 .text-1080x1080 { display: inline; }
+        ${sizeRules}
       </style>
     `;
     // Inject CSS into head
@@ -1357,8 +1367,11 @@ const MessageEditorDialog = ({
     const hasFormatting = formattingRules.length > 0;
     const isAddMode = formattingAddMode[fieldName];
 
-    // Size options for dropdown
-    const sizeOptions = ['All sizes', '1080x1080', '970x250', '640x360', '300x600', '300x250'];
+    // Size options for dropdown - use template dimensions if available
+    const templateSizes = availableDimensions.length > 0
+      ? availableDimensions
+      : ['1080x1080', '970x250', '640x360', '300x600', '300x250'];
+    const sizeOptions = ['All sizes', ...templateSizes];
 
     const handleDefaultValueChange = (value) => {
       updateField(fieldName, value);

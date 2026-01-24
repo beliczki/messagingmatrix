@@ -4,7 +4,7 @@
 /* ------------------------------------------- */
 
 html {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 #adContainer {
@@ -19,7 +19,7 @@ html {
 }
 
 #logoWrapper > img {
-  height: 4rem;
+  height: 70px;
 }
 .productHighlight #logoWrapper > img {
   height: 3.4rem;
@@ -45,21 +45,31 @@ html {
 
 
 #image4Container {
-  bottom: 3.8rem;
+  bottom: 283px;
+  right:30px;
 }
 
 #image6Wrapper {
   top: 200px;
-  left: 97px;
+  left: 82px;
 }
 
 .productHighlight #image6Wrapper {
-  top: 87px;
+  top: 127px;
   left: 155px;
 }
 .productHighlight #image6Wrapper > div {
-  width: 6rem;
-  height: 6rem;
+  width: 6.5rem;
+  height: 6.5rem;
+}
+
+.model #image6Wrapper {
+  top: 185px;
+  left: 20px;
+}
+.model #image6Wrapper > div {
+  width: 8rem;
+  height: 8rem;
 }
 
 /* -----------------------------------------*/

@@ -3,7 +3,7 @@
 /* Base styles are in main.css                 */
 /* ------------------------------------------- */
 html {
-  font-size: 25px;
+  font-size: 20px;
 }
 
 #adContainer {
@@ -17,20 +17,20 @@ html {
 }
 
 #logoWrapper > img {
-  height: 3.3rem;
+  height: 95px;
 }
 .productHighlight #logoWrapper > img {
   height: 4rem;
 }
 
 #image2Wrapper {
-  top: 90px;
-  left: 66px;
+  top: 60px;
+  left: 286px;
 }
 
 #image2Wrapper  > div {
   width: 150px;
-  height: 220px;
+  height: 240px;
 }
 
 .productHighlight #image2Wrapper {
@@ -44,7 +44,7 @@ html {
 
 #image6Wrapper {
   top: 150px;
-  left: 320px;
+  left: 40px;
 }
 
 .productHighlight #image6Wrapper {

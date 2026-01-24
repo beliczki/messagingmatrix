@@ -53,6 +53,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [hasAutoSynced, setHasAutoSynced] = useState(false);
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [pendingDriveChanges, setPendingDriveChanges] = useState(null); // { added: number, removed: number }
+  const [reloadingTemplates, setReloadingTemplates] = useState(false);
 
   // Filter states (load from localStorage if available)
   const [productFilter, setProductFilter] = useState(() => {
@@ -63,6 +64,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [sizeFilter, setSizeFilter] = useState(() => {
     const saved = localStorage.getItem('creativeLibrary_sizeFilter');
     return saved ? JSON.parse(saved) : [];
+  });
+
+  // Sorting state (persisted to localStorage)
+  const [sortColumn, setSortColumn] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_sortColumn');
+    return saved || 'date'; // Default sort by date
+  });
+  const [sortDirection, setSortDirection] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_sortDirection');
+    return saved || 'desc'; // Default newest first
   });
 
   // Default banner sizes (fallback if template doesn't specify sizes)
@@ -80,9 +91,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     return defaultBannerSizes;
   }, [templatesCache]);
 
-  // Load a single template by name
-  const loadTemplate = useCallback(async (templateName) => {
-    if (templatesCache[templateName]) {
+  // Load a single template by name (forceReload bypasses cache)
+  const loadTemplate = useCallback(async (templateName, forceReload = false) => {
+    if (!forceReload && templatesCache[templateName]) {
       return templatesCache[templateName];
     }
 
@@ -175,6 +186,32 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   }, [templatesCache]);
 
+  // Reload all cached templates (clears cache and re-fetches from server)
+  const reloadTemplates = useCallback(async () => {
+    const cachedTemplateNames = Object.keys(templatesCache);
+    if (cachedTemplateNames.length === 0) {
+      console.log('No templates in cache to reload');
+      return;
+    }
+
+    setReloadingTemplates(true);
+    console.log(`Reloading ${cachedTemplateNames.length} templates...`);
+
+    try {
+      // Clear the cache first
+      setTemplatesCache({});
+
+      // Reload each template with forceReload
+      for (const templateName of cachedTemplateNames) {
+        await loadTemplate(templateName, true);
+      }
+
+      console.log('Templates reloaded successfully');
+    } finally {
+      setReloadingTemplates(false);
+    }
+  }, [templatesCache, loadTemplate]);
+
   // Load templates for all unique message templates
   useEffect(() => {
     const loadTemplatesForMessages = async () => {
@@ -227,6 +264,20 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     };
     loadDriveConfig();
   }, []);
+
+  // Keyboard shortcut: Ctrl+Shift+T to reload templates
+  useEffect(() => {
+    const handleKeyDown = async (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        console.log('Reloading templates (Ctrl+Shift+T)...');
+        await reloadTemplates();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [reloadTemplates]);
 
   // Auto-sync with Drive on mount if enabled (only once)
   // Only sync when matrix data is actually loaded (has audiences, topics, or messages)
@@ -1067,6 +1118,28 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     localStorage.setItem('creativeLibrary_sizeFilter', JSON.stringify(sizeFilter));
   }, [sizeFilter]);
 
+  // Save sort preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_sortColumn', sortColumn);
+  }, [sortColumn]);
+
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_sortDirection', sortDirection);
+  }, [sortDirection]);
+
+  // Handle sort column click - toggle direction if same column, else set new column with default direction
+  const handleSort = useCallback((column) => {
+    if (sortColumn === column) {
+      // Toggle direction
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column - set sensible default direction
+      setSortColumn(column);
+      // Date defaults to desc (newest first), others to asc
+      setSortDirection(column === 'date' ? 'desc' : 'asc');
+    }
+  }, [sortColumn]);
+
   // Save bgColor to localStorage
   useEffect(() => {
     localStorage.setItem('creativeLibrary_bgColor', bgColor);
@@ -1114,31 +1187,92 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       return matchesProduct && matchesType && matchesSize;
     });
 
-    // Sort: newest on top, then by MC number (larger first)
+    // Sort based on sortColumn and sortDirection
     return filtered.sort((a, b) => {
-      // Get dates (from date field or File_date)
-      const dateA = a.date || a.File_date || '';
-      const dateB = b.date || b.File_date || '';
+      let comparison = 0;
 
-      // Compare dates (newest first)
-      if (dateA && dateB) {
-        const timeA = new Date(dateA).getTime();
-        const timeB = new Date(dateB).getTime();
-        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
-          return timeB - timeA; // Descending (newest first)
+      // Helper to get product (resolves from audience for dynamic creatives)
+      const getProduct = (creative) => {
+        if (creative.isDynamic && creative.messageData?.audience && matrixData?.audiences?.length > 0) {
+          const audience = matrixData.audiences.find(aud => aud.key === creative.messageData.audience);
+          return audience?.product || creative.product || '';
         }
-      } else if (dateA && !dateB) {
-        return -1; // A has date, B doesn't - A first
-      } else if (!dateA && dateB) {
-        return 1; // B has date, A doesn't - B first
+        return creative.product || '';
+      };
+
+      // Helper to get display name
+      const getName = (creative) => {
+        if (creative.isDynamic && creative.messageData && creative.bannerSize) {
+          return `MC${creative.messageData.number} ${creative.variant?.toUpperCase() || ''} ${creative.bannerSize.width}x${creative.bannerSize.height}`;
+        }
+        return creative.filename || '';
+      };
+
+      switch (sortColumn) {
+        case 'name': {
+          // Sort by MC number numerically
+          const getMcNumber = (creative) => {
+            // For dynamic creatives, use messageData.number
+            if (creative.isDynamic && creative.messageData?.number) {
+              return parseInt(creative.messageData.number, 10) || 0;
+            }
+            // For static files, try to extract MC number from filename (e.g., "MC123_...")
+            const match = (creative.filename || '').match(/MC(\d+)/i);
+            if (match) return parseInt(match[1], 10) || 0;
+            return 0;
+          };
+          const mcNumA = getMcNumber(a);
+          const mcNumB = getMcNumber(b);
+          // If both have MC numbers, compare numerically
+          if (mcNumA > 0 || mcNumB > 0) {
+            comparison = mcNumA - mcNumB;
+          } else {
+            // Fall back to alphabetical for non-MC items
+            const nameA = getName(a).toLowerCase();
+            const nameB = getName(b).toLowerCase();
+            comparison = nameA.localeCompare(nameB);
+          }
+          break;
+        }
+        case 'size': {
+          // Parse size as dimensions for numeric sorting (e.g., "300x250" -> 300*250 = 75000)
+          const parseSize = (size) => {
+            if (!size) return 0;
+            const match = size.match(/(\d+)x(\d+)/);
+            if (match) return parseInt(match[1]) * parseInt(match[2]);
+            return 0;
+          };
+          comparison = parseSize(a.size) - parseSize(b.size);
+          break;
+        }
+        case 'template': {
+          const templateA = (a.messageData?.template || '').toLowerCase();
+          const templateB = (b.messageData?.template || '').toLowerCase();
+          comparison = templateA.localeCompare(templateB);
+          break;
+        }
+        case 'date': {
+          const dateA = a.date || a.File_date || '';
+          const dateB = b.date || b.File_date || '';
+          const timeA = dateA ? new Date(dateA).getTime() : 0;
+          const timeB = dateB ? new Date(dateB).getTime() : 0;
+          comparison = timeA - timeB;
+          break;
+        }
+        case 'product': {
+          const productA = getProduct(a).toLowerCase();
+          const productB = getProduct(b).toLowerCase();
+          comparison = productA.localeCompare(productB);
+          break;
+        }
+        default:
+          comparison = 0;
       }
 
-      // If dates are same or unavailable, sort by MC number (larger first)
-      const mcNumA = parseInt(a.messageData?.number || a.MC_Number || '0', 10) || 0;
-      const mcNumB = parseInt(b.messageData?.number || b.MC_Number || '0', 10) || 0;
-      return mcNumB - mcNumA; // Descending (larger first)
+      // Apply direction
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [creatives, productFilter, typeFilter, sizeFilter]);
+  }, [creatives, productFilter, typeFilter, sizeFilter, sortColumn, sortDirection, matrixData?.audiences]);
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -1154,6 +1288,18 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         getItemExtension={(creative) => creative.extension}
         getItemUrl={(creative) => creative.url}
         getItemFilename={(creative) => creative.filename}
+
+        // Sorting props
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        listColumns={[
+          { key: 'name', label: 'Item' },
+          { key: 'size', label: 'Size' },
+          { key: 'template', label: 'Template' },
+          { key: 'date', label: 'Date' },
+          { key: 'product', label: 'Product' }
+        ]}
 
         // No header - just toolbar
         renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => (
@@ -1467,8 +1613,11 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         setCopiedUrl={setCopiedUrl}
         lookAndFeel={lookAndFeel}
         templatesCache={templatesCache}
+        loadTemplate={loadTemplate}
         getTemplateForCreative={getTemplateForCreative}
         textFormatting={matrixData?.textFormatting || []}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
         />
       </div>
 
@@ -1497,6 +1646,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           assetsFolderId={assetsFolderId}
           onSyncCreatives={syncWithDrive}
           syncingCreatives={loadingDrive}
+          // Template reload props
+          onReloadTemplates={reloadTemplates}
+          reloadingTemplates={reloadingTemplates}
           // Module-specific props
           activeTabs={['creatives']}
           pendingChanges={pendingDriveChanges}

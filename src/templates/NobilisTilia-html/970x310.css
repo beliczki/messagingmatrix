@@ -11,14 +11,13 @@ html {
   width: 970px !important;
   height: 310px !important;
 }
-
 #logoContainer {
-  top: 1.8rem;
-  left: 1.5rem;
+  top: 5px;
+  left: 5px;
 }
 
 #logoWrapper > img {
-  height: 4rem;
+  height: 100px;
   display: block;
 }
 
@@ -29,13 +28,27 @@ html {
   left:auto;
   right:0px;
   display: flex;
+  box-sizing: border-box;
+  padding: 1rem 1.5rem 1.8rem 1.5rem;
 }
 #textContainer > div {
   display: flex;
   flex-direction: column;
 }
-#textContainer #headlineWrapper {margin-top:auto;}
-#textContainer #copyWrapper1 {margin-bottom:auto;}
+#textContainer #headlineWrapper {
+  margin-top:auto;
+  width:85%;
+  margin-left:15%;
+}
+#textContainer #copyWrapper1 {
+  margin-bottom:auto;
+  margin-left:15%;
+  width:85%;
+}
+
+
+
+
 
 #buttonWrapper {
   width: max-content;
@@ -46,15 +59,15 @@ html {
 #buttonWrapper > span {
   display: inline;
   /*margin-right: 3rem;*/
-}
+} 
 
 #image2Wrapper {
-  top: 38px;
-  left: 340px;
+  top: 25px;
+  left: 330px;
 }
 #image2Wrapper  > div {
-  width: 190px;
-  height: 260px;
+  width: 150px;
+  height: 280px;
 }
 
 .productHighlight #image2Wrapper {
@@ -63,27 +76,32 @@ html {
 }
 .productHighlight #image2Wrapper > div {
   width: 140px;
-  height: 290px;
+  height: 280px;
 }
 
+
 #image4Container {
-  right: 10.2rem;
+  right: 448px;
+  bottom: 15px;
+}
+#image4Container div {
+  width: 65px;
+  height: 65px;
 }
 
 #image6Wrapper {
-  top: 100px;
-  left: 450px;
+  top: 80px;
+  left: 406px;
 }
 
 .productHighlight #image6Wrapper {
-  top: 75px;
-  left: 375px;
+  top: 45px;
+  left: 355px;
 }
 .productHighlight #image6Wrapper > div {
   width: 6.5rem;
   height: 6.5rem;
 }
-
 
 /* -----------------------------------------*/
 /* positioning based on Image cropping  PSD */
@@ -92,7 +110,6 @@ html {
   background-size: initial;
   background-position: -774px 0px;
 }
-
 
 /* Text format helpers */
 .sizebr.br970x310 {

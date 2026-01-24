@@ -20,11 +20,34 @@
  * @param {string} text - The original text
  * @param {Array} formattingRules - Array of formatting rules from Text_Formatting sheet
  * @param {string|object} messageId - Message ID string or object with multiple identifiers {id, poms_id, name, number, variant, numberVariant}
+ * @param {Array} templateSizes - Optional array of sizes from template config (e.g., ['300x250', '500x200'])
  * @returns {string} - HTML with spans for default and all size-specific variants
  */
-export const applyTextFormattingSpans = (text, formattingRules, messageId = null) => {
-  // All available sizes in templates
-  const allSizes = ['300x250', '300x600', '640x360', '970x250', '1080x1080'];
+export const applyTextFormattingSpans = (text, formattingRules, messageId = null, templateSizes = null) => {
+  // Start with template sizes if provided, otherwise use defaults
+  const baseSizes = templateSizes && templateSizes.length > 0
+    ? templateSizes
+    : ['300x250', '300x600', '640x360', '970x250', '1080x1080'];
+
+  // Also extract any sizes used in formatting rules to ensure all needed spans are generated
+  const sizesFromRules = new Set();
+  if (formattingRules && formattingRules.length > 0) {
+    formattingRules.forEach(rule => {
+      if (rule.text_original === text) {
+        // Parse formatting_scope (can be array or comma-separated string)
+        let scopeArray = [];
+        if (Array.isArray(rule.formatting_scope)) {
+          scopeArray = rule.formatting_scope;
+        } else if (rule.formatting_scope && typeof rule.formatting_scope === 'string') {
+          scopeArray = rule.formatting_scope.split(',').map(s => s.trim());
+        }
+        scopeArray.filter(s => s).forEach(size => sizesFromRules.add(size));
+      }
+    });
+  }
+
+  // Merge base sizes with sizes from rules (unique values only)
+  const allSizes = [...new Set([...baseSizes, ...sizesFromRules])];
 
   // Debug: log function entry
   // console.log('📥 applyTextFormattingSpans called:', {

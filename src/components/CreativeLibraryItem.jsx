@@ -122,7 +122,9 @@ const CreativeLibraryItem = ({
               variant: msg.variant || '',
               numberVariant: `${msg.number || ''}${msg.variant || ''}`
             };
-            value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers);
+            // Extract template sizes from config
+            const templateSizes = templateConfig?.sizes?.map(s => s.name || `${s.width}x${s.height}`) || null;
+            value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers, templateSizes);
           }
 
           // Use path-messagingmatrix for images and videos
@@ -240,6 +242,9 @@ const CreativeLibraryItem = ({
           // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
           const baseTag = `<base href="/api/templates/${templateName}/">`;
           populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
+
+          // Add size class to body for CSS-based text formatting visibility
+          populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
           populatedHtml = populatedHtml.replace(
             /url\(['"]?empty\.png['"]?\)/gi,
             `url('/api/templates/${templateName}/empty.png')`

@@ -207,22 +207,11 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       // Update local state
       setSpreadsheetAssets(updatedAssets);
 
-      // Check if matrix data is loaded before saving to spreadsheet
-      const canSave = (matrixData.audiences?.length > 0) ||
-                      (matrixData.topics?.length > 0) ||
-                      (matrixData.messages?.length > 0);
-
-      if (canSave) {
-        // Save to spreadsheet
-        await matrixData.save(null, null, updatedAssets);
-      } else {
-        console.warn('⚠️ Matrix data not loaded - assets updated locally but not saved to spreadsheet');
-      }
-
-      const savedNote = canSave ? '' : '\n\n⚠️ Note: Changes not saved to spreadsheet (no matrix data loaded)';
+      // Save ONLY assets to spreadsheet (does not affect Audiences, Topics, Messages)
+      await matrixData.saveAssetsOnly(updatedAssets);
       setSyncProgress({
         type: 'success',
-        message: `Successfully synced with Google Drive.\n\nAdded: ${newAssets.length} assets\nUpdated: ${modifiedAssets.length} assets\nRemoved: ${deletedAssets.length} assets${savedNote}`
+        message: `Successfully synced with Google Drive.\n\nAdded: ${newAssets.length} assets\nUpdated: ${modifiedAssets.length} assets\nRemoved: ${deletedAssets.length} assets`
       });
 
       // Auto-dismiss after 3 seconds

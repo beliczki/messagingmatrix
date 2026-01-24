@@ -54,6 +54,8 @@ const MatrixStatePanel = ({
   onSyncAssets,
   syncingCreatives = false,
   syncingAssets = false,
+  onReloadTemplates,
+  reloadingTemplates = false,
   // Module-specific props
   activeTabs = null, // null = all tabs active, array = only these tabs are active for this module
   pendingChanges = null, // { added: number, removed: number } - pending drive sync changes
@@ -227,10 +229,19 @@ const MatrixStatePanel = ({
     });
   };
 
+  // Escape HTML entities for safe display in dangerouslySetInnerHTML
+  // Note: Don't escape quotes since JSON needs them for display
+  const escapeHtml = (str) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
   // Render JSON with highlighted changes
   const renderHighlightedJson = (data, changes) => {
     if (!Array.isArray(data)) {
-      return JSON.stringify(data, null, 2);
+      return escapeHtml(JSON.stringify(data, null, 2));
     }
 
     // Build sets for all added/modified IDs
@@ -249,9 +260,9 @@ const MatrixStatePanel = ({
       pendingChanges.addedIds.forEach(id => addedIds.add(String(id)));
     }
 
-    // If no changes at all, just return plain JSON
+    // If no changes at all, just return plain JSON (with HTML escaped)
     if (addedIds.size === 0 && modifiedIds.size === 0) {
-      return data.map(item => JSON.stringify(item, null, 2)).join(',\n');
+      return data.map(item => escapeHtml(JSON.stringify(item, null, 2))).join(',\n');
     }
 
     return data.map((item) => {
@@ -262,7 +273,7 @@ const MatrixStatePanel = ({
       const itemChangedFields = changedFields[id] || [];
 
       if (!isAdded && !isModified) {
-        return JSON.stringify(item, null, 2);
+        return escapeHtml(JSON.stringify(item, null, 2));
       }
 
       const lines = JSON.stringify(item, null, 2).split('\n');
@@ -284,14 +295,6 @@ const MatrixStatePanel = ({
         return escapeHtml(line);
       }).join('\n');
     }).join(',\n');
-  };
-
-  const escapeHtml = (str) => {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   };
 
   const changeCount = changeTracking?.totalChanges || 0;
@@ -493,6 +496,39 @@ const MatrixStatePanel = ({
                       title="Sync assets from Drive"
                     >
                       <RefreshCw size={14} className={syncingAssets ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Reload Templates button */}
+                {onReloadTemplates && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '6px'
+                  }}>
+                    <Type size={14} style={{ opacity: 0.7 }} />
+                    <span style={{ fontSize: '12px', opacity: 0.7 }}>Templates</span>
+                    <button
+                      onClick={onReloadTemplates}
+                      disabled={reloadingTemplates}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        cursor: reloadingTemplates ? 'wait' : 'pointer',
+                        color: 'rgba(255,255,255,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Reload templates (CSS/HTML) - Ctrl+Shift+T"
+                    >
+                      <RefreshCw size={14} className={reloadingTemplates ? 'animate-spin' : ''} />
                     </button>
                   </div>
                 )}

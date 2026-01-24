@@ -18,8 +18,11 @@ const CreativeShare = ({
   setCopiedUrl,
   lookAndFeel,
   templatesCache = {},
+  loadTemplate,
   getTemplateForCreative,
-  textFormatting = []
+  textFormatting = [],
+  sortColumn = null,
+  sortDirection = 'asc'
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [creationStatus, setCreationStatus] = useState('');
@@ -105,19 +108,51 @@ const CreativeShare = ({
         setGeneratedShareUrl(null);
         setCopiedUrl(false);
         setIsCreating(true);
+
+        // Find unique templates that need to be loaded
+        const missingTemplates = new Set();
+        selectedCreatives.forEach(creative => {
+          if (creative.isDynamic && creative.messageData) {
+            const templateName = creative.messageData.template;
+            if (templateName && (!templatesCache[templateName] || !templatesCache[templateName].html)) {
+              missingTemplates.add(templateName);
+            }
+          }
+        });
+
+        // Load missing templates if loadTemplate is available
+        // Store loaded templates locally since state update won't be available immediately
+        const loadedTemplates = {};
+        if (missingTemplates.size > 0 && loadTemplate) {
+          setCreationStatus(`Loading ${missingTemplates.size} template(s)...`);
+          console.log('Loading missing templates:', Array.from(missingTemplates));
+
+          for (const templateName of missingTemplates) {
+            try {
+              const templateData = await loadTemplate(templateName);
+              if (templateData) {
+                loadedTemplates[templateName] = templateData;
+              }
+            } catch (e) {
+              console.warn(`Failed to load template ${templateName}:`, e);
+            }
+          }
+        }
+
         setCreationStatus('Creating share...');
 
         // Prepare creatives with their template data attached
-        // This is needed because functions (like getTemplateForCreative) can't be serialized
+        // Use freshly loaded templates first, then fall back to cache
         const creativesWithTemplates = selectedCreatives.map(creative => {
           if (creative.isDynamic && creative.messageData) {
             const templateName = creative.messageData.template;
-            const templateData = templatesCache[templateName] || {};
+            const templateData = loadedTemplates[templateName] || templatesCache[templateName];
+
             return {
               ...creative,
-              templateHtml: templateData.html || '',
-              templateCss: templateData.css || {},
-              templateConfig: templateData.config || null,
+              templateHtml: templateData?.html || '',
+              templateCss: templateData?.css || {},
+              templateConfig: templateData?.config || null,
               templateName: templateName
             };
           }
@@ -130,7 +165,8 @@ const CreativeShare = ({
           shareTitle,
           selectedBaseColor,
           {}, // Template data is now on each creative
-          textFormatting
+          textFormatting,
+          sortColumn ? { column: sortColumn, direction: sortDirection } : null
         );
 
         // Link share to task if one is selected

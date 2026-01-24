@@ -270,7 +270,7 @@ export const useMatrix = (currentUser = null) => {
       //   });
       // }
 
-      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData);
+      await sheets.saveAll(audiences, topics, completeMessages, feedData, feedFields, assetsData, creativesData, textFormatting);
       setLastSync(new Date());
 
       // Reset original state to current state (change counter goes to 0)
@@ -290,6 +290,27 @@ export const useMatrix = (currentUser = null) => {
       setIsSaving(false);
     }
   }, [audiences, topics, messages, assets, creatives, textFormatting]);
+
+  // Save ONLY assets to spreadsheet (does not touch Audiences, Topics, Messages)
+  const saveAssetsOnly = useCallback(async (assetsData) => {
+    setIsSaving(true);
+    try {
+      await sheets.saveAssetsOnly(assetsData);
+      setLastSync(new Date());
+
+      // Update original state for assets only
+      setOriginalState(prev => ({
+        ...prev,
+        assets: JSON.parse(JSON.stringify(assetsData))
+      }));
+    } catch (err) {
+      console.error('❌ [useMatrix.saveAssetsOnly] Error saving assets:', err);
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
 
   // Add audience - accepts either a name string or a full object
   const addAudience = useCallback((nameOrObject) => {
@@ -683,6 +704,7 @@ export const useMatrix = (currentUser = null) => {
       lastSync,
       load,
       save,
+      saveAssetsOnly,
       saveKeywords,
       addAudience,
       addTopic,
