@@ -110,7 +110,8 @@ class SettingsService {
   // Get all settings
   getAll() {
     if (!this.settings) {
-      throw new Error('Settings not initialized. Make sure the server is running.');
+      // Return empty object instead of throwing - components should handle missing values
+      return {};
     }
     return { ...this.settings };
   }
