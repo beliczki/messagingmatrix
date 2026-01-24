@@ -1469,18 +1469,90 @@ app.get('/api/shares/:shareId', (req, res) => {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    // Parse JSON fields
+    // Parse metadata from database
+    const metadata = share.metadata ? JSON.parse(share.metadata) : {};
+
+    // Build assets list from folder structure
+    const shareFolderPath = path.join(__dirname, 'public', 'share', shareId);
+    let assets = [];
+
+    if (fs.existsSync(shareFolderPath)) {
+      const entries = fs.readdirSync(shareFolderPath, { withFileTypes: true });
+
+      // Build a map of folder data from filesystem
+      const folderMap = {};
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const folderName = entry.name;
+          // Parse folder name pattern: MC{number}_{variant}_{width}x{height}_{version}
+          const mcMatch = folderName.match(/^MC(\d+)_([a-z])_(\d+)x(\d+)_(\d+)$/i);
+
+          if (mcMatch) {
+            const [, number, variant, width, height, version] = mcMatch;
+            folderMap[folderName] = {
+              id: `${shareId}-${folderName}`,
+              folderName,
+              staticPath: `/share/${shareId}/${folderName}/index.html`,
+              isLocalFolderReview: true,
+              reviewType: 'static-local',
+              size: `${width}x${height}`,
+              bannerSize: { width: parseInt(width), height: parseInt(height) },
+              mcNumber: parseInt(number),
+              variant,
+              version: parseInt(version)
+            };
+          }
+        }
+      }
+
+      // If we have stored asset display data, use it for ordering and display metadata
+      if (metadata.assets && Array.isArray(metadata.assets) && metadata.assets.length > 0) {
+        // Check if it's the new format (has folderName) or old format (has staticPath)
+        const isNewFormat = metadata.assets[0].folderName && !metadata.assets[0].staticPath;
+
+        if (isNewFormat) {
+          // New format: merge stored display data with folder data
+          for (const storedAsset of metadata.assets) {
+            const folderData = folderMap[storedAsset.folderName];
+            if (folderData) {
+              assets.push({
+                ...folderData,
+                // Add stored display data
+                product: storedAsset.product,
+                messageData: storedAsset.messageData,
+                order: storedAsset.order
+              });
+            }
+          }
+          // Sort by stored order
+          assets.sort((a, b) => (a.order || 0) - (b.order || 0));
+        } else {
+          // Old format: use as-is for backward compatibility
+          assets = metadata.assets;
+        }
+      } else {
+        // No stored asset data - use folder data with default sorting
+        assets = Object.values(folderMap);
+        assets.sort((a, b) => {
+          if (a.mcNumber !== b.mcNumber) return a.mcNumber - b.mcNumber;
+          if (a.variant !== b.variant) return a.variant.localeCompare(b.variant);
+          return a.size.localeCompare(b.size);
+        });
+      }
+    }
+
     const shareData = {
       shareId: share.id,
-      title: share.title,
+      title: share.title || metadata.title,
       description: share.description,
       createdBy: share.created_by,
-      assetIds: share.asset_ids ? JSON.parse(share.asset_ids) : [],
-      assets: share.metadata ? JSON.parse(share.metadata).assets : [],
       createdAt: share.created_at,
-      baseColor: share.metadata ? JSON.parse(share.metadata).baseColor : null,
-      comments: share.metadata ? JSON.parse(share.metadata).comments || [] : [],
-      driveAssets: share.drive_file_ids ? JSON.parse(share.drive_file_ids) : {}
+      baseColor: metadata.baseColor || null,
+      comments: metadata.comments || [],
+      assets,
+      // Keep for backward compatibility but not needed for new shares
+      assetIds: [],
+      driveAssets: {}
     };
 
     res.json(shareData);
@@ -1498,6 +1570,9 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
   // Text fields that should get span-based formatting
   const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
 
+  // Extract template sizes from config for text formatting spans
+  const templateSizes = templateConfig?.sizes?.map(s => s.name || `${s.width}x${s.height}`) || null;
+
   if (templateConfig && templateConfig.placeholders) {
     Object.keys(templateConfig.placeholders).forEach(placeholderName => {
       const config = templateConfig.placeholders[placeholderName];
@@ -1506,7 +1581,9 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
 
       if (binding) {
         const fieldName = binding.replace(/^message\./i, '').toLowerCase();
-        value = messageData[fieldName] || value;
+        // Case-insensitive property lookup since bindings use various casings
+        const matchingKey = Object.keys(messageData).find(k => k.toLowerCase() === fieldName);
+        value = (matchingKey ? messageData[matchingKey] : null) || value;
 
         // Apply span-based text formatting for text fields
         if (textFields.includes(fieldName) && value && textFormatting && textFormatting.length > 0) {
@@ -1519,7 +1596,7 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
             variant: messageData.variant || '',
             numberVariant: `${messageData.number || ''}${messageData.variant || ''}`
           };
-          value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers);
+          value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers, templateSizes);
         }
 
         // Build full image URL if this is an image field
@@ -1546,7 +1623,7 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
 // Create new share
 app.post('/api/shares', async (req, res) => {
   try {
-    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [], driveAssets = {} } = req.body;
+    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [], driveAssets = {}, sortSettings = null } = req.body;
 
     // Load config from SQLite to get image base URLs
     const sqlite = db.getSqlite();
@@ -1633,8 +1710,52 @@ app.post('/api/shares', async (req, res) => {
             textFormatting
           );
 
-          // Note: Images are NOT saved in share folder to save space
-          // They will be fetched from Drive when downloading ZIP
+          // Cache Drive images to public folder for fast static serving
+          const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
+          if (!fs.existsSync(publicCacheDir)) {
+            fs.mkdirSync(publicCacheDir, { recursive: true });
+          }
+
+          // Extract all /api/drive/proxy/ URLs from HTML
+          const driveProxyRegex = /\/api\/drive\/proxy\/([^"'\s)]+)/g;
+          const driveUrls = new Set();
+          let match;
+          while ((match = driveProxyRegex.exec(populatedHtml)) !== null) {
+            driveUrls.add(match[1]); // filename
+          }
+
+          // Cache each Drive file to public folder
+          for (const filename of driveUrls) {
+            const publicCachePath = path.join(publicCacheDir, filename);
+
+            // Skip if already cached
+            if (fs.existsSync(publicCachePath)) {
+              console.log(`  ✓ Already cached: ${filename}`);
+              continue;
+            }
+
+            try {
+              // Search for file in Drive
+              let files = await driveStorage.searchFiles(filename, 'assets');
+              if (files.length === 0) {
+                files = await driveStorage.searchFiles(filename, 'creatives');
+              }
+
+              if (files.length > 0) {
+                const fileId = files[0].id;
+                const fileData = await driveStorage.downloadFile(fileId);
+                fs.writeFileSync(publicCachePath, fileData);
+                console.log(`  ✓ Cached to public: ${filename}`);
+              } else {
+                console.warn(`  ⚠ File not found in Drive: ${filename}`);
+              }
+            } catch (cacheError) {
+              console.warn(`  ⚠ Failed to cache ${filename}:`, cacheError.message);
+            }
+          }
+
+          // Replace /api/drive/proxy/ URLs with /cache/drive/ for direct static serving
+          populatedHtml = populatedHtml.replace(/\/api\/drive\/proxy\//g, '/cache/drive/');
 
           // Replace CSS links with the actual styles file
           populatedHtml = populatedHtml.replace(
@@ -1645,9 +1766,20 @@ app.post('/api/shares', async (req, res) => {
             /<link rel="stylesheet" href="\[\[css\]\]".*?>/g,
             ''
           );
+          // Remove size-specific CSS links (e.g., 300x250.css) - already included in styles.css
+          populatedHtml = populatedHtml.replace(
+            /<link rel="stylesheet" href="\d+x\d+\.css".*?>/g,
+            ''
+          );
 
           // Save HTML file
           fs.writeFileSync(path.join(adDir, 'index.html'), populatedHtml, 'utf8');
+
+          // Copy empty.png from template to share folder
+          const emptyPngSource = path.join(templatesDir, creativeTemplateName, 'empty.png');
+          if (fs.existsSync(emptyPngSource)) {
+            fs.copyFileSync(emptyPngSource, path.join(adDir, 'empty.png'));
+          }
 
           // Copy and populate manifest.json
           const manifestSourcePath = path.join(templatesDir, creativeTemplateName, 'manifest.json');
@@ -1678,7 +1810,7 @@ app.post('/api/shares', async (req, res) => {
           // Add to processed assets list with new path and mark as local folder review
           processedAssets.push({
             ...creative,
-            staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
+            staticPath: `/share/${shareId}/${folderName}/index.html`,
             folderName,
             isLocalFolderReview: true,
             reviewType: 'static-local'
@@ -1693,18 +1825,31 @@ app.post('/api/shares', async (req, res) => {
       }
     }
 
-    // Create share data
-    const shareData = {
-      shareId,
-      assetIds,
-      assets: processedAssets,
+    // Create share metadata with ordered asset list for display
+    // Store only display-relevant data, not full creative objects
+    const assetDisplayData = processedAssets.map((asset, index) => ({
+      folderName: asset.folderName,
+      order: index,
+      // Display data for hover tags
+      product: asset.product || null,
+      messageData: asset.messageData ? {
+        number: asset.messageData.number,
+        variant: asset.messageData.variant,
+        version: asset.messageData.version,
+        name: asset.messageData.name,
+        template: asset.messageData.template
+      } : null
+    }));
+
+    const shareMetadata = {
       title,
       baseColor,
-      createdAt: new Date().toISOString(),
+      assets: assetDisplayData, // Ordered list with display data
       comments: []
     };
 
-    // Save to SQLite database (sqlite already declared above for config)
+    // Save to SQLite database with minimal data
+    // Assets are stored as files in public/share/{shareId}/ and can be read from folder names
     const shareStmt = sqlite.prepare(`
       INSERT INTO share_galleries (id, title, description, created_by, creative_ids, asset_ids, metadata, drive_file_ids, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1715,10 +1860,10 @@ app.post('/api/shares', async (req, res) => {
       title || null,
       null, // description
       null, // created_by
-      null, // creative_ids (deprecated in favor of metadata)
-      JSON.stringify(assetIds),
-      JSON.stringify(shareData), // Store full shareData in metadata for backward compatibility
-      Object.keys(driveAssets).length > 0 ? JSON.stringify(driveAssets) : null, // Store Drive file IDs
+      null, // creative_ids (not needed - read from folder)
+      null, // asset_ids (not needed - read from folder)
+      JSON.stringify(shareMetadata), // Minimal metadata: title, baseColor, comments
+      null, // drive_file_ids (not needed - files are cached publicly)
       new Date().toISOString()
     );
 
@@ -1741,7 +1886,8 @@ app.post('/api/shares', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating share:', error);
-    res.status(500).json({ error: 'Failed to create share' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to create share', details: error.message });
   }
 });
 
@@ -1821,56 +1967,35 @@ app.get('/api/drive-asset/:fileId', async (req, res) => {
   }
 });
 
-// HTML ad renderer for shares with Drive assets
-// Injects Drive proxy URLs into HTML templates for iframe viewing
-app.get('/api/share-html/:shareId/:assetId', async (req, res) => {
+// HTML ad renderer for shares - serves static HTML files
+// Static files are cached in public/share/{shareId}/{folderName}/
+app.get('/api/share-html/:shareId/:folderName', async (req, res) => {
   try {
-    const { shareId, assetId } = req.params;
-    const sqlite = db.getSqlite();
+    const { shareId, folderName } = req.params;
 
-    // Get share data
-    const shareStmt = sqlite.prepare('SELECT drive_file_ids FROM share_galleries WHERE id = ?');
-    const share = shareStmt.get(shareId);
-
-    if (!share) {
-      return res.status(404).send('Share not found');
-    }
-
-    // Parse Drive file IDs
-    const driveFileIds = share.drive_file_ids ? JSON.parse(share.drive_file_ids) : {};
-    const assetData = driveFileIds[assetId];
-
-    if (!assetData || !assetData.htmlFileId) {
-      return res.status(404).send('HTML asset not found in share');
-    }
-
-    // Get HTML content from Drive (or local path if it's a local folder review)
-    const shareDir = path.join(sharesDir, shareId, assetData.folderName || '');
-    const htmlPath = path.join(shareDir, 'index.html');
+    // Serve HTML from the static share folder
+    const htmlPath = path.join(sharesDir, shareId, folderName, 'index.html');
 
     if (fs.existsSync(htmlPath)) {
-      // Local folder review - serve directly
       res.setHeader('Content-Type', 'text/html');
       res.sendFile(htmlPath);
     } else {
-      // TODO: Fetch HTML from Drive and inject Drive proxy URLs for images
-      res.status(501).send('Drive-based HTML rendering not yet implemented');
+      res.status(404).send('HTML file not found');
     }
   } catch (error) {
-    console.error('Error rendering share HTML:', error);
-    res.status(500).send('Failed to render HTML');
+    console.error('Error serving share HTML:', error);
+    res.status(500).send('Failed to serve HTML');
   }
 });
 
 // HTML ad download for ZIP packaging
 // Returns HTML with local relative paths for standalone usage
-app.get('/api/share-html-download/:shareId/:assetId', async (req, res) => {
+app.get('/api/share-html-download/:shareId/:folderName', async (req, res) => {
   try {
-    const { shareId, assetId } = req.params;
+    const { shareId, folderName } = req.params;
 
-    // For now, this is the same as the regular endpoint
-    // In the future, this could modify paths to be relative for ZIP downloads
-    res.redirect(`/api/share-html/${shareId}/${assetId}`);
+    // Redirect to the share-html endpoint
+    res.redirect(`/api/share-html/${shareId}/${folderName}`);
   } catch (error) {
     console.error('Error downloading share HTML:', error);
     res.status(500).send('Failed to download HTML');
@@ -3881,41 +4006,48 @@ app.post('/api/drive/upload-batch', upload.array('files'), async (req, res) => {
   }
 });
 
-// Helper function to get cached Drive file
+// Helper function to get cached Drive file - uses PUBLIC cache for all systems
 async function getCachedDriveFile(fileId, metadata) {
-  const cacheDir = path.join(__dirname, 'cache', 'drive');
-  const cachePath = path.join(cacheDir, `${fileId}.cache`);
-  const metaPath = path.join(cacheDir, `${fileId}.meta.json`);
+  // Use public cache so all systems (Asset Library, Creative Library, Shares) use the same cache
+  const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
+  const filename = metadata.name || `${fileId}.bin`;
+  const cachePath = path.join(publicCacheDir, filename);
+  const metaPath = path.join(publicCacheDir, `${filename}.meta.json`);
 
   // Ensure cache directory exists
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
+  if (!fs.existsSync(publicCacheDir)) {
+    fs.mkdirSync(publicCacheDir, { recursive: true });
   }
 
   // Check if cached file exists
-  if (fs.existsSync(cachePath) && fs.existsSync(metaPath)) {
-    try {
-      const cachedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-
-      // Check if cache is still valid (compare modified times)
-      if (cachedMeta.modifiedTime === metadata.modifiedTime) {
-        console.log(`✅ Cache HIT for ${fileId}`);
-        return fs.readFileSync(cachePath);
-      } else {
-        console.log(`⚠️ Cache STALE for ${fileId} (modified time changed)`);
+  if (fs.existsSync(cachePath)) {
+    // Check metadata for staleness if meta file exists
+    if (fs.existsSync(metaPath)) {
+      try {
+        const cachedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (cachedMeta.modifiedTime === metadata.modifiedTime) {
+          console.log(`✅ Public cache HIT for ${filename}`);
+          return { data: fs.readFileSync(cachePath), filename, fromCache: true };
+        } else {
+          console.log(`⚠️ Public cache STALE for ${filename}`);
+        }
+      } catch (error) {
+        console.warn(`Cache meta read error for ${filename}:`, error.message);
       }
-    } catch (error) {
-      console.warn(`Cache read error for ${fileId}:`, error.message);
+    } else {
+      // File exists but no meta - assume valid
+      console.log(`✅ Public cache HIT for ${filename} (no meta)`);
+      return { data: fs.readFileSync(cachePath), filename, fromCache: true };
     }
   } else {
-    console.log(`❌ Cache MISS for ${fileId}`);
+    console.log(`❌ Public cache MISS for ${filename}`);
   }
 
   // Cache miss or stale - download from Drive
-  console.log(`⬇️ Downloading ${fileId} from Drive...`);
+  console.log(`⬇️ Downloading ${filename} from Drive...`);
   const fileData = await driveStorage.downloadFile(fileId);
 
-  // Save to cache
+  // Save to public cache with original filename
   try {
     fs.writeFileSync(cachePath, fileData);
     fs.writeFileSync(metaPath, JSON.stringify({
@@ -3992,11 +4124,20 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     }
 
     // Get file from cache or download from Drive
-    const fileData = await getCachedDriveFile(fileId, metadata);
+    const cacheResult = await getCachedDriveFile(fileId, metadata);
+    const fileData = cacheResult.data;
+    const cachedFilename = cacheResult.filename;
     const fileSize = fileData.length;
 
-    // Handle byte-range requests (crucial for video seeking and caching)
+    // Redirect to public cache URL for better performance (browser can cache directly)
+    // Skip redirect for range requests (video seeking) as they need special handling
     const range = req.headers.range;
+    if (!range && cachedFilename) {
+      // Redirect to static file - much faster
+      return res.redirect(302, `/cache/drive/${encodeURIComponent(cachedFilename)}`);
+    }
+
+    // Handle byte-range requests (crucial for video seeking and caching)
 
     // Add CORS headers for srcDoc iframes and cross-origin video requests
     res.setHeader('Access-Control-Allow-Origin', '*');

@@ -1,24 +1,21 @@
 <!DOCTYPE html>
-<html id="html" class="telekom">
+<html id="html" class="Nobilis">
   <head>
     <title>{{advert_name}}</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="advert_id" content="{{advert_id}}">
-    <meta name="advert_mc" content="{{advert_mc}}">
-    <meta name="advert_variant" content="{{advert_variant}}">
-    <meta name="advert_name" content="{{advert_name}}" />
-    <meta name="click_url" content="{{click_url}}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css" />
-    <link rel="stylesheet" href="300x250.css" />
-    <script type="text/javascript" src="/879366/Enabler_01_262.js"></script>
-    <script type="text/javascript" src="dynamic.content.js"></script>
+    
+    <!-- UNCOMMENT WHEN Creating adserver/google studio  template -->
+    <!-- <link rel="stylesheet" href="300x250.css" /> -->
+
+    <!-- UNCOMMENT WHEN Creating adserver/google studio  template -->
+    <!-- <script type="text/javascript" src="/879366/Enabler_01_262.js"></script>
+    <script type="text/javascript" src="dynamic.content.js"></script> -->
+
   </head>
-  <body data-advert-name="{{advert_name}}">
-    <div id="adContainer" class="template_variant_class {{template_variant_class}}">
+  <body data-PMMID="{{PMMID}}">
+    <div id="adContainer" class="template_variant_class {{template_variant_class}}" style="cursor: pointer;" onclick="onAdClickEvent()">
       <div id="backgroundContainer">
         <div id="imageWrapper" class="background">
           <div style="background-image:url('empty.png')" class="background_image_1" data-placeholder="{{background_image_1}}"></div>
@@ -77,12 +74,13 @@
 
 console.log("ad start");
 // First of all import Enabler.js
-if (!Enabler.isInitialized()) {
+// UNCOMMENT enabler event listener WHEN Creating adserver/google studio  template 
+/*if (!Enabler.isInitialized()) {
   Enabler.addEventListener(studio.events.StudioEvent.INIT, enablerInitialized);
 } else {
   console.log("ad enambler");
   enablerInitialized();
-}
+}*/
 
 // If the enabled is initialized you can get the content
 function enablerInitialized() {
@@ -174,9 +172,14 @@ function enablerInitialized() {
         }
 
         // On ad click event
-        function onAdClickEvent(url) {
+        function onAdClickEvent() {
             console.log("Click tag event triggered on ", window.click_url);
-            Enabler.exitOverride("Click url", window.click_url);
+            // Use Enabler if available (production), otherwise open URL directly (preview)
+            if (typeof Enabler !== 'undefined' && Enabler.exitOverride) {
+                Enabler.exitOverride("Click url", window.click_url);
+            } else if (window.click_url) {
+                window.open(window.click_url, '_blank');
+            }
         }
 
 </script>
@@ -194,6 +197,15 @@ function enablerInitialized() {
     (function() {
     try {
     console.log('Template script starting...');
+
+    // Set click URL from template placeholder (for preview mode)
+    // This will be populated by the server with the actual URL
+    window.click_url = window.click_url || '{{click_url}}';
+    // Clean up if placeholder wasn't replaced
+    if (window.click_url.indexOf('{{') !== -1) {
+      window.click_url = '';
+    }
+    console.log('Click URL set to:', window.click_url);
 
     // Apply data-placeholder attributes directly to elements
     function applyDataAttributes() {

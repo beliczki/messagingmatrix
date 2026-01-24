@@ -127,7 +127,9 @@ const CreativePreview = ({
 
         if (binding) {
           const fieldName = binding.replace(/^message\./i, '').toLowerCase();
-          value = msg[fieldName] || value;
+          // Case-insensitive property lookup since bindings use various casings
+          const matchingKey = Object.keys(msg).find(k => k.toLowerCase() === fieldName);
+          value = (matchingKey ? msg[matchingKey] : null) || value;
 
           // Apply text formatting with spans for text fields
           const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
@@ -141,7 +143,9 @@ const CreativePreview = ({
               variant: msg.variant || '',
               numberVariant: `${msg.number || ''}${msg.variant || ''}`
             };
-            value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers);
+            // Extract template sizes from config
+            const templateSizes = templateConfig?.sizes?.map(s => s.name || `${s.width}x${s.height}`) || null;
+            value = applyTextFormattingSpans(value, textFormatting, msgIdentifiers, templateSizes);
           }
 
           // Use path-messagingmatrix for images and videos
@@ -204,6 +208,9 @@ const CreativePreview = ({
     // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
     const baseTag = `<base href="/api/templates/${tplName}/">`;
     populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
+
+    // Add size class to body for CSS-based text formatting visibility
+    populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
     populatedHtml = populatedHtml.replace(
       /url\(['"]?empty\.png['"]?\)/gi,
       `url('/api/templates/${tplName}/empty.png')`
@@ -231,7 +238,7 @@ const CreativePreview = ({
               display: 'block'
             }}
             title={`${creative.product || 'Creative'} Preview`}
-            sandbox="allow-same-origin allow-scripts"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
           />
         </div>
       </div>

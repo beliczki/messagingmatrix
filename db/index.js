@@ -36,6 +36,9 @@ class DatabaseService {
       // Enable WAL mode for better concurrency
       this.sqlite.pragma('journal_mode = WAL');
 
+      // Set busy timeout to wait for locks (5 seconds)
+      this.sqlite.pragma('busy_timeout = 5000');
+
       // Create Drizzle instance
       this.db = drizzle(this.sqlite, { schema });
 
@@ -284,6 +287,13 @@ class DatabaseService {
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: Add drive_file_ids column if it doesn't exist
+    try {
+      this.sqlite.exec(`ALTER TABLE share_galleries ADD COLUMN drive_file_ids TEXT`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
 
     // Create processed_emails table
     this.sqlite.exec(`

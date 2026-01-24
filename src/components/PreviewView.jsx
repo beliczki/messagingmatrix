@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { apiGet, apiPost, authenticatedFetch } from '../utils/api';
 import {
   Share2,
@@ -12,11 +12,13 @@ import {
   DownloadCloud,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowLeft,
   ArrowRight,
   Info,
   CheckSquare,
-  Square
+  Square,
+  Filter
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -25,6 +27,278 @@ import {
   addComment
 } from '../services/previewService';
 import { useAuth } from '../contexts/AuthContext';
+
+// Lazy loading iframe - only loads when visible in viewport
+const LazyIframe = ({ src, width, height, title, className, style }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' } // Start loading 100px before visible
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ width, height, ...style }} className={className}>
+      {isVisible ? (
+        <iframe
+          src={src}
+          width={width}
+          height={height}
+          title={title}
+          style={{ border: 0, display: 'block' }}
+        />
+      ) : (
+        <div className="w-full h-full bg-white/5" />
+      )}
+    </div>
+  );
+};
+
+// Masonry Grid Component - fills shortest column first (same as Creative Library)
+const MasonryGrid = ({ assets, preview, isStaticLocalReview, getAssetUrl, onAssetClick }) => {
+  const [columnCount, setColumnCount] = useState(4);
+
+  // Responsive column count
+  useEffect(() => {
+    const updateColumns = () => {
+      const width = window.innerWidth;
+      if (width < 640) setColumnCount(1);
+      else if (width < 1024) setColumnCount(2);
+      else if (width < 1280) setColumnCount(3);
+      else setColumnCount(4);
+    };
+
+    updateColumns();
+    window.addEventListener('resize', updateColumns);
+    return () => window.removeEventListener('resize', updateColumns);
+  }, []);
+
+  // Distribute assets to columns using shortest-column algorithm
+  const columns = useMemo(() => {
+    const cols = Array.from({ length: columnCount }, () => []);
+    const heights = Array(columnCount).fill(0);
+
+    assets.forEach(asset => {
+      // Estimate height based on aspect ratio (default to 1:1 if unknown)
+      let aspectRatio = 1;
+      if (asset.bannerSize) {
+        aspectRatio = asset.bannerSize.height / asset.bannerSize.width;
+      } else if (asset.size) {
+        const match = asset.size.match(/(\d+)x(\d+)/);
+        if (match) {
+          aspectRatio = parseInt(match[2]) / parseInt(match[1]);
+        }
+      }
+
+      // Find shortest column
+      const shortestCol = heights.indexOf(Math.min(...heights));
+
+      // Add asset to shortest column
+      cols[shortestCol].push(asset);
+
+      // Update height estimate (using column width of ~300px)
+      heights[shortestCol] += 300 * aspectRatio + 16; // 16px gap
+    });
+
+    return cols;
+  }, [assets, columnCount]);
+
+  const renderAsset = (asset) => {
+    const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
+    const isVideo = asset.extension === 'mp4';
+    const isStatic = isStaticLocalReview(asset);
+    const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
+
+    // Get banner size - fallback to parsing from size string if bannerSize object missing
+    let bannerSize = asset.bannerSize;
+    if (!bannerSize && asset.size) {
+      const match = asset.size.match(/(\d+)x(\d+)/);
+      if (match) {
+        bannerSize = { width: parseInt(match[1]), height: parseInt(match[2]) };
+      }
+    }
+
+    return (
+      <div
+        key={asset.id}
+        className="group cursor-pointer mb-4"
+        onClick={() => onAssetClick(asset)}
+      >
+        <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white/10">
+          {isStatic && bannerSize && (
+            <div
+              style={{
+                width: '100%',
+                aspectRatio: `${bannerSize.width} / ${bannerSize.height}`,
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  width: `${bannerSize.width}px`,
+                  height: `${bannerSize.height}px`,
+                  transformOrigin: 'top left',
+                  transform: 'scale(var(--scale))',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0
+                }}
+                ref={(el) => {
+                  if (el) {
+                    const parentWidth = el.parentElement?.offsetWidth || bannerSize.width;
+                    const scale = parentWidth / bannerSize.width;
+                    el.style.setProperty('--scale', scale.toString());
+                  }
+                }}
+              >
+                <LazyIframe
+                  src={asset.staticPath}
+                  width={bannerSize.width}
+                  height={bannerSize.height}
+                  title={asset.folderName || asset.filename}
+                />
+                {/* Click overlay to capture clicks over iframe */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: `${bannerSize.width}px`,
+                    height: `${bannerSize.height}px`,
+                    cursor: 'pointer',
+                    zIndex: 10
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {/* Fallback for static without bannerSize */}
+          {isStatic && !bannerSize && (
+            <div style={{ position: 'relative', minHeight: '200px' }}>
+              <LazyIframe
+                src={asset.staticPath}
+                width="100%"
+                height={200}
+                title={asset.folderName || asset.filename}
+                style={{ minHeight: '200px' }}
+              />
+              {/* Click overlay to capture clicks over iframe */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  cursor: 'pointer',
+                  zIndex: 10
+                }}
+              />
+            </div>
+          )}
+          {!isStatic && isImage && (
+            <img
+              src={getAssetUrl(asset)}
+              alt={asset.filename}
+              className="w-full h-auto object-cover"
+              loading="lazy"
+            />
+          )}
+          {!isStatic && isVideo && (
+            <video
+              src={getAssetUrl(asset)}
+              className="w-full h-auto object-cover"
+              preload="metadata"
+            />
+          )}
+          {/* Hover Overlay with Info - same as Creative Library */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 pointer-events-none">
+            <div className="flex items-center gap-2 flex-wrap">
+              {isStatic && asset.messageData ? (
+                // Dynamic HTML ad - show product, MC number, variant, size, version
+                <>
+                  {asset.product && (
+                    <span className="px-2 py-1 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                      {asset.product}
+                    </span>
+                  )}
+                  <span className="px-2 py-1 bg-purple-500/80 backdrop-blur-sm text-white rounded text-xs font-medium">
+                    MC{asset.messageData.number}
+                  </span>
+                  <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                    {(asset.messageData.variant || asset.variant || 'a').toUpperCase()}
+                  </span>
+                  {bannerSize && (
+                    <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                      {bannerSize.width}x{bannerSize.height}
+                    </span>
+                  )}
+                  <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                    v{asset.messageData.version || 1}
+                  </span>
+                </>
+              ) : (
+                // Static file - show product, extension, size
+                <>
+                  {asset.product && (
+                    <span className="px-2 py-1 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs">
+                      {asset.product}
+                    </span>
+                  )}
+                  <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
+                    {asset.extension}
+                  </span>
+                  {asset.size && (
+                    <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                      {asset.size}
+                    </span>
+                  )}
+                  {asset.variant && (
+                    <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
+                      {asset.variant.toUpperCase()}
+                    </span>
+                  )}
+                </>
+              )}
+              {/* Comment count badge */}
+              {assetComments.length > 0 && (
+                <span className="px-2 py-1 bg-orange-500/80 backdrop-blur-sm text-white rounded text-xs flex items-center gap-1">
+                  <MessageSquare size={12} />
+                  {assetComments.length}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex gap-4 justify-center">
+      {columns.map((columnAssets, colIndex) => (
+        <div key={colIndex} className="flex-1 max-w-xs flex flex-col">
+          {columnAssets.map(asset => renderAsset(asset))}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const PublicPreviewView = ({ previewId }) => {
   const { currentUser } = useAuth();
@@ -48,6 +322,8 @@ const PublicPreviewView = ({ previewId }) => {
   const [mouseDownTime, setMouseDownTime] = useState(null);
   const [showOnlyCommented, setShowOnlyCommented] = useState(false);
   const [downloadingAdId, setDownloadingAdId] = useState(null);
+  const [sizeFilter, setSizeFilter] = useState('all');
+  const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
 
   // Load configuration (use public endpoint - no auth required for share links)
   useEffect(() => {
@@ -148,6 +424,74 @@ const PublicPreviewView = ({ previewId }) => {
     return null;
   };
 
+  // Sort assets based on sortSettings from share
+  const sortAssets = (assets, sortSettings) => {
+    if (!sortSettings || !sortSettings.column) return assets;
+
+    const { column, direction } = sortSettings;
+    const sorted = [...assets].sort((a, b) => {
+      let comparison = 0;
+
+      switch (column) {
+        case 'name': {
+          // Sort by MC number numerically for dynamic, filename for others
+          const getMcNumber = (asset) => {
+            if (asset.isDynamic && asset.messageData?.number) {
+              return parseInt(asset.messageData.number, 10) || 0;
+            }
+            const match = (asset.filename || asset.folderName || '').match(/MC(\d+)/i);
+            if (match) return parseInt(match[1], 10) || 0;
+            return 0;
+          };
+          const mcNumA = getMcNumber(a);
+          const mcNumB = getMcNumber(b);
+          if (mcNumA > 0 || mcNumB > 0) {
+            comparison = mcNumA - mcNumB;
+          } else {
+            comparison = (a.filename || '').localeCompare(b.filename || '');
+          }
+          break;
+        }
+        case 'size': {
+          const parseSize = (size) => {
+            if (!size) return 0;
+            const match = size.match(/(\d+)x(\d+)/);
+            if (match) return parseInt(match[1]) * parseInt(match[2]);
+            return 0;
+          };
+          comparison = parseSize(a.size) - parseSize(b.size);
+          break;
+        }
+        case 'template': {
+          const templateA = (a.messageData?.template || '').toLowerCase();
+          const templateB = (b.messageData?.template || '').toLowerCase();
+          comparison = templateA.localeCompare(templateB);
+          break;
+        }
+        case 'date': {
+          const dateA = a.date || a.File_date || '';
+          const dateB = b.date || b.File_date || '';
+          const timeA = dateA ? new Date(dateA).getTime() : 0;
+          const timeB = dateB ? new Date(dateB).getTime() : 0;
+          comparison = timeA - timeB;
+          break;
+        }
+        case 'product': {
+          const productA = (a.product || '').toLowerCase();
+          const productB = (b.product || '').toLowerCase();
+          comparison = productA.localeCompare(productB);
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+
+      return direction === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  };
+
   const loadPreview = async () => {
     setLoading(true);
     const loadedPreview = await getPreviewById(previewId);
@@ -164,21 +508,28 @@ const PublicPreviewView = ({ previewId }) => {
     setPreview(loadedPreview);
 
     // Check if we have assets array in the share data (for static local reviews)
+    let assets;
     if (loadedPreview.assets && Array.isArray(loadedPreview.assets)) {
       console.log('PublicPreviewView: Using assets from share data:', loadedPreview.assets);
-      setPreviewAssets(loadedPreview.assets);
+      console.log('PublicPreviewView: First asset sample:', loadedPreview.assets[0]);
+      assets = loadedPreview.assets;
     } else {
       // Fallback to loading from allAssets (for regular shares)
-      const assets = allAssets.filter(asset => {
+      assets = allAssets.filter(asset => {
         const matches = loadedPreview.assetIds.includes(asset.id);
         console.log(`Checking asset ${asset.id}: ${matches}`);
         return matches;
       });
-
       console.log('PublicPreviewView: Filtered assets:', assets);
-      setPreviewAssets(assets);
     }
 
+    // Apply sort settings if present
+    if (loadedPreview.sortSettings) {
+      console.log('PublicPreviewView: Applying sort settings:', loadedPreview.sortSettings);
+      assets = sortAssets(assets, loadedPreview.sortSettings);
+    }
+
+    setPreviewAssets(assets);
     setLoading(false);
   };
 
@@ -634,6 +985,59 @@ const PublicPreviewView = ({ previewId }) => {
     });
   };
 
+  // Get unique sizes from assets (must be before early returns to maintain hook order)
+  const uniqueSizes = useMemo(() => {
+    const sizes = new Set();
+    previewAssets.forEach(asset => {
+      if (asset.size) {
+        sizes.add(asset.size);
+      } else if (asset.bannerSize) {
+        sizes.add(`${asset.bannerSize.width}x${asset.bannerSize.height}`);
+      }
+    });
+    // Sort sizes by width then height
+    return Array.from(sizes).sort((a, b) => {
+      const [aW, aH] = a.split('x').map(Number);
+      const [bW, bH] = b.split('x').map(Number);
+      return aW - bW || aH - bH;
+    });
+  }, [previewAssets]);
+
+  // Filter assets based on size filter and showOnlyCommented checkbox
+  const displayedAssets = useMemo(() => {
+    let filtered = previewAssets;
+
+    // Apply size filter
+    if (sizeFilter !== 'all') {
+      filtered = filtered.filter(asset => {
+        const assetSize = asset.size || (asset.bannerSize ? `${asset.bannerSize.width}x${asset.bannerSize.height}` : null);
+        return assetSize === sizeFilter;
+      });
+    }
+
+    // Apply comment filter
+    if (showOnlyCommented && preview) {
+      filtered = filtered.filter(asset => {
+        const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
+        return assetComments.length > 0;
+      });
+    }
+
+    return filtered;
+  }, [previewAssets, sizeFilter, showOnlyCommented, preview]);
+
+  // Close size dropdown when clicking outside
+  useEffect(() => {
+    if (!sizeDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-size-dropdown]')) {
+        setSizeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sizeDropdownOpen]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -658,14 +1062,6 @@ const PublicPreviewView = ({ previewId }) => {
   }
 
   const baseColor = preview.baseColor || '#2870ed';
-
-  // Filter assets based on showOnlyCommented checkbox
-  const displayedAssets = showOnlyCommented
-    ? previewAssets.filter(asset => {
-        const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
-        return assetComments.length > 0;
-      })
-    : previewAssets;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: baseColor }}>
@@ -714,6 +1110,50 @@ const PublicPreviewView = ({ previewId }) => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Size Filter Dropdown */}
+              {uniqueSizes.length > 1 && (
+                <div className="relative" data-size-dropdown>
+                  <button
+                    onClick={() => setSizeDropdownOpen(!sizeDropdownOpen)}
+                    className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors"
+                  >
+                    <Filter size={16} />
+                    {sizeFilter === 'all' ? 'All Sizes' : sizeFilter}
+                    <ChevronDown size={16} className={`transition-transform ${sizeDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {sizeDropdownOpen && (
+                    <div className="absolute right-0 mt-1 bg-gray-900 border border-white/20 rounded-lg shadow-lg z-20 min-w-[140px] max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => {
+                          setSizeFilter('all');
+                          setSizeDropdownOpen(false);
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors ${sizeFilter === 'all' ? 'bg-white/20 text-white font-medium' : 'text-white/80'}`}
+                      >
+                        All Sizes ({previewAssets.length})
+                      </button>
+                      {uniqueSizes.map(size => {
+                        const count = previewAssets.filter(a => {
+                          const assetSize = a.size || (a.bannerSize ? `${a.bannerSize.width}x${a.bannerSize.height}` : null);
+                          return assetSize === size;
+                        }).length;
+                        return (
+                          <button
+                            key={size}
+                            onClick={() => {
+                              setSizeFilter(size);
+                              setSizeDropdownOpen(false);
+                            }}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors ${sizeFilter === size ? 'bg-white/20 text-white font-medium' : 'text-white/80'}`}
+                          >
+                            {size} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={() => setShowOnlyCommented(!showOnlyCommented)}
                 className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -724,11 +1164,11 @@ const PublicPreviewView = ({ previewId }) => {
               </button>
               <button
                 onClick={handleDownloadAll}
-                disabled={downloading || previewAssets.length === 0}
+                disabled={downloading || displayedAssets.length === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <DownloadCloud size={16} />
-                {downloading ? 'Downloading...' : `Download All (${previewAssets.length})`}
+                {downloading ? 'Downloading...' : `Download All (${displayedAssets.length})`}
               </button>
             </div>
           </div>
@@ -737,109 +1177,28 @@ const PublicPreviewView = ({ previewId }) => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Assets Gallery */}
+        {/* Assets Gallery - Shortest Column Masonry */}
         {displayedAssets.length === 0 ? (
           <div className="text-center py-12 text-gray-500 bg-white rounded-lg">
             <ImageIcon size={48} className="mx-auto mb-4 text-gray-300" />
-            <p>{showOnlyCommented ? 'No assets with comments' : 'No assets in this preview'}</p>
+            <p>
+              {sizeFilter !== 'all' && showOnlyCommented
+                ? `No ${sizeFilter} assets with comments`
+                : sizeFilter !== 'all'
+                ? `No ${sizeFilter} assets`
+                : showOnlyCommented
+                ? 'No assets with comments'
+                : 'No assets in this preview'}
+            </p>
           </div>
         ) : (
-          <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
-            {displayedAssets.map(asset => {
-              const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(asset.extension);
-              const isVideo = asset.extension === 'mp4';
-              const isStatic = isStaticLocalReview(asset);
-              const assetComments = preview.comments?.filter(c => c.text.startsWith(`[${asset.id}]`)) || [];
-
-              return (
-                <div
-                  key={asset.id}
-                  className="group cursor-pointer mb-4 break-inside-avoid"
-                  onClick={() => setSelectedAsset(asset)}
-                >
-                  <div className="relative rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white">
-                    {isStatic && asset.bannerSize && (
-                      <div
-                        style={{
-                          width: '100%',
-                          aspectRatio: `${asset.bannerSize.width} / ${asset.bannerSize.height}`,
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: `${asset.bannerSize.width}px`,
-                            height: `${asset.bannerSize.height}px`,
-                            transformOrigin: 'top left',
-                            transform: 'scale(var(--scale))',
-                            position: 'absolute',
-                            top: 0,
-                            left: 0
-                          }}
-                          ref={(el) => {
-                            if (el) {
-                              const parentWidth = el.parentElement?.offsetWidth || asset.bannerSize.width;
-                              const scale = parentWidth / asset.bannerSize.width;
-                              el.style.setProperty('--scale', scale.toString());
-                            }
-                          }}
-                        >
-                          <iframe
-                            src={asset.staticPath}
-                            className="pointer-events-none"
-                            style={{
-                              width: `${asset.bannerSize.width}px`,
-                              height: `${asset.bannerSize.height}px`,
-                              border: 0,
-                              display: 'block'
-                            }}
-                            title={asset.folderName || asset.filename}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {!isStatic && isImage && (
-                      <img
-                        src={getAssetUrl(asset)}
-                        alt={asset.filename}
-                        className="w-full h-auto object-cover"
-                        loading="lazy"
-                      />
-                    )}
-                    {!isStatic && isVideo && (
-                      <video
-                        src={getAssetUrl(asset)}
-                        className="w-full h-auto object-cover"
-                        preload="metadata"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 pointer-events-none">
-                      <h3 className="text-white font-semibold text-sm mb-2 line-clamp-2">
-                        {asset.product || asset.filename}
-                      </h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium uppercase">
-                          {asset.extension}
-                        </span>
-                        {assetComments.length > 0 && (
-                          <span className="px-2 py-1 bg-blue-500/80 backdrop-blur-sm text-white rounded text-xs flex items-center gap-1">
-                            <MessageSquare size={12} />
-                            {assetComments.length}
-                          </span>
-                        )}
-                        {asset.size && (
-                          <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs">
-                            {asset.size}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <MasonryGrid
+            assets={displayedAssets}
+            preview={preview}
+            isStaticLocalReview={isStaticLocalReview}
+            getAssetUrl={getAssetUrl}
+            onAssetClick={setSelectedAsset}
+          />
         )}
       </div>
 
@@ -1233,17 +1592,49 @@ const PublicPreviewView = ({ previewId }) => {
             {/* Asset Display */}
             <div className="flex items-center justify-center relative" style={{ height: '80vh' }}>
               {isStaticLocalReview(selectedAsset) ? (
-                <div className="relative" style={{ maxHeight: '80vh', maxWidth: '100%' }}>
+                <div
+                  className="relative"
+                  style={{
+                    // Calculate scaled dimensions to fit viewport
+                    width: (() => {
+                      if (!selectedAsset.bannerSize) return '800px';
+                      const maxW = window.innerWidth * 0.7; // 70vw (accounting for side panel)
+                      const maxH = window.innerHeight * 0.8; // 80vh
+                      const scaleW = maxW / selectedAsset.bannerSize.width;
+                      const scaleH = maxH / selectedAsset.bannerSize.height;
+                      const scale = Math.min(scaleW, scaleH, 1); // Don't scale up, only down
+                      return `${selectedAsset.bannerSize.width * scale}px`;
+                    })(),
+                    height: (() => {
+                      if (!selectedAsset.bannerSize) return '600px';
+                      const maxW = window.innerWidth * 0.7;
+                      const maxH = window.innerHeight * 0.8;
+                      const scaleW = maxW / selectedAsset.bannerSize.width;
+                      const scaleH = maxH / selectedAsset.bannerSize.height;
+                      const scale = Math.min(scaleW, scaleH, 1);
+                      return `${selectedAsset.bannerSize.height * scale}px`;
+                    })(),
+                    overflow: 'hidden'
+                  }}
+                >
                   <iframe
                     src={selectedAsset.staticPath}
                     className="rounded-lg shadow-2xl bg-white"
                     style={{
                       width: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.width}px` : '800px',
                       height: selectedAsset.bannerSize ? `${selectedAsset.bannerSize.height}px` : '600px',
-                      maxWidth: '90vw',
-                      maxHeight: '80vh',
                       border: 'none',
-                      display: 'block'
+                      display: 'block',
+                      transformOrigin: 'top left',
+                      transform: (() => {
+                        if (!selectedAsset.bannerSize) return 'none';
+                        const maxW = window.innerWidth * 0.7;
+                        const maxH = window.innerHeight * 0.8;
+                        const scaleW = maxW / selectedAsset.bannerSize.width;
+                        const scaleH = maxH / selectedAsset.bannerSize.height;
+                        const scale = Math.min(scaleW, scaleH, 1);
+                        return `scale(${scale})`;
+                      })()
                     }}
                     title={selectedAsset.folderName || selectedAsset.filename}
                     onLoad={(e) => {

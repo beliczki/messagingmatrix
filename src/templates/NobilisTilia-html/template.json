@@ -24,7 +24,7 @@
         "click_url": {
             "type": "url",
 	        "default": "",
-            "binding-messagingmatrix": "Final_Trafficked_URL"
+            "binding-messagingmatrix": "landingUrl"
         },
         "template_variant_class": {
             "type": "tag",

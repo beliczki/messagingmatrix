@@ -41,6 +41,8 @@ db/*.db-shm
 db/*.db-wal
 cache/drive/*
 !cache/drive/.gitkeep
+public/cache/drive/*
+!public/cache/drive/.gitkeep
 
 # Local creatives (loaded dynamically)
 src/creatives/*
@@ -57,3 +59,7 @@ nul
 
 # Auto Claude data directory
 .auto-claude/
+
+# Instance data (contains sensitive credentials)
+instances/*/
+!instances/.gitkeep
