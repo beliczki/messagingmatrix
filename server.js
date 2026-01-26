@@ -1492,7 +1492,7 @@ app.get('/api/shares/:shareId', (req, res) => {
             folderMap[folderName] = {
               id: `${shareId}-${folderName}`,
               folderName,
-              staticPath: `/share/${shareId}/${folderName}/index.html`,
+              staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
               isLocalFolderReview: true,
               reviewType: 'static-local',
               size: `${width}x${height}`,
@@ -1810,7 +1810,7 @@ app.post('/api/shares', async (req, res) => {
           // Add to processed assets list with new path and mark as local folder review
           processedAssets.push({
             ...creative,
-            staticPath: `/share/${shareId}/${folderName}/index.html`,
+            staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
             folderName,
             isLocalFolderReview: true,
             reviewType: 'static-local'
