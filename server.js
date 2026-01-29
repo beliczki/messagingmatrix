@@ -277,6 +277,39 @@ app.put('/api/sheets/:spreadsheetId/values/:range', async (req, res) => {
 });
 
 // Clear spreadsheet data
+// Add a new sheet/tab to a spreadsheet
+app.post('/api/sheets/:spreadsheetId/addSheet', verifyToken, async (req, res) => {
+  try {
+    const { spreadsheetId } = req.params;
+    const { title } = req.body;
+    const token = await getAccessToken();
+
+    const url = `${SHEETS_BASE_URL}/${spreadsheetId}:batchUpdate`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title } } }]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Google Sheets API error (addSheet):', error);
+      return res.status(response.status).json({ error: error.error?.message || 'Failed to add sheet' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error adding sheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/sheets/:spreadsheetId/values/:range/clear', verifyToken, async (req, res) => {
   try {
     const { spreadsheetId, range } = req.params;

@@ -179,7 +179,7 @@ class SheetsService {
     console.log(`📝 [write] spreadsheetId:`, this.spreadsheetId ? 'configured' : 'NOT SET');
     if (this.spreadsheetId) {
       try {
-        // Step 1: Clear the entire sheet first
+        // Step 1: Clear the entire sheet first (create tab if it doesn't exist)
         const clearUrl = `/api/sheets/${this.spreadsheetId}/values/${sheetName}/clear`;
 
         const clearResponse = await authenticatedFetch(clearUrl, {
@@ -191,11 +191,32 @@ class SheetsService {
 
         if (!clearResponse.ok) {
           const error = await clearResponse.json();
-          console.error(`Failed to clear ${sheetName}:`, error);
-          throw new Error(`Google Sheets clear error: ${JSON.stringify(error)}`);
-        }
+          const errorMsg = error.error || error.message || '';
+          const isSheetMissing = typeof errorMsg === 'string'
+            ? errorMsg.includes('Unable to parse range')
+            : JSON.stringify(error).includes('Unable to parse range');
 
-        console.log(`Cleared ${sheetName}`);
+          if (isSheetMissing) {
+            // Sheet/tab doesn't exist yet - create it
+            console.log(`Sheet "${sheetName}" not found, creating...`);
+            const createResponse = await authenticatedFetch(`/api/sheets/${this.spreadsheetId}/addSheet`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: sheetName }),
+            });
+            if (!createResponse.ok) {
+              const createError = await createResponse.json();
+              console.error(`Failed to create sheet ${sheetName}:`, createError);
+              throw new Error(`Failed to create sheet: ${JSON.stringify(createError)}`);
+            }
+            console.log(`Created sheet "${sheetName}"`);
+          } else {
+            console.error(`Failed to clear ${sheetName}:`, error);
+            throw new Error(`Google Sheets clear error: ${JSON.stringify(error)}`);
+          }
+        } else {
+          console.log(`Cleared ${sheetName}`);
+        }
 
         // Step 2: Write new data
         const url = `/api/sheets/${this.spreadsheetId}/values/${sheetName}`;
@@ -833,6 +854,55 @@ class SheetsService {
       return { success: true, rowCount: data.length };
     } catch (error) {
       console.error('❌ [writeFilteredFeed] Failed:', error);
+      throw error;
+    }
+  }
+
+  // Save a content package to the Messages Log sheet
+  async saveMessagesLog(packageData) {
+    const sheetName = 'Messages Log';
+    console.log(`📝 [saveMessagesLog] Saving package for MC${packageData.mcNumber}${packageData.variant || 'a'}`);
+
+    try {
+      // Read existing log entries
+      let existingData = [];
+      try {
+        const existing = await this.read(sheetName);
+        if (existing && Array.isArray(existing)) {
+          existingData = existing;
+        }
+      } catch (e) {
+        // Sheet might not exist yet, start with empty array
+        console.log(`📝 [saveMessagesLog] Creating new Messages Log sheet`);
+      }
+
+      // Add header row if empty
+      if (existingData.length === 0) {
+        existingData.push(['timestamp', 'mc_number', 'variant', 'audience', 'topic', 'headline', 'copy1', 'cta', 'applied']);
+      }
+
+      // Add new entry
+      const newRow = [
+        packageData.timestamp || new Date().toISOString(),
+        packageData.mcNumber || '',
+        packageData.variant || 'a',
+        packageData.audience || '',
+        packageData.topic || '',
+        packageData.headline || '',
+        packageData.copy1 || '',
+        packageData.cta || '',
+        packageData.applied ? 'true' : 'false'
+      ];
+
+      existingData.push(newRow);
+
+      // Write back to sheet
+      await this.write(sheetName, existingData);
+
+      console.log(`✅ [saveMessagesLog] Saved package to Messages Log`);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ [saveMessagesLog] Failed:`, error);
       throw error;
     }
   }
