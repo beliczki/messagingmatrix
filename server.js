@@ -4189,6 +4189,9 @@ if (process.env.NODE_ENV === 'production') {
   if (fs.existsSync(distPath)) {
     console.log('✓ Serving static files from:', distPath);
 
+    // Serve runtime-generated files (e.g., Drive cache in public/cache/drive/)
+    app.use(express.static(path.join(__dirname, 'public')));
+
     // Serve static assets
     app.use(express.static(distPath));
 
