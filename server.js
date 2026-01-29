@@ -4190,7 +4190,7 @@ if (process.env.NODE_ENV === 'production') {
     console.log('✓ Serving static files from:', distPath);
 
     // Serve runtime-generated files (e.g., Drive cache in public/cache/drive/)
-    app.use(express.static(path.join(__dirname, 'public')));
+    app.use('/cache', express.static(path.join(__dirname, 'public', 'cache')));
 
     // Serve static assets
     app.use(express.static(distPath));
