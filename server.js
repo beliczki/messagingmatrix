@@ -4071,8 +4071,6 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
   try {
     const { fileIdOrName } = req.params;
 
-    console.log(`🎬 Drive proxy request: ${fileIdOrName}`);
-
     // Check if Drive storage is initialized
     if (!driveStorage.initialized) {
       console.warn(`Drive proxy request for ${fileIdOrName} but Drive is not initialized`);
@@ -4085,31 +4083,52 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     const hasExtension = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|pdf|zip|psd|html|htm|css|js|json)$/i.test(fileIdOrName);
 
     if (hasExtension) {
-      // This is a filename - search for it in Drive
+      // This is a filename - check local cache first by filename before searching Drive
+      const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
+      const cachedPath = path.join(publicCacheDir, fileIdOrName);
+      if (fs.existsSync(cachedPath)) {
+        const range = req.headers.range;
+        if (!range) {
+          return res.redirect(302, `/cache/drive/${encodeURIComponent(fileIdOrName)}`);
+        }
+      }
+
+      // Cache miss - search for file in Drive
       console.log(`Searching for file by name: ${fileIdOrName}`);
-
-      // Search in both assets and creatives folders
       let files = await driveStorage.searchFiles(fileIdOrName, 'assets');
-      console.log(`Assets search returned ${files.length} results`);
-
       if (files.length === 0) {
-        // Try creatives folder if not found in assets
         files = await driveStorage.searchFiles(fileIdOrName, 'creatives');
-        console.log(`Creatives search returned ${files.length} results`);
       }
 
       if (files.length === 0) {
         console.error(`File not found: ${fileIdOrName}`);
-        console.log(`Attempted search in both assets and creatives folders`);
         return res.status(404).json({ error: `File not found: ${fileIdOrName}` });
       }
 
-      // Use the first matching file
       fileId = files[0].id;
       console.log(`Found file: ${files[0].name} (ID: ${fileId})`);
+    } else {
+      // This is a Drive file ID - check local cache by ID lookup
+      const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
+      const idMapPath = path.join(publicCacheDir, `_id_${fileId}.json`);
+      if (fs.existsSync(idMapPath)) {
+        try {
+          const idMap = JSON.parse(fs.readFileSync(idMapPath, 'utf8'));
+          const cachedPath = path.join(publicCacheDir, idMap.filename);
+          if (fs.existsSync(cachedPath)) {
+            const range = req.headers.range;
+            if (!range) {
+              return res.redirect(302, `/cache/drive/${encodeURIComponent(idMap.filename)}`);
+            }
+            // For range requests, read from cache and fall through to range handling below
+          }
+        } catch (e) {
+          // Corrupt map file, continue to Drive API
+        }
+      }
     }
 
-    // Get file metadata first to check ETag
+    // Cache miss - fetch from Drive API
     const metadata = await driveStorage.getFileMetadata(fileId);
 
     // Use file ID + modified time as ETag for cache validation
@@ -4118,7 +4137,6 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     // Check if client has cached version
     const clientEtag = req.headers['if-none-match'];
     if (clientEtag === etag) {
-      // File hasn't changed, return 304 Not Modified
       res.status(304).end();
       return;
     }
@@ -4129,11 +4147,17 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     const cachedFilename = cacheResult.filename;
     const fileSize = fileData.length;
 
+    // Save ID→filename mapping for fast cache lookups
+    try {
+      const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
+      const idMapPath = path.join(publicCacheDir, `_id_${fileId}.json`);
+      fs.writeFileSync(idMapPath, JSON.stringify({ filename: cachedFilename }));
+    } catch (e) { /* ignore */ }
+
     // Redirect to public cache URL for better performance (browser can cache directly)
     // Skip redirect for range requests (video seeking) as they need special handling
     const range = req.headers.range;
     if (!range && cachedFilename) {
-      // Redirect to static file - much faster
       return res.redirect(302, `/cache/drive/${encodeURIComponent(cachedFilename)}`);
     }
 
