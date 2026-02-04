@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X } from 'lucide-react';
+import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X, Image } from 'lucide-react';
 
 /**
  * MediaToolbar - Floating draggable toolbar for Creative Library
@@ -32,6 +32,7 @@ const MediaToolbar = ({
   onDeselectAll,
   onExitSelection,
   onShare,
+  onExportImages,
   // Color picker props
   bgColor,
   setBgColor,
@@ -381,6 +382,15 @@ const MediaToolbar = ({
                       className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
                     >
                       Share Selected
+                    </button>
+                  )}
+                  {onExportImages && selectedCount > 0 && (
+                    <button
+                      onClick={onExportImages}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                    >
+                      <Image size={16} />
+                      Export Images
                     </button>
                   )}
                   <button

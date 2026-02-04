@@ -11,6 +11,7 @@ import CreativeLibraryListView from './CreativeLibraryListView';
 import CreativeLibraryUploadDialogs from './CreativeLibraryUploadDialogs';
 import MediaLibraryBase from './MediaLibraryBase';
 import MediaToolbar from './MediaToolbar';
+import ExportImagesDialog from './ExportImagesDialog';
 import { processAssets } from '../utils/assetUtils';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData, invalidateDriveCache } from '../utils/driveAssets';
@@ -32,6 +33,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
   const [selectorMode, setSelectorMode] = useState(false);
   const [selectedCreativeIds, setSelectedCreativeIds] = useState(new Set());
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [shareTitle, setShareTitle] = useState('');
   const [generatedShareUrl, setGeneratedShareUrl] = useState(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -1342,6 +1344,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
               setSelectedCreativeIds(new Set());
             }}
             onShare={() => setShowShareDialog(true)}
+            onExportImages={() => setShowExportDialog(true)}
             // Color picker props
             bgColor={bgColor}
             setBgColor={setBgColor}
@@ -1627,6 +1630,15 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         sortColumn={sortColumn}
         sortDirection={sortDirection}
         />
+
+      {/* Export Images Dialog */}
+      <ExportImagesDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        selectedCreatives={creatives.filter(c => selectedCreativeIds.has(c.id))}
+        templatesCache={templatesCache}
+        textFormatting={matrixData?.textFormatting || []}
+      />
       </div>
 
       {/* Bottom Bar */}
