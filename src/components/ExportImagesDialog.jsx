@@ -257,6 +257,15 @@ const ExportImagesDialog = ({
             windowWidth: width,
             windowHeight: height,
             onclone: (clonedDoc) => {
+              // Preserve html element's computed font-size (critical for rem units!)
+              const originalHtmlStyle = iframeWindow.getComputedStyle(iframeDoc.documentElement);
+              const htmlFontSize = originalHtmlStyle.fontSize;
+              clonedDoc.documentElement.style.fontSize = htmlFontSize;
+
+              // Also ensure body has no unexpected margins
+              clonedDoc.body.style.margin = '0';
+              clonedDoc.body.style.padding = '0';
+
               // Apply SVG conversions to the CLONED document only
               const clonedImages = clonedDoc.querySelectorAll('img');
               for (const img of clonedImages) {
