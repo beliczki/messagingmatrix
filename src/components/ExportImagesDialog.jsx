@@ -149,50 +149,6 @@ const ExportImagesDialog = ({
     // Add size class to body
     populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
 
-    // Helper to convert SVG URL to base64 data URI
-    const svgToDataUri = async (url) => {
-      try {
-        const response = await fetch(url, { mode: 'cors' });
-        const svgText = await response.text();
-        const base64 = btoa(unescape(encodeURIComponent(svgText)));
-        return `data:image/svg+xml;base64,${base64}`;
-      } catch (e) {
-        console.warn('Failed to convert SVG:', url, e);
-        return null;
-      }
-    };
-
-    // Find and convert all SVG URLs in HTML before writing to iframe
-    // This handles both src="...svg" and url('...svg') patterns
-    const svgSrcPattern = /src=["']([^"']*\.svg[^"']*)["']/gi;
-    const svgUrlPattern = /url\(["']?([^"')]*\.svg[^"')]*)/gi;
-
-    // Collect unique SVG URLs
-    const svgUrls = new Set();
-    let match;
-    while ((match = svgSrcPattern.exec(populatedHtml)) !== null) {
-      svgUrls.add(match[1]);
-    }
-    while ((match = svgUrlPattern.exec(populatedHtml)) !== null) {
-      svgUrls.add(match[1]);
-    }
-
-    // Convert SVGs to data URIs and replace in HTML
-    for (const svgUrl of svgUrls) {
-      // Build full URL if relative
-      let fullUrl = svgUrl;
-      if (!svgUrl.startsWith('http') && !svgUrl.startsWith('data:')) {
-        fullUrl = svgUrl.startsWith('/') ? `${window.location.origin}${svgUrl}` : `${window.location.origin}/${svgUrl}`;
-      }
-
-      const dataUri = await svgToDataUri(fullUrl);
-      if (dataUri) {
-        // Escape special regex characters in the URL
-        const escapedUrl = svgUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        populatedHtml = populatedHtml.replace(new RegExp(escapedUrl, 'g'), dataUri);
-      }
-    }
-
     // Create off-screen container
     const container = document.createElement('div');
     container.style.cssText = `
@@ -229,6 +185,42 @@ const ExportImagesDialog = ({
       await Promise.all(promises);
     };
 
+    // Helper to convert SVG images to data URIs with proper dimensions
+    const convertSvgImagesInDoc = async (doc, iframeWindow) => {
+      const images = doc.querySelectorAll('img');
+      for (const img of images) {
+        const src = img.src || img.getAttribute('src');
+        if (src && src.includes('.svg') && !src.startsWith('data:')) {
+          try {
+            const response = await fetch(src, { mode: 'cors' });
+            const svgText = await response.text();
+
+            // Get computed dimensions from CSS
+            const computedStyle = iframeWindow.getComputedStyle(img);
+            const imgWidth = parseInt(computedStyle.width) || img.offsetWidth || img.naturalWidth;
+            const imgHeight = parseInt(computedStyle.height) || img.offsetHeight || img.naturalHeight;
+
+            // Inject width/height into SVG if not present
+            let modifiedSvg = svgText;
+            if (imgWidth && imgHeight) {
+              // Remove any existing width/height and add new ones
+              modifiedSvg = modifiedSvg.replace(/<svg([^>]*)>/, (match, attrs) => {
+                // Remove existing width/height attributes
+                let cleanAttrs = attrs.replace(/\s*width\s*=\s*["'][^"']*["']/gi, '');
+                cleanAttrs = cleanAttrs.replace(/\s*height\s*=\s*["'][^"']*["']/gi, '');
+                return `<svg${cleanAttrs} width="${imgWidth}" height="${imgHeight}">`;
+              });
+            }
+
+            const base64 = btoa(unescape(encodeURIComponent(modifiedSvg)));
+            img.src = `data:image/svg+xml;base64,${base64}`;
+          } catch (e) {
+            console.warn('Failed to convert SVG image:', src, e);
+          }
+        }
+      }
+    };
+
     return new Promise((resolve, reject) => {
       iframe.onload = async () => {
         // Wait for initial render
@@ -236,9 +228,16 @@ const ExportImagesDialog = ({
 
         try {
           const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          const iframeWindow = iframe.contentWindow;
 
-          // Wait for all images to fully load
+          // Wait for all images to fully load first
           await waitForImages(iframeDoc);
+
+          // Convert SVG images to data URIs with proper dimensions
+          await convertSvgImagesInDoc(iframeDoc, iframeWindow);
+
+          // Wait again after SVG conversion
+          await new Promise(r => setTimeout(r, 100));
 
           // Wait for animations/transitions
           await new Promise(r => setTimeout(r, delay));

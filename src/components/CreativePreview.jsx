@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Info, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Info, ExternalLink, Image } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
 
@@ -16,6 +17,10 @@ const CreativePreview = ({
   audiences = []
 }) => {
   const [infoOpen, setInfoOpen] = useState(false);
+  const [canvasMode, setCanvasMode] = useState(false);
+  const [canvasDataUrl, setCanvasDataUrl] = useState(null);
+  const [canvasLoading, setCanvasLoading] = useState(false);
+  const iframeRef = useRef(null);
 
   // Progressive loading: start with thumbnail, upgrade to full res
   const [displayUrl, setDisplayUrl] = useState(creative?.url);
@@ -174,6 +179,71 @@ const CreativePreview = ({
     return result;
   };
 
+  // Capture iframe content to canvas
+  const captureToCanvas = async () => {
+    if (!iframeRef.current) return;
+
+    setCanvasLoading(true);
+    try {
+      const iframe = iframeRef.current;
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const width = creative.bannerSize.width;
+      const height = creative.bannerSize.height;
+
+      // Convert SVG images to data URIs before capture
+      const svgImages = iframeDoc.querySelectorAll('img');
+      for (const img of svgImages) {
+        const src = img.src || img.getAttribute('src');
+        if (src && src.includes('.svg')) {
+          try {
+            const response = await fetch(src, { mode: 'cors' });
+            const svgText = await response.text();
+            // Get computed dimensions from CSS
+            const computedStyle = iframe.contentWindow.getComputedStyle(img);
+            const imgWidth = parseInt(computedStyle.width) || img.offsetWidth;
+            const imgHeight = parseInt(computedStyle.height) || img.offsetHeight;
+            // Inject width/height into SVG
+            let modifiedSvg = svgText;
+            if (!modifiedSvg.includes('width=') && imgWidth) {
+              modifiedSvg = modifiedSvg.replace(/<svg/, `<svg width="${imgWidth}" height="${imgHeight}"`);
+            }
+            const base64 = btoa(unescape(encodeURIComponent(modifiedSvg)));
+            img.src = `data:image/svg+xml;base64,${base64}`;
+          } catch (e) {
+            console.warn('Failed to convert SVG:', src, e);
+          }
+        }
+      }
+
+      // Wait for images to settle
+      await new Promise(r => setTimeout(r, 500));
+
+      const canvas = await html2canvas(iframeDoc.body, {
+        width,
+        height,
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: true // Enable for debugging
+      });
+
+      setCanvasDataUrl(canvas.toDataURL('image/png'));
+    } catch (error) {
+      console.error('Canvas capture failed:', error);
+      alert('Canvas capture failed: ' + error.message);
+    } finally {
+      setCanvasLoading(false);
+    }
+  };
+
+  // Reset canvas when switching creatives or toggling mode
+  useEffect(() => {
+    if (!canvasMode) {
+      setCanvasDataUrl(null);
+    }
+  }, [canvasMode, creative?.id]);
+
   // Render dynamic HTML creative
   const renderDynamicCreative = () => {
     if (!templateHtml || !templateCss || !creative.bannerSize) return null;
@@ -221,7 +291,40 @@ const CreativePreview = ({
     );
 
     return (
-      <div className="bg-gray-900 p-4 rounded-lg flex items-center justify-center">
+      <div className="bg-gray-900 p-4 rounded-lg flex flex-col items-center justify-center gap-4">
+        {/* Canvas Mode Toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCanvasMode(!canvasMode)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+              canvasMode
+                ? 'bg-orange-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            <Image size={16} />
+            Canvas Mode {canvasMode ? 'ON' : 'OFF'}
+          </button>
+          {canvasMode && !canvasDataUrl && (
+            <button
+              onClick={captureToCanvas}
+              disabled={canvasLoading}
+              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {canvasLoading ? 'Capturing...' : 'Capture'}
+            </button>
+          )}
+          {canvasMode && canvasDataUrl && (
+            <button
+              onClick={() => setCanvasDataUrl(null)}
+              className="px-3 py-1.5 bg-gray-600 text-white rounded text-sm hover:bg-gray-500"
+            >
+              Re-capture
+            </button>
+          )}
+        </div>
+
+        {/* Preview Container */}
         <div
           style={{
             width: `${width}px`,
@@ -229,17 +332,35 @@ const CreativePreview = ({
             position: 'relative'
           }}
         >
-          <iframe
-            srcDoc={populatedHtml}
-            style={{
-              width: `${width}px`,
-              height: `${height}px`,
-              border: 0,
-              display: 'block'
-            }}
-            title={`${creative.product || 'Creative'} Preview`}
-            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
-          />
+          {canvasMode && canvasDataUrl ? (
+            <img
+              src={canvasDataUrl}
+              alt="Canvas capture"
+              style={{ width: `${width}px`, height: `${height}px`, display: 'block' }}
+            />
+          ) : (
+            <iframe
+              ref={iframeRef}
+              srcDoc={populatedHtml}
+              style={{
+                width: `${width}px`,
+                height: `${height}px`,
+                border: 0,
+                display: 'block'
+              }}
+              title={`${creative.product || 'Creative'} Preview`}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+            />
+          )}
+        </div>
+
+        {/* Mode indicator */}
+        <div className="text-xs text-gray-500">
+          {canvasMode
+            ? canvasDataUrl
+              ? 'Showing html2canvas output (what export will look like)'
+              : 'Click Capture to see html2canvas output'
+            : 'Showing live iframe (normal preview)'}
         </div>
       </div>
     );
