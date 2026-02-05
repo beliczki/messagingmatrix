@@ -231,28 +231,33 @@ const CreativePreview = ({
       }
 
       // Collect and convert background images to data URIs (for foreignObjectRendering CORS)
-      const bgImageDataUris = {};
-      const elementsWithBg = iframeDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
-      for (const el of elementsWithBg) {
+      // Store by element identifier (class or data-placeholder value)
+      const bgImagesByElement = [];
+      const allElements = iframeDoc.querySelectorAll('*');
+      for (const el of allElements) {
         const computedStyle = iframeWindow.getComputedStyle(el);
         const bgImage = computedStyle.backgroundImage;
         if (bgImage && bgImage !== 'none') {
           const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
           if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('data:')) {
             const imgUrl = urlMatch[1];
-            if (!bgImageDataUris[imgUrl]) {
-              try {
-                const response = await fetch(imgUrl, { mode: 'cors' });
-                const blob = await response.blob();
-                const dataUri = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result);
-                  reader.readAsDataURL(blob);
-                });
-                bgImageDataUris[imgUrl] = dataUri;
-              } catch (e) {
-                console.warn('Failed to convert bg image:', imgUrl, e);
-              }
+            try {
+              const response = await fetch(imgUrl, { mode: 'cors' });
+              const blob = await response.blob();
+              const dataUri = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+              });
+              // Store element identifier and data URI
+              bgImagesByElement.push({
+                selector: el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ')[0]}` : null,
+                dataPlaceholder: el.getAttribute('data-placeholder'),
+                dataUri,
+                originalUrl: imgUrl
+              });
+            } catch (e) {
+              console.warn('Failed to convert bg image:', imgUrl, e);
             }
           }
         }
@@ -294,17 +299,19 @@ const CreativePreview = ({
           }
 
           // Apply background image data URIs to cloned elements
-          const clonedBgElements = clonedDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
-          for (const el of clonedBgElements) {
-            const bgStyle = el.style.backgroundImage;
-            if (bgStyle) {
-              let newBgStyle = bgStyle;
-              for (const [url, dataUri] of Object.entries(bgImageDataUris)) {
-                if (bgStyle.includes(url)) {
-                  newBgStyle = newBgStyle.replace(url, dataUri);
+          // Iterate through all elements and replace background images with data URIs
+          const clonedAllElements = clonedDoc.querySelectorAll('*');
+          for (const el of clonedAllElements) {
+            const computedBg = window.getComputedStyle(el).backgroundImage;
+            if (computedBg && computedBg !== 'none') {
+              // Check if this element's background matches any of our converted images
+              for (const bgInfo of bgImagesByElement) {
+                if (computedBg.includes(bgInfo.originalUrl)) {
+                  // Replace the URL with data URI
+                  el.style.backgroundImage = computedBg.replace(bgInfo.originalUrl, bgInfo.dataUri);
+                  break;
                 }
               }
-              el.style.backgroundImage = newBgStyle;
             }
           }
         }

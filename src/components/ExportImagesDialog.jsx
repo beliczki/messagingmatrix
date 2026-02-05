@@ -244,16 +244,19 @@ const ExportImagesDialog = ({
           const svgDataUris = await collectAndConvertSvgs(iframeDoc, iframeWindow);
 
           // Collect and convert background images to data URIs (for foreignObjectRendering CORS)
-          const bgImageDataUris = {};
-          const elementsWithBg = iframeDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
-          for (const el of elementsWithBg) {
+          // Query ALL elements since backgrounds can be set via CSS classes, not just inline styles
+          const bgImagesByElement = [];
+          const allElements = iframeDoc.querySelectorAll('*');
+          for (const el of allElements) {
             const computedStyle = iframeWindow.getComputedStyle(el);
             const bgImage = computedStyle.backgroundImage;
             if (bgImage && bgImage !== 'none') {
               const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
               if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('data:')) {
                 const imgUrl = urlMatch[1];
-                if (!bgImageDataUris[imgUrl]) {
+                // Check if we already have this URL converted
+                const existing = bgImagesByElement.find(b => b.originalUrl === imgUrl);
+                if (!existing) {
                   try {
                     const response = await fetch(imgUrl, { mode: 'cors' });
                     const blob = await response.blob();
@@ -262,7 +265,10 @@ const ExportImagesDialog = ({
                       reader.onloadend = () => resolve(reader.result);
                       reader.readAsDataURL(blob);
                     });
-                    bgImageDataUris[imgUrl] = dataUri;
+                    bgImagesByElement.push({
+                      dataUri,
+                      originalUrl: imgUrl
+                    });
                   } catch (e) {
                     console.warn('Failed to convert bg image:', imgUrl, e);
                   }
@@ -310,17 +316,19 @@ const ExportImagesDialog = ({
               }
 
               // Apply background image data URIs to cloned elements
-              const clonedBgElements = clonedDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
-              for (const el of clonedBgElements) {
-                const bgStyle = el.style.backgroundImage;
-                if (bgStyle) {
-                  let newBgStyle = bgStyle;
-                  for (const [url, dataUri] of Object.entries(bgImageDataUris)) {
-                    if (bgStyle.includes(url)) {
-                      newBgStyle = newBgStyle.replace(url, dataUri);
+              // Iterate ALL elements and use computed style (since bg may be set via CSS)
+              const clonedAllElements = clonedDoc.querySelectorAll('*');
+              for (const el of clonedAllElements) {
+                const computedBg = window.getComputedStyle(el).backgroundImage;
+                if (computedBg && computedBg !== 'none') {
+                  // Check if this element's background matches any of our converted images
+                  for (const bgInfo of bgImagesByElement) {
+                    if (computedBg.includes(bgInfo.originalUrl)) {
+                      // Set inline style to override with data URI
+                      el.style.backgroundImage = computedBg.replace(bgInfo.originalUrl, bgInfo.dataUri);
+                      break;
                     }
                   }
-                  el.style.backgroundImage = newBgStyle;
                 }
               }
             }
