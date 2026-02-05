@@ -100,18 +100,37 @@ const ExportImagesDialog = ({
     // Inject CSS inline into the HTML
     let htmlWithCss = templateData.html;
 
+    // Add base tag for proper URL resolution
+    const baseUrl = window.location.origin;
+    htmlWithCss = htmlWithCss.replace(
+      /<head([^>]*)>/i,
+      `<head$1><base href="${baseUrl}/api/templates/${tplName}/">`
+    );
+
     if (templateData.css?.main || templateData.css?.[sizeKey]) {
       const mainCss = templateData.css.main || '';
       const sizeCss = templateData.css[sizeKey] || '';
       const combinedCss = `${mainCss}\n${sizeCss}`;
+
+      // Replace main.css link with inline styles
       htmlWithCss = htmlWithCss.replace(
-        /<link rel="stylesheet" href="main.css".*?>/,
+        /<link rel="stylesheet" href="main.css".*?>/i,
         `<style>${combinedCss}</style>`
       );
+
+      // Remove any [[css]] placeholder links
       htmlWithCss = htmlWithCss.replace(
-        /<link rel="stylesheet" href="\[\[css\]\]".*?>/,
+        /<link rel="stylesheet" href="\[\[css\]\]".*?>/gi,
         ''
       );
+
+      // Also inject styles before </head> as fallback (in case link tag isn't found)
+      if (!htmlWithCss.includes('<style>')) {
+        htmlWithCss = htmlWithCss.replace(
+          /<\/head>/i,
+          `<style>${combinedCss}</style></head>`
+        );
+      }
     }
 
     // Populate template with message data
@@ -129,6 +148,50 @@ const ExportImagesDialog = ({
 
     // Add size class to body
     populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
+
+    // Helper to convert SVG URL to base64 data URI
+    const svgToDataUri = async (url) => {
+      try {
+        const response = await fetch(url, { mode: 'cors' });
+        const svgText = await response.text();
+        const base64 = btoa(unescape(encodeURIComponent(svgText)));
+        return `data:image/svg+xml;base64,${base64}`;
+      } catch (e) {
+        console.warn('Failed to convert SVG:', url, e);
+        return null;
+      }
+    };
+
+    // Find and convert all SVG URLs in HTML before writing to iframe
+    // This handles both src="...svg" and url('...svg') patterns
+    const svgSrcPattern = /src=["']([^"']*\.svg[^"']*)["']/gi;
+    const svgUrlPattern = /url\(["']?([^"')]*\.svg[^"')]*)/gi;
+
+    // Collect unique SVG URLs
+    const svgUrls = new Set();
+    let match;
+    while ((match = svgSrcPattern.exec(populatedHtml)) !== null) {
+      svgUrls.add(match[1]);
+    }
+    while ((match = svgUrlPattern.exec(populatedHtml)) !== null) {
+      svgUrls.add(match[1]);
+    }
+
+    // Convert SVGs to data URIs and replace in HTML
+    for (const svgUrl of svgUrls) {
+      // Build full URL if relative
+      let fullUrl = svgUrl;
+      if (!svgUrl.startsWith('http') && !svgUrl.startsWith('data:')) {
+        fullUrl = svgUrl.startsWith('/') ? `${window.location.origin}${svgUrl}` : `${window.location.origin}/${svgUrl}`;
+      }
+
+      const dataUri = await svgToDataUri(fullUrl);
+      if (dataUri) {
+        // Escape special regex characters in the URL
+        const escapedUrl = svgUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        populatedHtml = populatedHtml.replace(new RegExp(escapedUrl, 'g'), dataUri);
+      }
+    }
 
     // Create off-screen container
     const container = document.createElement('div');
@@ -153,21 +216,45 @@ const ExportImagesDialog = ({
     container.appendChild(iframe);
     document.body.appendChild(container);
 
+    // Helper to wait for all images to load
+    const waitForImages = async (doc) => {
+      const images = doc.querySelectorAll('img');
+      const promises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+      await Promise.all(promises);
+    };
+
     return new Promise((resolve, reject) => {
       iframe.onload = async () => {
-        // Wait for animations
-        await new Promise(r => setTimeout(r, delay));
+        // Wait for initial render
+        await new Promise(r => setTimeout(r, 100));
 
         try {
           const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+          // Wait for all images to fully load
+          await waitForImages(iframeDoc);
+
+          // Wait for animations/transitions
+          await new Promise(r => setTimeout(r, delay));
+
           const canvas = await html2canvas(iframeDoc.body, {
             width,
             height,
             scale: 1,
             useCORS: true,
             allowTaint: true,
-            backgroundColor: '#ffffff',
-            logging: false
+            backgroundColor: null, // Use template's own background
+            logging: false,
+            onclone: (clonedDoc) => {
+              // Force reflow to ensure CSS is applied
+              clonedDoc.body.offsetHeight;
+            }
           });
 
           const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
