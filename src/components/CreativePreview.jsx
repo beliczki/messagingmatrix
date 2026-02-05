@@ -187,38 +187,44 @@ const CreativePreview = ({
     try {
       const iframe = iframeRef.current;
       const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const iframeWindow = iframe.contentWindow;
       const width = creative.bannerSize.width;
       const height = creative.bannerSize.height;
 
-      // Convert SVG images to data URIs before capture
+      // Collect SVG info from the LIVE document (but don't modify it!)
+      const svgInfo = [];
       const svgImages = iframeDoc.querySelectorAll('img');
       for (const img of svgImages) {
         const src = img.src || img.getAttribute('src');
-        if (src && src.includes('.svg')) {
-          try {
-            const response = await fetch(src, { mode: 'cors' });
-            const svgText = await response.text();
-            // Get computed dimensions from CSS
-            const computedStyle = iframe.contentWindow.getComputedStyle(img);
-            const imgWidth = parseInt(computedStyle.width) || img.offsetWidth;
-            const imgHeight = parseInt(computedStyle.height) || img.offsetHeight;
-            // Inject width/height into SVG
-            let modifiedSvg = svgText;
-            if (!modifiedSvg.includes('width=') && imgWidth) {
-              modifiedSvg = modifiedSvg.replace(/<svg/, `<svg width="${imgWidth}" height="${imgHeight}"`);
-            }
-            const base64 = btoa(unescape(encodeURIComponent(modifiedSvg)));
-            img.src = `data:image/svg+xml;base64,${base64}`;
-          } catch (e) {
-            console.warn('Failed to convert SVG:', src, e);
-          }
+        if (src && src.includes('.svg') && !src.startsWith('data:')) {
+          const computedStyle = iframeWindow.getComputedStyle(img);
+          const imgWidth = parseInt(computedStyle.width) || img.offsetWidth;
+          const imgHeight = parseInt(computedStyle.height) || img.offsetHeight;
+          svgInfo.push({ src, imgWidth, imgHeight });
         }
       }
 
-      // Wait for images to settle
-      await new Promise(r => setTimeout(r, 500));
+      // Pre-fetch and convert all SVGs
+      const svgDataUris = {};
+      for (const info of svgInfo) {
+        try {
+          const response = await fetch(info.src, { mode: 'cors' });
+          const svgText = await response.text();
+          let modifiedSvg = svgText;
+          // Remove existing width/height and add computed dimensions
+          modifiedSvg = modifiedSvg.replace(/<svg([^>]*)>/, (match, attrs) => {
+            let cleanAttrs = attrs.replace(/\s*width\s*=\s*["'][^"']*["']/gi, '');
+            cleanAttrs = cleanAttrs.replace(/\s*height\s*=\s*["'][^"']*["']/gi, '');
+            return `<svg${cleanAttrs} width="${info.imgWidth}" height="${info.imgHeight}">`;
+          });
+          const base64 = btoa(unescape(encodeURIComponent(modifiedSvg)));
+          svgDataUris[info.src] = `data:image/svg+xml;base64,${base64}`;
+        } catch (e) {
+          console.warn('Failed to convert SVG:', info.src, e);
+        }
+      }
 
-      // Capture #adContainer directly instead of body to avoid margin/scroll issues
+      // Capture #adContainer directly
       const adContainer = iframeDoc.getElementById('adContainer') || iframeDoc.body;
 
       const canvas = await html2canvas(adContainer, {
@@ -228,11 +234,21 @@ const CreativePreview = ({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        logging: true, // Enable for debugging
+        logging: true,
         scrollX: 0,
         scrollY: 0,
         windowWidth: width,
-        windowHeight: height
+        windowHeight: height,
+        onclone: (clonedDoc) => {
+          // Convert SVGs in the CLONED document (not the original!)
+          const clonedImages = clonedDoc.querySelectorAll('img');
+          for (const img of clonedImages) {
+            const src = img.src || img.getAttribute('src');
+            if (src && svgDataUris[src]) {
+              img.src = svgDataUris[src];
+            }
+          }
+        }
       });
 
       setCanvasDataUrl(canvas.toDataURL('image/png'));

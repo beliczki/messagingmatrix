@@ -185,9 +185,11 @@ const ExportImagesDialog = ({
       await Promise.all(promises);
     };
 
-    // Helper to convert SVG images to data URIs with proper dimensions
-    const convertSvgImagesInDoc = async (doc, iframeWindow) => {
+    // Helper to collect SVG info and pre-convert to data URIs
+    const collectAndConvertSvgs = async (doc, iframeWindow) => {
+      const svgDataUris = {};
       const images = doc.querySelectorAll('img');
+
       for (const img of images) {
         const src = img.src || img.getAttribute('src');
         if (src && src.includes('.svg') && !src.startsWith('data:')) {
@@ -200,12 +202,10 @@ const ExportImagesDialog = ({
             const imgWidth = parseInt(computedStyle.width) || img.offsetWidth || img.naturalWidth;
             const imgHeight = parseInt(computedStyle.height) || img.offsetHeight || img.naturalHeight;
 
-            // Inject width/height into SVG if not present
+            // Inject width/height into SVG
             let modifiedSvg = svgText;
             if (imgWidth && imgHeight) {
-              // Remove any existing width/height and add new ones
               modifiedSvg = modifiedSvg.replace(/<svg([^>]*)>/, (match, attrs) => {
-                // Remove existing width/height attributes
                 let cleanAttrs = attrs.replace(/\s*width\s*=\s*["'][^"']*["']/gi, '');
                 cleanAttrs = cleanAttrs.replace(/\s*height\s*=\s*["'][^"']*["']/gi, '');
                 return `<svg${cleanAttrs} width="${imgWidth}" height="${imgHeight}">`;
@@ -213,12 +213,14 @@ const ExportImagesDialog = ({
             }
 
             const base64 = btoa(unescape(encodeURIComponent(modifiedSvg)));
-            img.src = `data:image/svg+xml;base64,${base64}`;
+            svgDataUris[src] = `data:image/svg+xml;base64,${base64}`;
           } catch (e) {
             console.warn('Failed to convert SVG image:', src, e);
           }
         }
       }
+
+      return svgDataUris;
     };
 
     return new Promise((resolve, reject) => {
@@ -233,11 +235,8 @@ const ExportImagesDialog = ({
           // Wait for all images to fully load first
           await waitForImages(iframeDoc);
 
-          // Convert SVG images to data URIs with proper dimensions
-          await convertSvgImagesInDoc(iframeDoc, iframeWindow);
-
-          // Wait again after SVG conversion
-          await new Promise(r => setTimeout(r, 100));
+          // Collect SVG info and convert to data URIs (but don't modify live DOM!)
+          const svgDataUris = await collectAndConvertSvgs(iframeDoc, iframeWindow);
 
           // Wait for animations/transitions
           await new Promise(r => setTimeout(r, delay));
@@ -258,8 +257,14 @@ const ExportImagesDialog = ({
             windowWidth: width,
             windowHeight: height,
             onclone: (clonedDoc) => {
-              // Force reflow to ensure CSS is applied
-              clonedDoc.body.offsetHeight;
+              // Apply SVG conversions to the CLONED document only
+              const clonedImages = clonedDoc.querySelectorAll('img');
+              for (const img of clonedImages) {
+                const src = img.src || img.getAttribute('src');
+                if (src && svgDataUris[src]) {
+                  img.src = svgDataUris[src];
+                }
+              }
             }
           });
 
