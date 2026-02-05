@@ -37,7 +37,7 @@ h1, h2, p {
 #adContainer {
   width: 300px;
   height: 250px;
-  background-color: rgb(var(--skin));
+  background-color: transparent;
   position: relative;
   overflow: hidden;
 }
@@ -152,13 +152,13 @@ main {
 
 #image2Wrapper {
   position: absolute;
-  top: 17px;
-  left: 190px;
+  top: 10px;
+  left: 198px;
 }
 
 #image2Wrapper > div {
   width: 80px;
-  height: 140px;
+  height: 152px;
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;

@@ -81,8 +81,8 @@ html {
 
 
 #image4Container {
-  right: 448px;
-  bottom: 15px;
+  right: 308px;
+  bottom: 40px;
 }
 #image4Container div {
   width: 65px;
@@ -90,8 +90,12 @@ html {
 }
 
 #image6Wrapper {
-  top: 80px;
+  top: 65px;
   left: 406px;
+}
+#image6Wrapper > div {
+  width: 8rem;
+  height: 8rem;
 }
 
 .productHighlight #image6Wrapper {

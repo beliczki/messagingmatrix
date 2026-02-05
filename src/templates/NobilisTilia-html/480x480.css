@@ -24,13 +24,13 @@ html {
 }
 
 #image2Wrapper {
-  top: 60px;
-  left: 286px;
+  top: 20px;
+  left: 296px;
 }
 
 #image2Wrapper  > div {
-  width: 150px;
-  height: 240px;
+  width: 160px;
+  height: 300px;
 }
 
 .productHighlight #image2Wrapper {

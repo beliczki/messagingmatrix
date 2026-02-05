@@ -60,12 +60,12 @@ html {
 }	
 
 #image2Wrapper {
-  top: 25px;
+  top: 5px;
   left: 330px;
 }
 #image2Wrapper  > div {
-  width: 150px;
-  height: 220px;
+  width: 180px;
+  height: 260px;
 }
 
 .productHighlight #image2Wrapper {
@@ -79,7 +79,7 @@ html {
 
 
 #image4Container {
-  right: 448px;
+  right: 328px;
   bottom: 15px;
 }
 #image4Container div {
@@ -88,8 +88,12 @@ html {
 }
 
 #image6Wrapper {
-  top: 50px;
+  top: 35px;
   left: 400px;
+}
+#image6Wrapper > div {
+  width: 7.5rem;
+  height: 7.5rem;
 }
 
 .productHighlight #image6Wrapper {

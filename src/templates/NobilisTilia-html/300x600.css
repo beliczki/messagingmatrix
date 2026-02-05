@@ -26,12 +26,12 @@ html {
 }
 
 #image2Wrapper {
-  top: 113px;
-  left: 6px;
+  top: 100px;
+  left: 0px;
 }
 #image2Wrapper  > div {
-  width: 160px;
-  height: 230px;
+  width: 170px;
+  height: 270px;
 }
 
 .productHighlight #image2Wrapper {
