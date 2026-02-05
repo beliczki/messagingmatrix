@@ -230,6 +230,34 @@ const CreativePreview = ({
         }
       }
 
+      // Collect and convert background images to data URIs (for foreignObjectRendering CORS)
+      const bgImageDataUris = {};
+      const elementsWithBg = iframeDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
+      for (const el of elementsWithBg) {
+        const computedStyle = iframeWindow.getComputedStyle(el);
+        const bgImage = computedStyle.backgroundImage;
+        if (bgImage && bgImage !== 'none') {
+          const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+          if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('data:')) {
+            const imgUrl = urlMatch[1];
+            if (!bgImageDataUris[imgUrl]) {
+              try {
+                const response = await fetch(imgUrl, { mode: 'cors' });
+                const blob = await response.blob();
+                const dataUri = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.readAsDataURL(blob);
+                });
+                bgImageDataUris[imgUrl] = dataUri;
+              } catch (e) {
+                console.warn('Failed to convert bg image:', imgUrl, e);
+              }
+            }
+          }
+        }
+      }
+
       // Capture #adContainer directly
       const adContainer = iframeDoc.getElementById('adContainer') || iframeDoc.body;
 
@@ -262,6 +290,21 @@ const CreativePreview = ({
             const src = img.src || img.getAttribute('src');
             if (src && svgDataUris[src]) {
               img.src = svgDataUris[src];
+            }
+          }
+
+          // Apply background image data URIs to cloned elements
+          const clonedBgElements = clonedDoc.querySelectorAll('[style*="background-image"], [data-placeholder]');
+          for (const el of clonedBgElements) {
+            const bgStyle = el.style.backgroundImage;
+            if (bgStyle) {
+              let newBgStyle = bgStyle;
+              for (const [url, dataUri] of Object.entries(bgImageDataUris)) {
+                if (bgStyle.includes(url)) {
+                  newBgStyle = newBgStyle.replace(url, dataUri);
+                }
+              }
+              el.style.backgroundImage = newBgStyle;
             }
           }
         }
