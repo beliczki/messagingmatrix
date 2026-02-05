@@ -218,14 +218,21 @@ const CreativePreview = ({
       // Wait for images to settle
       await new Promise(r => setTimeout(r, 500));
 
-      const canvas = await html2canvas(iframeDoc.body, {
+      // Capture #adContainer directly instead of body to avoid margin/scroll issues
+      const adContainer = iframeDoc.getElementById('adContainer') || iframeDoc.body;
+
+      const canvas = await html2canvas(adContainer, {
         width,
         height,
         scale: 1,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        logging: true // Enable for debugging
+        logging: true, // Enable for debugging
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: width,
+        windowHeight: height
       });
 
       setCanvasDataUrl(canvas.toDataURL('image/png'));

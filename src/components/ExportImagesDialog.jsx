@@ -242,7 +242,10 @@ const ExportImagesDialog = ({
           // Wait for animations/transitions
           await new Promise(r => setTimeout(r, delay));
 
-          const canvas = await html2canvas(iframeDoc.body, {
+          // Capture #adContainer directly instead of body to avoid margin/scroll issues
+          const adContainer = iframeDoc.getElementById('adContainer') || iframeDoc.body;
+
+          const canvas = await html2canvas(adContainer, {
             width,
             height,
             scale: 1,
@@ -250,6 +253,10 @@ const ExportImagesDialog = ({
             allowTaint: true,
             backgroundColor: null, // Use template's own background
             logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: width,
+            windowHeight: height,
             onclone: (clonedDoc) => {
               // Force reflow to ensure CSS is applied
               clonedDoc.body.offsetHeight;
