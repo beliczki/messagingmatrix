@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X, Image } from 'lucide-react';
+import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X, Image, Share2 } from 'lucide-react';
 
 /**
  * MediaToolbar - Floating draggable toolbar for Creative Library
@@ -375,19 +375,20 @@ const MediaToolbar = ({
                 </>
               )}
               {selectorMode && (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   {onShare && selectedCount > 0 && (
                     <button
                       onClick={onShare}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
+                      className="flex items-center justify-center gap-2 px-3 py-2 border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
                     >
+                      <Share2 size={16} />
                       Share Selected
                     </button>
                   )}
                   {onExportImages && selectedCount > 0 && (
                     <button
                       onClick={onExportImages}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                      className="flex items-center justify-center gap-2 px-3 py-2 border border-white text-white rounded hover:bg-white/20 transition-colors text-sm"
                     >
                       <Image size={16} />
                       Export Images
@@ -395,7 +396,7 @@ const MediaToolbar = ({
                   )}
                   <button
                     onClick={onExitSelection}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-white/10 text-white rounded hover:bg-white/20 transition-colors text-sm"
                   >
                     <X size={16} />
                     <span>Cancel</span>

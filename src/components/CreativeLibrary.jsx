@@ -1638,6 +1638,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         selectedCreatives={creatives.filter(c => selectedCreativeIds.has(c.id))}
         templatesCache={templatesCache}
         textFormatting={matrixData?.textFormatting || []}
+        selectedBaseColor={selectedBaseColor}
       />
       </div>
 

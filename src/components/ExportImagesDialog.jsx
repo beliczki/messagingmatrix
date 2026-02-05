@@ -11,7 +11,8 @@ const ExportImagesDialog = ({
   onClose,
   selectedCreatives = [],
   templatesCache = {},
-  textFormatting = []
+  textFormatting = [],
+  selectedBaseColor = '#e91e8c'
 }) => {
   const [delay, setDelay] = useState(2000);
   const [format, setFormat] = useState('png');
@@ -340,8 +341,8 @@ const ExportImagesDialog = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+      <div className="rounded-lg ui-shadow w-full max-w-md" style={{ backgroundColor: selectedBaseColor }}>
+        <div className="flex items-center justify-between p-6 border-b border-white/20">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Image size={20} />
             Export Images
@@ -349,7 +350,7 @@ const ExportImagesDialog = ({
           <button
             onClick={onClose}
             disabled={exporting}
-            className="p-2 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+            className="p-2 hover:bg-white/20 rounded transition-colors disabled:opacity-50"
           >
             <X size={20} className="text-white" />
           </button>
@@ -357,11 +358,11 @@ const ExportImagesDialog = ({
 
         <div className="p-6 space-y-4">
           {/* Selection Summary */}
-          <div className="bg-gray-700/50 rounded-lg p-3">
-            <div className="text-sm text-gray-300">
+          <div className="bg-white/10 rounded-lg p-3">
+            <div className="text-sm text-white/80">
               <span className="font-medium text-white">{selectedCreatives.length}</span> creative{selectedCreatives.length !== 1 ? 's' : ''} selected
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-white/60 mt-1">
               {htmlCount > 0 && <span>{htmlCount} HTML ad{htmlCount !== 1 ? 's' : ''}</span>}
               {htmlCount > 0 && staticCount > 0 && <span> + </span>}
               {staticCount > 0 && <span>{staticCount} static image{staticCount !== 1 ? 's' : ''}</span>}
@@ -371,9 +372,9 @@ const ExportImagesDialog = ({
           {/* Delay Input (only relevant for HTML ads) */}
           {htmlCount > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-white mb-2">
                 Capture Delay (ms)
-                <span className="text-gray-500 font-normal ml-2">for HTML animations</span>
+                <span className="text-white/60 font-normal ml-2">for HTML animations</span>
               </label>
               <input
                 type="number"
@@ -382,9 +383,9 @@ const ExportImagesDialog = ({
                 disabled={exporting}
                 min="0"
                 step="500"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full px-3 py-2 bg-white/20 border border-white/40 rounded text-white focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-white/60 mt-1">
                 Wait time before capturing (default: 2000ms for animations)
               </p>
             </div>
@@ -392,7 +393,7 @@ const ExportImagesDialog = ({
 
           {/* Format Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-white mb-2">
               Output Format
             </label>
             <div className="flex gap-3">
@@ -401,8 +402,8 @@ const ExportImagesDialog = ({
                 disabled={exporting}
                 className={`flex-1 px-4 py-2 rounded border-2 transition-colors ${
                   format === 'png'
-                    ? 'border-green-500 bg-green-500/20 text-green-400'
-                    : 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                    ? 'border-white bg-white/20 text-white'
+                    : 'border-white/40 bg-white/10 text-white/80 hover:border-white/60'
                 } disabled:opacity-50`}
               >
                 PNG
@@ -412,8 +413,8 @@ const ExportImagesDialog = ({
                 disabled={exporting}
                 className={`flex-1 px-4 py-2 rounded border-2 transition-colors ${
                   format === 'jpg'
-                    ? 'border-green-500 bg-green-500/20 text-green-400'
-                    : 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                    ? 'border-white bg-white/20 text-white'
+                    : 'border-white/40 bg-white/10 text-white/80 hover:border-white/60'
                 } disabled:opacity-50`}
               >
                 JPG
@@ -423,36 +424,36 @@ const ExportImagesDialog = ({
 
           {/* Progress */}
           {exporting && (
-            <div className="bg-gray-700/50 rounded-lg p-4">
+            <div className="bg-white/10 rounded-lg p-4">
               <div className="flex items-center gap-3 mb-2">
-                <Loader2 size={20} className="text-green-400 animate-spin" />
+                <Loader2 size={20} className="text-white animate-spin" />
                 <span className="text-white text-sm">{progress.message}</span>
               </div>
-              <div className="w-full bg-gray-600 rounded-full h-2">
+              <div className="w-full bg-white/20 rounded-full h-2">
                 <div
-                  className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-white h-2 rounded-full transition-all duration-300"
                   style={{ width: `${(progress.current / progress.total) * 100}%` }}
                 />
               </div>
-              <div className="text-xs text-gray-400 mt-1 text-right">
+              <div className="text-xs text-white/60 mt-1 text-right">
                 {progress.current} / {progress.total}
               </div>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-white/20">
           <button
             onClick={onClose}
             disabled={exporting}
-            className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleExport}
             disabled={exporting || selectedCreatives.length === 0}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-4 py-2 bg-transparent border border-white text-white rounded hover:bg-white/20 transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             {exporting ? (
               <>
