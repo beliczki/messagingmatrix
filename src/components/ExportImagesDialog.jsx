@@ -232,6 +232,11 @@ const ExportImagesDialog = ({
           const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
           const iframeWindow = iframe.contentWindow;
 
+          // Wait for fonts to be fully loaded
+          if (iframeDoc.fonts && iframeDoc.fonts.ready) {
+            await iframeDoc.fonts.ready;
+          }
+
           // Wait for all images to fully load first
           await waitForImages(iframeDoc);
 
@@ -256,6 +261,7 @@ const ExportImagesDialog = ({
             scrollY: 0,
             windowWidth: width,
             windowHeight: height,
+            foreignObjectRendering: true, // Use browser's actual text rendering
             onclone: (clonedDoc) => {
               // Preserve html element's computed font-size (critical for rem units!)
               const originalHtmlStyle = iframeWindow.getComputedStyle(iframeDoc.documentElement);

@@ -191,6 +191,12 @@ const CreativePreview = ({
       const width = creative.bannerSize.width;
       const height = creative.bannerSize.height;
 
+      // Wait for fonts to be fully loaded in the iframe
+      if (iframeDoc.fonts && iframeDoc.fonts.ready) {
+        await iframeDoc.fonts.ready;
+        console.log('Fonts loaded:', iframeDoc.fonts.status);
+      }
+
       // Collect SVG info from the LIVE document (but don't modify it!)
       const svgInfo = [];
       const svgImages = iframeDoc.querySelectorAll('img');
@@ -239,6 +245,7 @@ const CreativePreview = ({
         scrollY: 0,
         windowWidth: width,
         windowHeight: height,
+        foreignObjectRendering: true, // Use browser's actual text rendering for accurate fonts
         onclone: (clonedDoc) => {
           // Preserve html element's computed font-size (critical for rem units!)
           const originalHtmlStyle = iframeWindow.getComputedStyle(iframeDoc.documentElement);
