@@ -125,7 +125,7 @@ const Matrix = ({
   });
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
   const [generatedContent, setGeneratedContent] = useState(null);
-  const [generatedVersions, setGeneratedVersions] = useState(null); // { headline: [...], copy1: [...], etc }
+  const [generatedPackages, setGeneratedPackages] = useState([]); // Array of { id, headline, copy1, cta, createdAt, mcNumber, variant }
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
 
   // Asset generation state
@@ -133,6 +133,14 @@ const Matrix = ({
   const [generatedImages, setGeneratedImages] = useState([]);
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  // AI Assistant brewing context (for MC Editor integration)
+  const [assistantMCContext, setAssistantMCContext] = useState(null);
+  // { messageId, mcNumber, variant, audience, topic, template, currentContent, brief }
+  const [assistantSelections, setAssistantSelections] = useState({
+    text: {},    // { headline: 'value', copy1: 'value', ... }
+    images: []   // [{ data, mimeType, field }, ...]
+  });
   const [orphanedMessages, setOrphanedMessages] = useState([]);
   const [showOrphanedDialog, setShowOrphanedDialog] = useState(false);
   const [correctingMessage, setCorrectingMessage] = useState(null);
@@ -384,14 +392,18 @@ const Matrix = ({
     if (msgOrNull === null) {
       // Closing the editor
       setEditingMessage(null);
-      setGeneratedVersions(null); // Clear generated versions when closing
+      setGeneratedPackages([]); // Clear generated packages when closing
+      setAssistantMCContext(null); // Clear brewing context
+      setAssistantSelections({ text: {}, images: [] }); // Clear selections
       // URL update handled by effect
     } else if (editingMessage && msgOrNull.id === editingMessage.id) {
       // Same message, just updating fields - no URL change
       setEditingMessage(msgOrNull);
     } else {
       // Different message (e.g., prev/next navigation)
-      setGeneratedVersions(null); // Clear generated versions BEFORE changing message
+      setGeneratedPackages([]); // Clear generated packages BEFORE changing message
+      setAssistantMCContext(null); // Clear brewing context when changing message
+      setAssistantSelections({ text: {}, images: [] }); // Clear selections
       const messageId = `${msgOrNull.number}${msgOrNull.variant || 'a'}`;
       navigate(`/matrix/edit/${messageId}`, { replace: true });
       setEditingMessage(msgOrNull);
@@ -517,6 +529,30 @@ const Matrix = ({
   // Feed export state
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState(null); // 'success' | 'error' | null
+
+  // Template sizes map: { templateName: ['300x250', '640x360', ...] }
+  const [templateSizesMap, setTemplateSizesMap] = useState({});
+
+  // Fetch template sizes for feed text formatting
+  useEffect(() => {
+    const fetchTemplateSizes = async () => {
+      try {
+        const response = await fetch('/api/templates');
+        if (!response.ok) return;
+        const templates = await response.json();
+        const sizesMap = {};
+        templates.forEach(t => {
+          if (t.sizes && t.sizes.length > 0) {
+            sizesMap[t.name] = t.sizes.map(s => s.name || `${s.width}x${s.height}`);
+          }
+        });
+        setTemplateSizesMap(sizesMap);
+      } catch (e) {
+        // Sizes will fall back to defaults in textFormatter
+      }
+    };
+    fetchTemplateSizes();
+  }, []);
 
   // Matrix view controls state
   const [isPanning, setIsPanning] = useState(false);
@@ -956,7 +992,7 @@ const Matrix = ({
             variant: msg.variant || '',
             numberVariant: `${msg.number || ''}${msg.variant || ''}`
           };
-          cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers);
+          cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap[msg.template] || null);
         }
 
         feedRow[colName] = cellValue;
@@ -964,7 +1000,7 @@ const Matrix = ({
 
       return feedRow;
     });
-  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting, matrixData?.keywords]);
+  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting, matrixData?.keywords, templateSizesMap]);
 
   // Generate feedFields structure for saving
   const feedFields = useMemo(() => {
@@ -2431,6 +2467,7 @@ const Matrix = ({
             productFilters={productFilters}
             mcFilter={mcFilter}
             textFormatting={textFormatting}
+            templateSizesMap={templateSizesMap}
             getStatusColors={getStatusColors}
             onMessageClick={(msg) => openMessageEditor(msg)}
           />
@@ -2501,7 +2538,7 @@ const Matrix = ({
         setActiveTab={setActiveTab}
         isGeneratingContent={isGeneratingContent}
         handleGenerateContent={handleGenerateContent}
-        generatedVersions={generatedVersions}
+        generatedPackages={generatedPackages}
         onApplyField={handleApplyField}
         selectedProducts={currentProducts}
         selectedStatuses={currentStatuses}
@@ -2517,6 +2554,24 @@ const Matrix = ({
         isGeneratingImage={isGeneratingImage}
         onApplyGeneratedImage={handleApplyGeneratedImage}
         onClearGeneratedAssets={handleClearGeneratedAssets}
+        // AI Assistant brewing props
+        assistantSelections={assistantSelections}
+        onBrewWithAssistant={(context) => {
+          setAssistantMCContext(context);
+          // Open the assistant panel
+          claudeChatRef.current?.openAssistant?.();
+        }}
+        onApplyAssistantSelection={(field, value) => {
+          // Clear the selection after applying
+          setAssistantSelections(prev => {
+            const newText = { ...prev.text };
+            delete newText[field];
+            return { ...prev, text: newText };
+          });
+        }}
+        onClearAssistantSelections={() => {
+          setAssistantSelections({ text: {}, images: [] });
+        }}
       />
 
       {/* Audience Edit Dialog */}
@@ -2607,9 +2662,59 @@ const Matrix = ({
             onDeleteTopic={deleteTopic}
             editingMessage={editingMessage}
             onApplyField={handleApplyField}
-            setGeneratedVersions={setGeneratedVersions}
+            onAddPackage={(pkg) => {
+              // Add package to generatedPackages with metadata
+              const newPackage = {
+                id: `pkg-${Date.now()}`,
+                headline: pkg.headline || '',
+                copy1: pkg.copy1 || '',
+                cta: pkg.cta || '',
+                createdAt: new Date().toISOString(),
+                mcNumber: editingMessage?.number,
+                variant: editingMessage?.variant || 'a'
+              };
+              setGeneratedPackages(prev => [...prev, newPackage]);
+            }}
             setActiveEditorTab={setActiveTab}
             setIsGeneratingContent={setIsGeneratingContent}
+            // MC brewing context - auto-set when assistant opens with MC editor open
+            mcContext={assistantMCContext}
+            onOpen={() => {
+              // Auto-enter brewing mode if editing a message
+              if (editingMessage) {
+                const audience = audiences.find(a => a.key === editingMessage.audience);
+                const topic = topics.find(t => t.key === editingMessage.topic);
+                const context = {
+                  messageId: editingMessage.id,
+                  mcNumber: editingMessage.number,
+                  variant: editingMessage.variant,
+                  audience: audience,
+                  topic: topic,
+                  template: matrixData?.templateName,
+                  currentContent: {
+                    headline: editingMessage.headline,
+                    copy1: editingMessage.copy1,
+                    copy2: editingMessage.copy2,
+                    flash: editingMessage.flash,
+                    cta: editingMessage.cta
+                  }
+                };
+                setAssistantMCContext(context);
+              }
+            }}
+            onAddSelection={(selection) => {
+              if (selection.type === 'text') {
+                setAssistantSelections(prev => ({
+                  ...prev,
+                  text: { ...prev.text, [selection.field]: selection.value }
+                }));
+              } else if (selection.type === 'image') {
+                setAssistantSelections(prev => ({
+                  ...prev,
+                  images: [...prev.images, selection]
+                }));
+              }
+            }}
           />
         </div>,
         document.body

@@ -12,6 +12,7 @@ const FeedTableView = ({
   productFilters,
   mcFilter,
   textFormatting,
+  templateSizesMap,
   getStatusColors,
   onMessageClick
 }) => {
@@ -216,7 +217,7 @@ const FeedTableView = ({
                           variant: msg.variant || '',
                           numberVariant: `${msg.number || ''}${msg.variant || ''}`
                         };
-                        displayValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers);
+                        displayValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap?.[msg.template] || null);
                       }
 
                       return (

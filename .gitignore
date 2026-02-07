@@ -57,6 +57,12 @@ tasks/
 # Windows special file
 nul
 
+# AI context files
+AI/
+
+# Claude Code settings
+.claude/settings.local.json
+
 # Auto Claude data directory
 .auto-claude/
 
