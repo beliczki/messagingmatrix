@@ -4,6 +4,9 @@
     <title>{{advert_name}}</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@100..900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="main.css" />
     
     <!-- UNCOMMENT WHEN Creating adserver/google studio  template -->
@@ -73,6 +76,10 @@
 <script type="text/javascript">
 
 console.log("ad start");
+// Set body size class
+if (adContainer) {
+  document.body.classList.add('size-' + adContainer.offsetWidth + 'x' + adContainer.offsetHeight);
+}
 // First of all import Enabler.js
 // UNCOMMENT enabler event listener WHEN Creating adserver/google studio  template 
 /*if (!Enabler.isInitialized()) {
@@ -91,9 +98,9 @@ function enablerInitialized() {
       adVisible();
   }
 
-// Set profileId to load content from uploaded data
+    // Set profileId to load content from uploaded data
 
-// Dynamic Content variables and sample values
+    // Dynamic Content variables and sample values
     Enabler.setProfileId(10956466);
     var devDynamicContent = {};
 
@@ -145,7 +152,7 @@ function enablerInitialized() {
     devDynamicContent.Nobilis_Tilia_AI_messaging_matrix_2026_feed[0].click_url = {};
     devDynamicContent.Nobilis_Tilia_AI_messaging_matrix_2026_feed[0].click_url.Url = "http://nobilis.cz?utm_campaign=Campaign_name&utm_source=DV360&utm_medium=rtb&utm_content=p_dv360-s_pro-a_dvPrKwHW-m_1-t_Hyaluronic_hw_emotional_morning_model-v_a-n_1";
     Enabler.setDevDynamicContent(devDynamicContent);
-   // Replace content if its loaded
+  // Replace content if its loaded
   
   // YOU MUST USE dynamicContent as OUTPUT
 
@@ -156,31 +163,31 @@ function enablerInitialized() {
 
   window.click_url = dynamicContent.Nobilis_Tilia_AI_messaging_matrix_2026_feed[0].click_url.Url;
 
-        }
+}
 
-        // On ad visible event
-        function adVisible() {
+// On ad visible event
+function adVisible() {
 
-            // Fade in when content loaded
-            document.body.style.transition = "all 0.3s";
-            document.body.style.opacity = 1;
+    // Fade in when content loaded
+    document.body.style.transition = "all 0.3s";
+    document.body.style.opacity = 1;
 
-            // Ad visible, start ad/animation.
-            if (typeof onAdInitialized === "function") {
-                onAdInitialized(document.dynamicContent);
-            }
-        }
+    // Ad visible, start ad/animation.
+    if (typeof onAdInitialized === "function") {
+        onAdInitialized(document.dynamicContent);
+    }
+}
 
-        // On ad click event
-        function onAdClickEvent() {
-            console.log("Click tag event triggered on ", window.click_url);
-            // Use Enabler if available (production), otherwise open URL directly (preview)
-            if (typeof Enabler !== 'undefined' && Enabler.exitOverride) {
-                Enabler.exitOverride("Click url", window.click_url);
-            } else if (window.click_url) {
-                window.open(window.click_url, '_blank');
-            }
-        }
+// On ad click event
+function onAdClickEvent() {
+    console.log("Click tag event triggered on ", window.click_url);
+    // Use Enabler if available (production), otherwise open URL directly (preview)
+    if (typeof Enabler !== 'undefined' && Enabler.exitOverride) {
+        Enabler.exitOverride("Click url", window.click_url);
+    } else if (window.click_url) {
+        window.open(window.click_url, '_blank');
+    }
+}
 
 </script>
 
