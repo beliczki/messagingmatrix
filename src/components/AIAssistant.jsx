@@ -5,6 +5,7 @@ import { Bot, Send, Loader, RefreshCw, ChevronDown, ChevronUp, ChevronRight, Gri
 import { callAIAPI, callAIAPIStream } from '../api/claude-proxy';
 import { apiGet } from '../utils/api';
 import { marked } from 'marked';
+import sheets from '../services/sheets';
 
 // Default AI Provider configurations (fallback)
 const DEFAULT_AI_PROVIDERS = {
@@ -67,7 +68,7 @@ const getAIProviders = () => {
   return DEFAULT_AI_PROVIDERS;
 };
 
-const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, setGeneratedVersions, setActiveEditorTab, setIsGeneratingContent }, ref) => {
+const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, onAddPackage, setActiveEditorTab, setIsGeneratingContent, mcContext, onAddSelection, onOpen }, ref) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -174,6 +175,155 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
 
+  // Parse content for [PACKAGE] blocks and render with "Use This Package" buttons
+  const renderContentWithPackages = (content) => {
+    if (!mcContext || !onAddPackage) {
+      return null; // Don't use this renderer if not in brewing mode
+    }
+
+    // Match [PACKAGE]...[/PACKAGE] blocks
+    const packageRegex = /\[PACKAGE\]([\s\S]*?)\[\/PACKAGE\]/g;
+    const matches = [...content.matchAll(packageRegex)];
+
+    if (matches.length === 0) {
+      return null; // No packages found, use default rendering
+    }
+
+    // Parse package content into fields
+    const parsePackage = (packageContent) => {
+      const pkg = {};
+      const lines = packageContent.trim().split('\n');
+      for (const line of lines) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0) {
+          const field = line.substring(0, colonIdx).trim().toLowerCase();
+          const value = line.substring(colonIdx + 1).trim();
+          if (field && value) {
+            pkg[field] = value;
+          }
+        }
+      }
+      return pkg;
+    };
+
+    // Build parts array with text and packages
+    const parts = [];
+    let lastIndex = 0;
+
+    matches.forEach((match, idx) => {
+      const [fullMatch, packageContent] = match;
+      const startIndex = match.index;
+
+      // Add text before this package
+      if (startIndex > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: content.substring(lastIndex, startIndex)
+        });
+      }
+
+      // Add the package
+      parts.push({
+        type: 'package',
+        data: parsePackage(packageContent)
+      });
+
+      lastIndex = startIndex + fullMatch.length;
+    });
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push({
+        type: 'text',
+        content: content.substring(lastIndex)
+      });
+    }
+
+    return (
+      <div className="ai-markdown-content" style={{ paddingRight: '24px' }}>
+        {parts.map((part, idx) => {
+          if (part.type === 'text') {
+            return (
+              <div key={idx} dangerouslySetInnerHTML={{ __html: marked.parse(part.content) }} />
+            );
+          } else {
+            const pkg = part.data;
+            return (
+              <div
+                key={idx}
+                style={{
+                  padding: '12px',
+                  margin: '8px 0',
+                  background: 'rgba(167, 139, 250, 0.1)',
+                  border: '1px solid rgba(167, 139, 250, 0.3)',
+                  borderRadius: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                  {pkg.headline && (
+                    <div>
+                      <span style={{ fontSize: '9px', fontWeight: 600, color: '#a78bfa', textTransform: 'uppercase' }}>Headline</span>
+                      <div style={{ fontSize: '12px', color: 'white', marginTop: '2px' }}>{pkg.headline}</div>
+                    </div>
+                  )}
+                  {pkg.copy1 && (
+                    <div>
+                      <span style={{ fontSize: '9px', fontWeight: 600, color: '#a78bfa', textTransform: 'uppercase' }}>Copy</span>
+                      <div style={{ fontSize: '12px', color: 'white', marginTop: '2px' }}>{pkg.copy1}</div>
+                    </div>
+                  )}
+                  {pkg.cta && (
+                    <div>
+                      <span style={{ fontSize: '9px', fontWeight: 600, color: '#a78bfa', textTransform: 'uppercase' }}>CTA</span>
+                      <div style={{ fontSize: '12px', color: 'white', marginTop: '2px' }}>{pkg.cta}</div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    // Add package to Generate tab
+                    onAddPackage(pkg);
+                    setActiveEditorTab?.('generate');
+
+                    // Save to Messages Log
+                    try {
+                      await sheets.saveMessagesLog({
+                        timestamp: new Date().toISOString(),
+                        mcNumber: mcContext?.mcNumber,
+                        variant: mcContext?.variant || 'a',
+                        audience: mcContext?.audience?.name || '',
+                        topic: mcContext?.topic?.name || '',
+                        headline: pkg.headline || '',
+                        copy1: pkg.copy1 || '',
+                        cta: pkg.cta || '',
+                        applied: false
+                      });
+                    } catch (error) {
+                      console.error('Failed to save to Messages Log:', error);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#7c3aed',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  Use This Package
+                </button>
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  };
+
   // Persist markdown preference
   useEffect(() => {
     localStorage.setItem('ai_assistant_render_markdown', renderMarkdown.toString());
@@ -194,6 +344,8 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
       handleClose();
     } else {
       setIsCollapsed(false);
+      // Notify parent that assistant is opening (for auto-setting MC context)
+      onOpen?.();
     }
   };
 
@@ -654,15 +806,13 @@ Respond ONLY with a JSON object in this exact format:
 
               const hasContent = generatedContent.headline?.length || generatedContent.copy1?.length || generatedContent.cta?.length;
               if (hasContent) {
-                if (setGeneratedVersions) {
-                  setGeneratedVersions(generatedContent);
-                }
+                // Note: Old field-by-field generation is deprecated. Use packages instead.
                 if (setActiveEditorTab) {
                   setActiveEditorTab('generate');
                 }
                 const successMessage = {
                   role: 'system',
-                  content: '✅ Generated 5 versions for each field! Switch to Generate tab to apply.'
+                  content: '✅ Content generated! Use the [PACKAGE] format for applying complete packages.'
                 };
                 setMessages(prev => [...prev, successMessage]);
               } else {
@@ -709,7 +859,12 @@ Respond ONLY with a JSON object in this exact format:
         setIsGeneratingContent(false);
       }
     },
-    getIsGenerating: () => isGenerating
+    getIsGenerating: () => isGenerating,
+    openAssistant: () => {
+      setIsCollapsed(false);
+      setActiveTab('chat');
+      onOpen?.();
+    }
   }));
 
   // Handle resize
@@ -977,7 +1132,72 @@ Respond ONLY with a JSON object in this exact format:
         .replace(/\{\{MESSAGE_CTA\}\}/g, editingMessage.cta || 'N/A')
         .replace(/\{\{EXAMPLES_SECTION\}\}/g, examplesSection);
 
-      const context = `${clientContextSection}${messageInstructions}
+      // Add MC Brewing instructions if context is set
+      let brewingInstructions = '';
+      if (mcContext) {
+        brewingInstructions = `
+
+---
+
+# MC BREWING MODE ACTIVE
+
+You are helping create content for MC${mcContext.mcNumber}${mcContext.variant || ''}.
+
+**Context:**
+- Template: ${mcContext.template || 'Not specified'}
+- Audience: ${mcContext.audience?.name || 'Not specified'} (${mcContext.audience?.strategy || ''})
+- Topic: ${mcContext.topic?.name || 'Not specified'}
+${mcContext.brief ? `- Brief: ${mcContext.brief}` : ''}
+
+**Current Content:**
+${mcContext.currentContent?.headline ? `- Headline: "${mcContext.currentContent.headline}"` : ''}
+${mcContext.currentContent?.copy1 ? `- Copy 1: "${mcContext.currentContent.copy1}"` : ''}
+${mcContext.currentContent?.copy2 ? `- Copy 2: "${mcContext.currentContent.copy2}"` : ''}
+${mcContext.currentContent?.flash ? `- Flash: "${mcContext.currentContent.flash}"` : ''}
+${mcContext.currentContent?.cta ? `- CTA: "${mcContext.currentContent.cta}"` : ''}
+
+**IMPORTANT - Output Format for Content Packages:**
+
+When generating content, you MUST provide complete "packages" (headline + copy + CTA together) using this exact format:
+
+\`\`\`
+[PACKAGE]
+headline: Your headline text here
+copy1: Your copy text here
+cta: Your CTA text here
+[/PACKAGE]
+\`\`\`
+
+Each package should contain a headline, copy1, and cta that work together as a cohesive message.
+
+Example response when asked for content packages:
+"Here are 3 content packages for your summer campaign:
+
+[PACKAGE]
+headline: Summer Savings Start Here
+copy1: Don't miss out on our exclusive summer deals. Save big on everything you need.
+cta: Shop Now
+[/PACKAGE]
+
+[PACKAGE]
+headline: Your Summer Deal Awaits
+copy1: Unlock special offers made just for you. Limited time only.
+cta: Get Started
+[/PACKAGE]
+
+[PACKAGE]
+headline: Hot Deals for Hot Days
+copy1: Beat the heat with cool savings. Browse our summer collection today.
+cta: Explore Deals
+[/PACKAGE]
+
+Each package is designed to..."
+
+Always use the [PACKAGE] format when providing content. Each package should be a complete, cohesive set of headline, copy, and CTA.
+`;
+      }
+
+      const context = `${clientContextSection}${messageInstructions}${brewingInstructions}
 ${appStateContext}`;
       return context;
     }
@@ -1675,8 +1895,9 @@ ${appStateContext}`;
                 <Bot size={24} style={{ color: 'white' }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ color: 'white', fontSize: '16px', fontWeight: 600 }}>AI Assistant</span>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
-                    {isGenerating ? 'Message Generation' :
+                  <span style={{ color: mcContext ? '#a78bfa' : 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                    {mcContext ? `Brewing for MC${mcContext.mcNumber}${mcContext.variant || ''}` :
+                     isGenerating ? 'Message Generation' :
                      editingMessage ? 'Messages' :
                      moduleContext?.module === 'creative-library' ? 'Creative Library' :
                      moduleContext?.module === 'assets' ? 'Assets' :
@@ -2038,14 +2259,21 @@ ${appStateContext}`;
                       </button>
                     )}
                     {typeof msg.content === 'string' ? (
-                      msg.role === 'assistant' && renderMarkdown ? (
-                        <div
-                          className="ai-markdown-content"
-                          style={{ paddingRight: '24px' }}
-                          dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }}
-                        />
+                      msg.role === 'assistant' ? (
+                        // Try to render with packages (for MC brewing mode)
+                        renderContentWithPackages(msg.content) || (
+                          renderMarkdown ? (
+                            <div
+                              className="ai-markdown-content"
+                              style={{ paddingRight: '24px' }}
+                              dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }}
+                            />
+                          ) : (
+                            <p style={{ whiteSpace: 'pre-wrap', margin: 0, paddingRight: '24px' }}>{msg.content}</p>
+                          )
+                        )
                       ) : (
-                        <p style={{ whiteSpace: 'pre-wrap', margin: 0, paddingRight: msg.role === 'assistant' ? '24px' : 0 }}>{msg.content}</p>
+                        <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{msg.content}</p>
                       )
                     ) : (
                       <div>

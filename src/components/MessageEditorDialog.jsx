@@ -24,7 +24,7 @@ const MessageEditorDialog = ({
   setActiveTab,
   isGeneratingContent,
   handleGenerateContent,
-  generatedVersions,
+  generatedPackages = [],
   onApplyField,
   selectedProducts = [],
   selectedStatuses = [],
@@ -39,7 +39,12 @@ const MessageEditorDialog = ({
   isGeneratingDescription,
   isGeneratingImage,
   onApplyGeneratedImage,
-  onClearGeneratedAssets
+  onClearGeneratedAssets,
+  // AI Assistant brewing props
+  assistantSelections = { text: {}, images: [] },
+  onBrewWithAssistant,
+  onApplyAssistantSelection,
+  onClearAssistantSelections
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -107,22 +112,20 @@ const MessageEditorDialog = ({
   const [imageAspectRatio, setImageAspectRatio] = useState('1:1');
   const [selectedImageField, setSelectedImageField] = useState('image1');
 
-  // Capture original values when generatedVersions first appears
+  // Capture original values when packages first appear (for "Return to Original" functionality)
   useEffect(() => {
-    if (generatedVersions && !originalFieldValues && editingMessage) {
+    if (generatedPackages?.length > 0 && !originalFieldValues && editingMessage) {
       setOriginalFieldValues({
         headline: editingMessage.headline || '',
         copy1: editingMessage.copy1 || '',
-        copy2: editingMessage.copy2 || '',
-        flash: editingMessage.flash || '',
         cta: editingMessage.cta || ''
       });
     }
-    // Clear original values when generatedVersions is cleared
-    if (!generatedVersions && originalFieldValues) {
+    // Clear original values when packages are cleared
+    if ((!generatedPackages || generatedPackages.length === 0) && originalFieldValues) {
       setOriginalFieldValues(null);
     }
-  }, [generatedVersions, editingMessage, originalFieldValues]);
+  }, [generatedPackages, editingMessage, originalFieldValues]);
 
   // Fetch tasks and find those related to this message
   useEffect(() => {
@@ -1869,6 +1872,103 @@ const MessageEditorDialog = ({
                 sandbox="allow-same-origin allow-scripts"
               />
               </div>
+
+              {/* Generated Images Gallery from AI Assistant */}
+              {assistantSelections?.images?.length > 0 && (
+                <div style={{
+                  marginTop: '16px',
+                  width: '100%',
+                  maxWidth: `${scaledWidth}px`
+                }}>
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#a78bfa',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <Image size={14} />
+                    Generated Images ({assistantSelections.images.length})
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    overflowX: 'auto',
+                    paddingBottom: '8px'
+                  }}>
+                    {assistantSelections.images.map((img, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          flexShrink: 0,
+                          width: '150px',
+                          background: 'var(--white-05)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--white-10)',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <img
+                          src={`data:${img.mimeType};base64,${img.data}`}
+                          alt={`Generated ${idx + 1}`}
+                          style={{
+                            width: '100%',
+                            height: '100px',
+                            objectFit: 'cover'
+                          }}
+                        />
+                        <div style={{
+                          padding: '8px',
+                          display: 'flex',
+                          gap: '4px'
+                        }}>
+                          <button
+                            onClick={() => {
+                              // Preview in template - set as temporary override
+                              setPreviewOverrides(prev => ({
+                                ...prev,
+                                [img.field || 'image1']: `data:${img.mimeType};base64,${img.data}`
+                              }));
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '4px 8px',
+                              background: 'var(--white-10)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              fontSize: '10px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Preview
+                          </button>
+                          <button
+                            onClick={() => {
+                              updateField(img.field || 'image1', `data:${img.mimeType};base64,${img.data}`);
+                              onApplyAssistantSelection?.(img.field || 'image1');
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '4px 8px',
+                              background: '#7c3aed',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              fontSize: '10px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })() : (
@@ -2543,82 +2643,103 @@ const MessageEditorDialog = ({
 
                 return (
                   <>
-                    {/* Generate Section */}
+                    {/* Generate Section - Help Text */}
                     <div style={{
-                      background: 'var(--white-05)',
+                      background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(167, 139, 250, 0.05) 100%)',
                       borderRadius: '8px',
-                      border: '1px solid var(--white-10)'
+                      border: '1px solid rgba(167, 139, 250, 0.2)',
+                      padding: '20px'
                     }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '16px'
+                        gap: '12px',
+                        marginBottom: '12px'
                       }}>
-                        <div>
-                          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Sparkles size={18} style={{ color: 'white' }} />
-                            AI Content Generation
-                          </h3>
-                          <p style={{ color: 'var(--white-50)', fontSize: '12px' }}>
-                            Generate 5 versions of each field based on topic and audience
-                          </p>
+                        <Sparkles size={20} style={{ color: '#a78bfa' }} />
+                        <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'white', margin: 0 }}>
+                          Content Packages
+                        </h3>
+                      </div>
+                      <p style={{ color: 'var(--white-70)', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+                        Use the <strong style={{ color: '#a78bfa' }}>AI Assistant</strong> below to generate content packages.
+                        Ask for headline, copy, and CTA combinations tailored to your audience and topic.
+                        Selected packages will appear here for review and application.
+                      </p>
+                    </div>
+
+                    {/* From Assistant Section - show selected content from AI Assistant */}
+                    {Object.keys(assistantSelections?.text || {}).length > 0 && (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(167, 139, 250, 0.1) 100%)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        border: '1px solid rgba(167, 139, 250, 0.3)'
+                      }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#a78bfa',
+                          marginBottom: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          <span style={{
+                            width: '4px',
+                            height: '16px',
+                            background: '#a78bfa',
+                            borderRadius: '2px'
+                          }} />
+                          From Assistant
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => setBriefExpanded(!briefExpanded)}
-                            className="btn btn-secondary"
-                            style={{ padding: '10px 20px' }}
-                          >
-                            Add Brief
-                          </button>
-                          <button
-                            onClick={() => handleGenerateContent(briefText)}
-                            disabled={isGeneratingContent}
-                            className="btn btn-primary"
-                            style={{ padding: '10px 20px' }}
-                          >
-                            {isGeneratingContent ? (
-                              <><Loader size={14} className="animate-spin" /> Generating...</>
-                            ) : (
-                              <><Sparkles size={14} /> Generate</>
-                            )}
-                          </button>
+                        <p style={{ fontSize: '11px', color: 'var(--white-50)', marginBottom: '12px' }}>
+                          Content selected from AI Assistant. Click Apply to use it.
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {Object.entries(assistantSelections.text).map(([field, value]) => (
+                            <div
+                              key={field}
+                              style={{
+                                padding: '12px',
+                                background: 'var(--white-05)',
+                                border: '1px solid var(--white-10)',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                gap: '12px'
+                              }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  color: '#a78bfa',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  {field}
+                                </span>
+                                <div style={{ fontSize: '12px', color: 'white', marginTop: '4px' }}>
+                                  {value}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  updateField(field, value);
+                                  onApplyAssistantSelection?.(field, value);
+                                }}
+                                className="btn btn-primary"
+                                style={{ padding: '6px 12px', fontSize: '11px', flexShrink: 0 }}
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      {briefExpanded && (
-                        <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--white-10)', paddingTop: '16px' }}>
-                          <textarea
-                            value={briefText}
-                            onChange={(e) => {
-                              setBriefText(e.target.value);
-                              e.target.style.height = 'auto';
-                              e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.height = 'auto';
-                              e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            placeholder="Add additional instructions or context for AI generation..."
-                            rows={2}
-                            className="form-textarea"
-                            style={{ minHeight: '60px', resize: 'none', overflow: 'hidden' }}
-                          />
-                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                              onClick={() => {
-                                updateCommentBrief(briefText);
-                              }}
-                              disabled={!briefText.trim()}
-                              className="btn btn-secondary"
-                              style={{ padding: '8px 16px' }}
-                            >
-                              Save to Comments
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    )}
 
                     {/* Sibling Variants Section */}
                     {siblingVariants.length > 0 && (
@@ -2716,206 +2837,155 @@ const MessageEditorDialog = ({
                       </div>
                     )}
 
-                    {/* AI Generated Versions */}
-                    {generatedVersions ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {[
-                          { key: 'headline', label: 'Headline' },
-                          { key: 'copy1', label: 'Copy 1' },
-                          { key: 'copy2', label: 'Copy 2' },
-                          { key: 'flash', label: 'Flash' },
-                          { key: 'cta', label: 'CTA' }
-                        ].filter(({ key }) => generatedVersions[key]?.length > 0)
-                        .map(({ key, label }, idx) => {
-                          const hasChanged = originalFieldValues &&
-                            (editingMessage?.[key] || '') !== (originalFieldValues[key] || '');
-
-                          // Check if this field has a placeholder in the template HTML
-                          // First find the placeholder name that maps to this field
-                          const placeholderName = templateConfig?.placeholders && Object.entries(templateConfig.placeholders).find(([name, p]) => {
-                            const binding = p['binding-messagingmatrix'];
-                            return binding && binding.replace(/^message\./i, '').toLowerCase() === key;
-                          })?.[0];
-                          // Then check if that placeholder is actually used in the HTML
-                          const hasPlaceholder = placeholderName && templateHtml && templateHtml.includes(`{{${placeholderName}}}`);
-
-                          return (
-                            <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {idx > 0 && (
-                                <hr style={{ border: 'none', borderTop: '1px solid var(--white-10)', margin: '8px 0 12px 0' }} />
-                              )}
-                              <div style={{
-                                fontSize: '12px',
-                                fontWeight: 600,
+                    {/* Content Packages */}
+                    {generatedPackages.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>
+                            {generatedPackages.length} Package{generatedPackages.length !== 1 ? 's' : ''} Available
+                          </span>
+                          {originalFieldValues && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateField('headline', originalFieldValues.headline);
+                                updateField('copy1', originalFieldValues.copy1);
+                                updateField('cta', originalFieldValues.cta);
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                background: 'var(--white-10)',
+                                border: 'none',
+                                borderRadius: '4px',
                                 color: 'white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between'
-                              }}>
-                                <span>{label}</span>
-                                {hasChanged && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      if (originalFieldValues) {
-                                        updateField(key, originalFieldValues[key]);
-                                      }
-                                    }}
-                                    style={{
-                                      padding: '4px 8px',
-                                      background: 'var(--white-10)',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      color: 'white',
-                                      fontSize: '10px',
-                                      cursor: 'pointer',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                    title="Restore original value"
-                                  >
-                                    Return to Original
-                                  </button>
+                                fontSize: '11px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Return to Original
+                            </button>
+                          )}
+                        </div>
+                        {generatedPackages.map((pkg, idx) => {
+                          const isHovered = hoveredLine === `pkg-${pkg.id}`;
+                          return (
+                            <div
+                              key={pkg.id}
+                              onMouseEnter={() => setHoveredLine(`pkg-${pkg.id}`)}
+                              onMouseLeave={() => setHoveredLine(null)}
+                              style={{
+                                background: isHovered ? 'var(--white-10)' : 'var(--white-05)',
+                                border: '1px solid var(--white-10)',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                transition: 'background 0.15s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  color: '#a78bfa',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.5px'
+                                }}>
+                                  Package {idx + 1}
+                                </span>
+                                <span style={{ fontSize: '10px', color: 'var(--white-40)' }}>
+                                  {new Date(pkg.createdAt).toLocaleTimeString()}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {pkg.headline && (
+                                  <div>
+                                    <span style={{ fontSize: '10px', color: 'var(--white-50)', textTransform: 'uppercase' }}>Headline</span>
+                                    <div style={{ fontSize: '13px', color: 'white', marginTop: '2px' }}>{pkg.headline}</div>
+                                  </div>
+                                )}
+                                {pkg.copy1 && (
+                                  <div>
+                                    <span style={{ fontSize: '10px', color: 'var(--white-50)', textTransform: 'uppercase' }}>Copy</span>
+                                    <div style={{ fontSize: '13px', color: 'white', marginTop: '2px' }}>{pkg.copy1}</div>
+                                  </div>
+                                )}
+                                {pkg.cta && (
+                                  <div>
+                                    <span style={{ fontSize: '10px', color: 'var(--white-50)', textTransform: 'uppercase' }}>CTA</span>
+                                    <div style={{ fontSize: '13px', color: 'white', marginTop: '2px' }}>{pkg.cta}</div>
+                                  </div>
                                 )}
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {generatedVersions[key].map((version, idx) => {
-                                  const lineId = `${key}-${idx}`;
-                                  const isHovered = hoveredLine === lineId;
-
-                                  return (
-                                    <div
-                                      key={idx}
-                                      onMouseEnter={() => setHoveredLine(lineId)}
-                                      onMouseLeave={() => setHoveredLine(null)}
-                                      onClick={() => {
-                                        if (version) {
-                                          if (isNonHtmlTemplate || !hasPlaceholder) {
-                                            // For non-dynamic templates or missing placeholders, add to comment instead
-                                            addGeneratedToComment(key, version);
-                                          } else {
-                                            updateField(key, version);
-                                          }
-                                        }
-                                      }}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        padding: '8px 12px',
-                                        background: isHovered ? 'var(--white-10)' : 'var(--white-05)',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.15s',
-                                        minHeight: '36px'
-                                      }}
-                                    >
-                                      <span style={{ flex: 1, fontSize: '12px', color: 'white', lineHeight: '1.4' }}>{version}</span>
-                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: isHovered ? 1 : 0, transition: 'opacity 0.15s' }}>
-                                          {!isNonHtmlTemplate && hasPlaceholder && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  if (version) {
-                                                    setPreviewOverrides(prev => ({ ...prev, [key]: version }));
-                                                  }
-                                                }}
-                                                style={{
-                                                  padding: '4px 8px',
-                                                  background: previewOverrides[key] === version ? 'var(--white-40)' : 'var(--white-20)',
-                                                  border: 'none',
-                                                  borderRadius: '4px',
-                                                  color: 'white',
-                                                  fontSize: '10px',
-                                                  cursor: 'pointer',
-                                                  whiteSpace: 'nowrap'
-                                                }}
-                                                title="Preview in template"
-                                              >
-                                                Preview
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  if (version) {
-                                                    updateField(key, version);
-                                                    setPreviewOverrides(prev => {
-                                                      const next = { ...prev };
-                                                      delete next[key];
-                                                      return next;
-                                                    });
-                                                  }
-                                                }}
-                                                style={{
-                                                  padding: '4px 8px',
-                                                  background: 'var(--white-20)',
-                                                  border: 'none',
-                                                  borderRadius: '4px',
-                                                  color: 'white',
-                                                  fontSize: '10px',
-                                                  cursor: 'pointer',
-                                                  whiteSpace: 'nowrap'
-                                                }}
-                                                title="Apply to content field"
-                                              >
-                                                Apply
-                                              </button>
-                                            </>
-                                          )}
-                                          {!isNonHtmlTemplate && !hasPlaceholder && (
-                                            <span style={{
-                                              fontSize: '10px',
-                                              fontStyle: 'italic',
-                                              color: 'white',
-                                              whiteSpace: 'nowrap',
-                                              lineHeight: '22px',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              marginRight: '8px'
-                                            }}>
-                                              placeholder not available
-                                            </span>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              addGeneratedToComment(key, version);
-                                            }}
-                                            style={{
-                                              padding: '4px 8px',
-                                              background: 'var(--white-20)',
-                                              border: 'none',
-                                              borderRadius: '4px',
-                                              color: 'white',
-                                              fontSize: '10px',
-                                              cursor: 'pointer',
-                                              whiteSpace: 'nowrap'
-                                            }}
-                                            title="Add to message comments"
-                                          >
-                                            Add to Comment
-                                          </button>
-                                        </div>
-                                    </div>
-                                  );
-                                })}
+                              <div style={{
+                                display: 'flex',
+                                gap: '8px',
+                                marginTop: '12px',
+                                paddingTop: '12px',
+                                borderTop: '1px solid var(--white-10)'
+                              }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Preview all fields at once
+                                    setPreviewOverrides({
+                                      headline: pkg.headline,
+                                      copy1: pkg.copy1,
+                                      cta: pkg.cta
+                                    });
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: 'var(--white-20)',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Preview
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Apply all fields at once
+                                    if (pkg.headline) updateField('headline', pkg.headline);
+                                    if (pkg.copy1) updateField('copy1', pkg.copy1);
+                                    if (pkg.cta) updateField('cta', pkg.cta);
+                                    setPreviewOverrides({});
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: '#7c3aed',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    fontWeight: 500,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Apply All
+                                </button>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    ) : !siblingVariants.length && !isGeneratingContent && (
-                      <div style={{ textAlign: 'center', color: 'var(--white-50)', marginTop: '20px' }}>
-                        <p style={{ fontSize: '13px' }}>
-                          Click "Generate" to create AI-powered content variations
+                    ) : !siblingVariants.length && (
+                      <div style={{
+                        textAlign: 'center',
+                        color: 'var(--white-50)',
+                        padding: '24px',
+                        background: 'var(--white-05)',
+                        borderRadius: '8px',
+                        border: '1px dashed var(--white-20)'
+                      }}>
+                        <p style={{ fontSize: '13px', margin: 0 }}>
+                          No packages yet. Use the AI Assistant to generate content.
                         </p>
                       </div>
                     )}
