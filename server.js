@@ -4122,7 +4122,8 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
       if (fs.existsSync(cachedPath)) {
         const range = req.headers.range;
         if (!range) {
-          return res.redirect(302, `/cache/drive/${encodeURIComponent(fileIdOrName)}`);
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.sendFile(cachedPath);
         }
       }
 
@@ -4151,7 +4152,8 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
           if (fs.existsSync(cachedPath)) {
             const range = req.headers.range;
             if (!range) {
-              return res.redirect(302, `/cache/drive/${encodeURIComponent(idMap.filename)}`);
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+              return res.sendFile(cachedPath);
             }
             // For range requests, read from cache and fall through to range handling below
           }
@@ -4187,11 +4189,15 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
       fs.writeFileSync(idMapPath, JSON.stringify({ filename: cachedFilename }));
     } catch (e) { /* ignore */ }
 
-    // Redirect to public cache URL for better performance (browser can cache directly)
-    // Skip redirect for range requests (video seeking) as they need special handling
+    // Serve from cache directly with strong cache headers
+    // Skip for range requests (video seeking) as they need special handling
     const range = req.headers.range;
     if (!range && cachedFilename) {
-      return res.redirect(302, `/cache/drive/${encodeURIComponent(cachedFilename)}`);
+      const publicCachePath = path.join(__dirname, 'public', 'cache', 'drive', cachedFilename);
+      if (fs.existsSync(publicCachePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.sendFile(publicCachePath);
+      }
     }
 
     // Handle byte-range requests (crucial for video seeking and caching)

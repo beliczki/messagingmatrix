@@ -93,12 +93,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     return defaultBannerSizes;
   }, [templatesCache]);
 
-  // Load a single template by name (forceReload bypasses cache)
-  const loadTemplate = useCallback(async (templateName, forceReload = false) => {
-    if (!forceReload && templatesCache[templateName]) {
-      return templatesCache[templateName];
-    }
-
+  // Fetch a single template's data from the server (pure data fetch, no state updates)
+  const fetchTemplate = useCallback(async (templateName) => {
     try {
       // Get template metadata from /api/templates (has CSS-derived sizes via dimensions)
       let templateMeta = null;
@@ -138,11 +134,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       }
 
       // Merge CSS-derived sizes from /api/templates into config
-      // Use sizes if available, otherwise convert dimensions array to sizes format
       if (templateMeta?.sizes && templateMeta.sizes.length > 0) {
         config = { ...config, sizes: templateMeta.sizes };
       } else if (templateMeta?.dimensions && templateMeta.dimensions.length > 0) {
-        // Convert dimensions strings to sizes objects
         const sizes = templateMeta.dimensions.map(dim => {
           const [width, height] = dim.split('x').map(Number);
           return { width, height, name: dim };
@@ -169,7 +163,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           if (sizeCssResponse.ok) {
             const sizeCssData = await sizeCssResponse.json();
             const cssText = sizeCssData.content || '';
-            // Only add if it's actual CSS content
             if (cssText && !cssText.includes('<!DOCTYPE') && !cssText.includes('<html')) {
               cssMap[sizeKey] = cssText;
             }
@@ -179,16 +172,26 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         }
       }
 
-      const templateData = { html, config, css: cssMap };
-      setTemplatesCache(prev => ({ ...prev, [templateName]: templateData }));
-      return templateData;
+      return { html, config, css: cssMap };
     } catch (error) {
       console.error(`Failed to load template ${templateName}:`, error);
       return null;
     }
-  }, [templatesCache]);
+  }, []);
 
-  // Reload all cached templates (clears cache and re-fetches from server)
+  // Load a single template and update the cache (convenience wrapper for single-template callers)
+  const loadTemplate = useCallback(async (templateName, forceReload = false) => {
+    if (!forceReload && templatesCache[templateName]) {
+      return templatesCache[templateName];
+    }
+    const data = await fetchTemplate(templateName);
+    if (data) {
+      setTemplatesCache(prev => ({ ...prev, [templateName]: data }));
+    }
+    return data;
+  }, [templatesCache, fetchTemplate]);
+
+  // Reload all cached templates (re-fetches from server in parallel, single state update)
   const reloadTemplates = useCallback(async () => {
     const cachedTemplateNames = Object.keys(templatesCache);
     if (cachedTemplateNames.length === 0) {
@@ -200,49 +203,29 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     console.log(`Reloading ${cachedTemplateNames.length} templates...`);
 
     try {
-      // Clear the cache first
-      setTemplatesCache({});
+      const results = await Promise.all(
+        cachedTemplateNames.map(async (name) => {
+          const data = await fetchTemplate(name);
+          return [name, data];
+        })
+      );
 
-      // Reload each template with forceReload
-      for (const templateName of cachedTemplateNames) {
-        await loadTemplate(templateName, true);
-      }
+      const newCache = {};
+      results.forEach(([name, data]) => {
+        if (data) newCache[name] = data;
+      });
+      setTemplatesCache(newCache);
 
       console.log('Templates reloaded successfully');
     } finally {
       setReloadingTemplates(false);
     }
-  }, [templatesCache, loadTemplate]);
+  }, [templatesCache, fetchTemplate]);
 
-  // Load templates for all unique message templates
-  useEffect(() => {
-    const loadTemplatesForMessages = async () => {
-      if (!matrixData?.messages) return;
-
-      // Get unique templates from messages (only load explicitly set templates)
-      const templates = new Set();
-      const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
-
-      matrixData.messages.forEach(msg => {
-        // Skip messages without a template - don't default to 'html'
-        if (!msg.template) return;
-
-        // Only load HTML-based templates (skip Adobe PSD, Adobe AEP, etc.)
-        if (!nonHtmlTemplates.includes(msg.template)) {
-          templates.add(msg.template);
-        }
-      });
-
-      // Load each unique template
-      for (const templateName of templates) {
-        if (!templatesCache[templateName]) {
-          await loadTemplate(templateName);
-        }
-      }
-    };
-
-    loadTemplatesForMessages();
-  }, [matrixData?.messages, matrixData?.keywords, loadTemplate, templatesCache]);
+  // Load templates for all unique message templates (batched to avoid multiple re-renders)
+  // This is only used by reloadTemplates and other explicit callers — initial loading
+  // is handled by loadCreatives to avoid double-render cascades.
+  // (kept as a standalone effect-free function)
 
   // Helper to get template data for a creative
   const getTemplateForCreative = useCallback((creative) => {
@@ -693,7 +676,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
   };
 
-  // Load creatives
+  // Load creatives — also ensures needed templates are loaded first (single effect, one render)
   const loadCreatives = useCallback(async () => {
     const assetModules = import.meta.glob('/src/creatives/*.*', { eager: true, as: 'url' });
     const creativeList = await processAssets(assetModules);
@@ -771,6 +754,35 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           }
         });
 
+        // Ensure all needed templates are loaded before generating creatives
+        const neededTemplates = new Set();
+        uniqueMessages.forEach(msg => {
+          if (msg.template && !nonHtmlTemplates.includes(msg.template) && !templatesCache[msg.template]) {
+            neededTemplates.add(msg.template);
+          }
+        });
+
+        if (neededTemplates.size > 0) {
+          // Load missing templates in parallel, batch into single cache update
+          const results = await Promise.all(
+            [...neededTemplates].map(async (name) => {
+              const data = await fetchTemplate(name);
+              return [name, data];
+            })
+          );
+          const newEntries = {};
+          results.forEach(([name, data]) => {
+            if (data) newEntries[name] = data;
+          });
+          if (Object.keys(newEntries).length > 0) {
+            setTemplatesCache(prev => ({ ...prev, ...newEntries }));
+            // Return early — the cache update will trigger getTemplateSizes to change,
+            // which re-creates loadCreatives, which re-fires this effect with templates ready.
+            // This avoids generating creatives with wrong sizes then immediately regenerating.
+            return;
+          }
+        }
+
         const allMessageCreatives = [];
 
         // Create creatives for each unique message that uses an HTML template
@@ -781,19 +793,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           }
 
           // Skip messages without a template set - don't default to HTML
-          // (Only generate HTML creatives if template is explicitly set to an HTML template name)
           if (!message.template) {
             return; // Skip - no template configured
           }
 
           // Look up product from audiences or topics based on message
-          // Only use actual product values - don't fallback to message name/number
           const audience = (matrixData?.audiences || []).find(a => a.key === message.audience);
           const topic = (matrixData?.topics || []).find(t => t.key === message.topic);
           const product = audience?.product || topic?.product || '';
 
           // Get template-specific sizes for this message
-          const templateName = message.template; // template is guaranteed to be set (checked above)
+          const templateName = message.template;
           const templateSizes = getTemplateSizes(templateName);
 
           const messageCreatives = templateSizes.map((size) => ({
@@ -821,7 +831,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     }
 
     setCreatives([...spreadsheetCreatives, ...creativeList]);
-  }, [matrixData, getTemplateSizes, templatesCache]);
+  }, [matrixData, getTemplateSizes, fetchTemplate, templatesCache]);
 
   useEffect(() => {
     loadCreatives();
