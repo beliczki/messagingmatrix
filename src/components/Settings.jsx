@@ -4,6 +4,7 @@ import settings from '../services/settings';
 import AIAssistant from './AIAssistant';
 import { callClaudeAPI } from '../api/claude-proxy';
 import { apiGet, apiPost } from '../utils/api';
+import BottomBar from './BottomBar';
 
 // Google Sheets icon component
 const GoogleSheetsIcon = ({ size = 16 }) => (
@@ -2312,12 +2313,12 @@ Guidelines for creating instructions:
       </button>
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <AIAssistant
           moduleContext={{ module: 'settings' }}
           matrixData={matrixData}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

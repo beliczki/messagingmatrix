@@ -23,6 +23,7 @@ import OrphanedMessagesDialog from './OrphanedMessagesDialog';
 import MatrixControlPanel from './MatrixControlPanel';
 import FeedTableView from './FeedTableView';
 import MatrixGridView from './MatrixGridView';
+import BottomBar from './BottomBar';
 
 // Module-level persistent refs to survive component re-renders/remounts
 const EMPTY_ARRAY = [];
@@ -2631,7 +2632,7 @@ const Matrix = ({
 
       {/* Bottom Bar - Rendered via portal to ensure it's above dialogs */}
       {createPortal(
-        <div className="bottom-bar">
+        <BottomBar>
           <MatrixStatePanel
             audiences={audiences || []}
             topics={topics || []}
@@ -2716,7 +2717,7 @@ const Matrix = ({
               }
             }}
           />
-        </div>,
+        </BottomBar>,
         document.body
       )}
     </div>

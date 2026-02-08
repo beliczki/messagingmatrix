@@ -1,19 +1,34 @@
 /* ========================================
    BOTTOM BAR COMPONENT STYLES
-   Matches style-guide.html exactly
    Centered at bottom with Matrix State & AI Assistant
+   Animated toggle between centered and sides layout
    ======================================== */
 
-/* --- Bottom Bar Container (centered) --- */
+/* --- Bottom Bar Container (default: centered, no animation) --- */
 .bottom-bar {
   position: fixed;
-  /* Align bottom with bottom of menu-panel */
   bottom: calc(var(--space-6) + 46px + 8px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: var(--space-4);
   z-index: var(--z-bottom-bar);
+}
+
+/* --- Animated variant (has toggle, always full-width) --- */
+.bottom-bar--animated {
+  left: 0;
+  right: 0;
+  transform: none;
+  justify-content: center;
+  gap: 0;
+  padding: 0 var(--space-6);
+  pointer-events: none;
+  transition: bottom 0.3s ease;
+}
+
+.bottom-bar--animated > * {
+  pointer-events: auto;
 }
 
 /* --- Bottom Panel (blue pill) --- */
@@ -27,7 +42,7 @@
   gap: var(--space-3);
   color: var(--color-white);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: filter var(--transition-fast);
 }
 
 .bottom-panel:hover {
@@ -43,6 +58,9 @@
   font-weight: 600;
   margin-right: var(--space-2);
   white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 
 .bottom-panel-btn {
@@ -63,6 +81,86 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* --- Group: panel + its side toggle --- */
+.bottom-bar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* --- Spacer between groups (grows in sides mode) --- */
+.bottom-bar-spacer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: flex 0.3s ease;
+}
+
+/* --- Toggle button base --- */
+.bottom-bar-toggle {
+  background: var(--main-ui-color);
+  border: none;
+  color: var(--color-white);
+  opacity: 0.5;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: max-width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+
+.bottom-bar-toggle:hover {
+  opacity: 0.9;
+}
+
+/* Center toggle: visible in center mode, hidden in sides */
+.bottom-bar-toggle--center {
+  max-width: 28px;
+  margin: 0 var(--space-2);
+}
+
+/* Side toggles: hidden in center mode, visible in sides */
+.bottom-bar-toggle--side {
+  max-width: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* --- Sides layout active --- */
+.bottom-bar--sides {
+  bottom: var(--space-6);
+}
+
+.bottom-bar--sides .bottom-bar-spacer {
+  flex: 1 0 0px;
+}
+
+.bottom-bar--sides .bottom-bar-toggle--center {
+  max-width: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.bottom-bar--sides .bottom-bar-toggle--side {
+  max-width: 28px;
+  opacity: 0.5;
+  pointer-events: auto;
+}
+
+.bottom-bar--sides .bottom-panel-title {
+  max-width: 0;
+  opacity: 0;
+  margin: 0;
+}
+
 /* --- Responsive adjustments --- */
 @media (max-width: 768px) {
   .bottom-bar {
@@ -75,6 +173,8 @@
   }
 
   .bottom-panel-title {
-    display: none;
+    max-width: 0;
+    opacity: 0;
+    margin: 0;
   }
 }

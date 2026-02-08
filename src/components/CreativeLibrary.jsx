@@ -17,6 +17,7 @@ import { clearAndReloadApp } from '../utils/clearAndReload';
 import { loadDriveAssets, isDriveEnabled, parseDriveAssetData, invalidateDriveCache } from '../utils/driveAssets';
 import settings from '../services/settings';
 import { apiGet } from '../utils/api';
+import BottomBar from './BottomBar';
 
 const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   // Read filter from URL params
@@ -1602,7 +1603,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       </div>
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <MatrixStatePanel
           audiences={matrixData?.audiences || []}
           topics={matrixData?.topics || []}
@@ -1646,7 +1647,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             return creative.url;
           }}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

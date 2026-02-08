@@ -7,6 +7,7 @@ import CodeEditor from './CodeEditor';
 import TemplateClaudeChat from './TemplateClaudeChat';
 import MatrixStatePanel from './MatrixStatePanel';
 import { clearAndReloadApp } from '../utils/clearAndReload';
+import BottomBar from './BottomBar';
 
 const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel }) => {
   const navigate = useNavigate();
@@ -203,7 +204,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
       )}
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <MatrixStatePanel
           audiences={matrixData?.audiences || []}
           topics={matrixData?.topics || []}
@@ -226,7 +227,7 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
           activeTabs={[]}
           isFullyLoaded={matrixData?.isFullyLoaded}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

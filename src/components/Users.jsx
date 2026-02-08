@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users as UsersIcon, Key, X, Check, AlertCircle, UserPlus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AIAssistant from './AIAssistant';
+import BottomBar from './BottomBar';
 
 const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const { getAllUsers, changePassword, createUser, deleteUser } = useAuth();
@@ -507,12 +508,12 @@ const Users = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
       )}
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <AIAssistant
           moduleContext={{ module: 'users' }}
           matrixData={matrixData}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

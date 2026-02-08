@@ -3,6 +3,7 @@ import { BarChart3 } from 'lucide-react';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
 import { clearAndReloadApp } from '../utils/clearAndReload';
+import BottomBar from './BottomBar';
 
 const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const [saveProgress, setSaveProgress] = useState(null); // { step: number, message: string }
@@ -66,7 +67,7 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
       </div>
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <MatrixStatePanel
           audiences={matrixData?.audiences || []}
           topics={matrixData?.topics || []}
@@ -93,7 +94,7 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
           moduleContext={{ module: 'monitoring' }}
           matrixData={matrixData}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

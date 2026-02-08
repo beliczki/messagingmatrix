@@ -9,6 +9,7 @@ import MediaToolbar from './MediaToolbar';
 import { loadDriveAssets, parseDriveAssetData, isDriveEnabled, invalidateDriveCache } from '../utils/driveAssets';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import settings from '../services/settings';
+import BottomBar from './BottomBar';
 
 const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   // Get assets from matrixData (loaded from spreadsheet)
@@ -655,7 +656,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
       </div>
 
       {/* Bottom Bar */}
-      <div className="bottom-bar">
+      <BottomBar>
         <MatrixStatePanel
           audiences={matrixData?.audiences || []}
           topics={matrixData?.topics || []}
@@ -693,7 +694,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
             return asset.File_DirectLink || asset.File_thumbnail;
           }}
         />
-      </div>
+      </BottomBar>
     </div>
   );
 };

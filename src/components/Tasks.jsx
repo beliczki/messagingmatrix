@@ -7,6 +7,7 @@ import TaskEditorDialog from './TaskEditorDialog';
 import TaskToolbar from './TaskToolbar';
 import MatrixStatePanel from './MatrixStatePanel';
 import { clearAndReloadApp } from '../utils/clearAndReload';
+import BottomBar from './BottomBar';
 
 const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
   const claudeChatRef = useRef(null);
@@ -512,7 +513,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
 
       {/* Bottom Bar - Rendered via portal */}
       {createPortal(
-        <div className="bottom-bar">
+        <BottomBar>
           <MatrixStatePanel
             audiences={matrixData?.audiences || []}
             topics={matrixData?.topics || []}
@@ -539,7 +540,7 @@ const Tasks = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => 
               emails
             }}
           />
-        </div>,
+        </BottomBar>,
         document.body
       )}
     </div>
