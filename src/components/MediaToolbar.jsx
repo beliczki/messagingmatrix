@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X, Image, Share2 } from 'lucide-react';
+import { PocketKnife, GripHorizontal, Filter, ChevronDown, Check, LayoutGrid, List, CheckSquare, Square, X, Image, Share2, Info } from 'lucide-react';
 
 /**
  * MediaToolbar - Floating draggable toolbar for Creative Library
@@ -36,7 +36,9 @@ const MediaToolbar = ({
   // Color picker props
   bgColor,
   setBgColor,
-  colorPresets = []
+  colorPresets = [],
+  // Debug info
+  debugInfo
 }) => {
   // Load saved toolbar state from localStorage
   const [isOpen, setIsOpen] = useState(() => {
@@ -58,6 +60,7 @@ const MediaToolbar = ({
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // Refs
   const toolbarRef = useRef(null);
@@ -433,6 +436,25 @@ const MediaToolbar = ({
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Virtual Scrolling Info (collapsible) */}
+          {debugInfo && (
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <button
+                onClick={() => setDebugOpen(prev => !prev)}
+                className="flex items-center gap-2 text-white/60 hover:text-white/80 transition-colors text-xs w-full"
+              >
+                <Info size={14} />
+                <span>Virtual Scrolling</span>
+                <ChevronDown size={14} className={`ml-auto transition-transform ${debugOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {debugOpen && (
+                <div className="mt-2 text-white/70 text-xs whitespace-pre-line">
+                  {debugInfo}
+                </div>
+              )}
             </div>
           )}
 

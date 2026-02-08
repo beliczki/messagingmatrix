@@ -463,7 +463,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
         getItemFilename={(asset) => asset.File_name}
 
         // No header - just toolbar
-        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => (
+        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount, debugInfo }) => (
           <MediaToolbar
             filterText={filterText}
             setFilterText={setFilterText}
@@ -480,6 +480,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
             totalCount={totalItems}
             viewMode={viewMode}
             setViewMode={setViewMode}
+            debugInfo={debugInfo}
             // Selection props
             selectorMode={selectorMode}
             selectedCount={selectedAssetIds.size}
@@ -650,80 +651,6 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
           );
         }}
 
-        // Custom floating actions with Drive status
-        renderFloatingActions={({ showDebugInfo, setShowDebugInfo, debugInfo, totalItems }) => (
-          <div className="fixed bottom-[68px] right-8 z-40">
-            <button
-              onClick={() => setShowDebugInfo(!showDebugInfo)}
-              className={`p-3 rounded-full shadow-lg transition-all ${
-                showDebugInfo
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-blue-600 hover:bg-blue-50'
-              }`}
-              title="View loading info"
-            >
-              <Info size={20} />
-            </button>
-
-            {showDebugInfo && (
-              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 border border-gray-200 min-w-64">
-                {/* Drive Sync Status */}
-                {syncProgress && (
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <div className="font-semibold mb-2 flex items-center gap-2">
-                      {syncProgress.type === 'loading' && (
-                        <Loader size={16} className="text-blue-600 animate-spin" />
-                      )}
-                      {syncProgress.type === 'success' && (
-                        <CheckCircle size={16} className="text-green-600" />
-                      )}
-                      {syncProgress.type === 'error' && (
-                        <AlertCircle size={16} className="text-red-600" />
-                      )}
-                      <span className={
-                        syncProgress.type === 'loading' ? 'text-blue-600' :
-                        syncProgress.type === 'success' ? 'text-green-600' :
-                        'text-red-600'
-                      }>
-                        {syncProgress.type === 'loading' && 'Syncing with Drive...'}
-                        {syncProgress.type === 'success' && 'Sync Successful'}
-                        {syncProgress.type === 'error' && 'Sync Failed'}
-                      </span>
-                    </div>
-                    <div className="text-gray-600 whitespace-pre-line">{syncProgress.message}</div>
-                    {syncProgress.type === 'error' && (
-                      <button
-                        onClick={() => setSyncProgress(null)}
-                        className="mt-2 text-xs text-red-600 hover:text-red-700 underline"
-                      >
-                        Dismiss
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Virtual Scrolling Info */}
-                <div className="font-semibold mb-3 text-blue-600">Virtual Scrolling Info</div>
-                <div className="mb-3 whitespace-nowrap">{debugInfo}</div>
-
-                {/* Google Drive Status */}
-                <div className="border-t border-gray-200 pt-3 mt-3">
-                  <div className="font-semibold mb-2 text-blue-600">Google Drive Status</div>
-                  {loadingDrive ? (
-                    <div className="flex items-center gap-2 text-blue-600">
-                      <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                      <span>Loading assets from Drive...</span>
-                    </div>
-                  ) : driveEnabled ? (
-                    <div className="text-green-600">✓ Loaded {totalItems} assets</div>
-                  ) : (
-                    <div className="text-yellow-600">Drive not connected - Click sync to connect</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
         />
       </div>
 

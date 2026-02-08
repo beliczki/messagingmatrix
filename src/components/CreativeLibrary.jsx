@@ -802,9 +802,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           const topic = (matrixData?.topics || []).find(t => t.key === message.topic);
           const product = audience?.product || topic?.product || '';
 
-          // Get template-specific sizes for this message
+          // Get template-specific sizes for this message (deduplicated)
           const templateName = message.template;
-          const templateSizes = getTemplateSizes(templateName);
+          const templateSizesRaw = getTemplateSizes(templateName);
+          const seenSizes = new Set();
+          const templateSizes = templateSizesRaw.filter(size => {
+            const key = `${size.width}x${size.height}`;
+            if (seenSizes.has(key)) return false;
+            seenSizes.add(key);
+            return true;
+          });
 
           const messageCreatives = templateSizes.map((size) => ({
             id: `mc${message.number}-${message.variant}-${size.width}x${size.height}`,
@@ -1322,7 +1329,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         ]}
 
         // No header - just toolbar
-        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount }) => (
+        renderHeader={({ filterText, setFilterText, viewMode, setViewMode, viewModes, totalItems, filteredCount, debugInfo }) => (
           <MediaToolbar
             filterText={filterText}
             setFilterText={setFilterText}
@@ -1339,6 +1346,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             totalCount={totalItems}
             viewMode={viewMode}
             setViewMode={setViewMode}
+            debugInfo={debugInfo}
             // Selection props
             selectorMode={selectorMode}
             selectedCount={selectedCreativeIds.size}
@@ -1541,65 +1549,6 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           );
         }}
 
-        // Custom floating actions
-        renderFloatingActions={({ showDebugInfo, setShowDebugInfo, debugInfo }) => (
-          <div className="fixed bottom-[68px] right-8 z-40">
-            <button
-              onClick={() => setShowDebugInfo(!showDebugInfo)}
-              className={`p-3 rounded-full shadow-lg transition-all ${
-                showDebugInfo
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-blue-600 hover:bg-blue-50'
-              }`}
-              title="View loading info"
-            >
-              <Info size={20} />
-            </button>
-
-            {showDebugInfo && (
-              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 border border-gray-200 min-w-64">
-                {/* Drive Sync Status */}
-                {syncProgress && (
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <div className="font-semibold mb-2 flex items-center gap-2">
-                      {syncProgress.type === 'loading' && (
-                        <Loader size={16} className="text-blue-600 animate-spin" />
-                      )}
-                      {syncProgress.type === 'success' && (
-                        <CheckCircle size={16} className="text-green-600" />
-                      )}
-                      {syncProgress.type === 'error' && (
-                        <AlertCircle size={16} className="text-red-600" />
-                      )}
-                      <span className={
-                        syncProgress.type === 'loading' ? 'text-blue-600' :
-                        syncProgress.type === 'success' ? 'text-green-600' :
-                        'text-red-600'
-                      }>
-                        {syncProgress.type === 'loading' && 'Syncing with Drive...'}
-                        {syncProgress.type === 'success' && 'Sync Successful'}
-                        {syncProgress.type === 'error' && 'Sync Failed'}
-                      </span>
-                    </div>
-                    <div className="text-gray-600 whitespace-pre-line">{syncProgress.message}</div>
-                    {syncProgress.type === 'error' && (
-                      <button
-                        onClick={() => setSyncProgress(null)}
-                        className="mt-2 text-xs text-red-600 hover:text-red-700 underline"
-                      >
-                        Dismiss
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Virtual Scrolling Info */}
-                <div className="font-semibold mb-2 text-blue-600">Virtual Scrolling Info</div>
-                <div className="whitespace-nowrap">{debugInfo}</div>
-              </div>
-            )}
-          </div>
-        )}
       />
 
       {/* Upload Dialogs */}

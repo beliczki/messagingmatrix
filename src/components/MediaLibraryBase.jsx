@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Image as ImageIcon, Info, ChevronUp, ChevronDown } from 'lucide-react';
+import { Image as ImageIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import PageHeader from './PageHeader';
 import { filterAssets, calculatePlaceholderHeight } from '../utils/assetUtils';
 
@@ -46,7 +46,6 @@ const MediaLibraryBase = ({
   renderListItem = null, // (item) => ReactNode
   renderMasonryView = null, // ({ gridRef, columnItems, columnCount, containerHeight, ... }) => ReactNode
   renderPreview = null, // (selectedItem, onClose, allFilteredItems, onNavigate) => ReactNode
-  renderFloatingActions = null, // ({ showDebugInfo, setShowDebugInfo, debugInfo }) => ReactNode
 
   // Configuration
   initialViewMode = 'grid',
@@ -74,7 +73,6 @@ const MediaLibraryBase = ({
   const [viewMode, setViewMode] = useState(initialViewMode);
   const [filterText, setFilterText] = useState(initialFilterText);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [containerWidth, setContainerWidth] = useState(1200);
 
   // Fixed column width for grid view (300px)
@@ -601,7 +599,7 @@ const MediaLibraryBase = ({
   const containerHeight = maxColumnHeight + (typeof window !== 'undefined' ? window.innerHeight * 0.1 : 80);
 
   const unloadedCount = totalVisible - (loadedEnd - loadedStart);
-  const debugInfo = `Showing ${totalVisible} of ${totalItems} (loaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'}) | Next to load: #${nextItemIndex}`;
+  const debugInfo = `Showing ${totalVisible} of ${totalItems}\nLoaded: ${loadedStart + 1}-${loadedEnd}, ${unloadedCount > 0 ? unloadedCount + ' unloaded' : 'all loaded'}\nNext to load: #${nextItemIndex}`;
 
   // Handle item click
   const handleItemClick = useCallback((item) => {
@@ -622,7 +620,8 @@ const MediaLibraryBase = ({
         filteredCount: totalItems,
         onMenuToggle,
         currentModuleName,
-        lookAndFeel
+        lookAndFeel,
+        debugInfo
       }) : (
         <PageHeader
           onMenuToggle={onMenuToggle}
@@ -640,36 +639,6 @@ const MediaLibraryBase = ({
         className="w-full p-6 overflow-y-auto relative custom-scrollbar"
         style={{ height: '100vh', background: 'transparent' }}
       >
-        {/* Floating Actions */}
-        {renderFloatingActions ? renderFloatingActions({
-          showDebugInfo,
-          setShowDebugInfo,
-          debugInfo,
-          totalItems,
-          filteredCount: totalItems
-        }) : (
-          <div className="fixed bottom-8 right-8 z-40">
-            <button
-              onClick={() => setShowDebugInfo(!showDebugInfo)}
-              className={`p-3 rounded-full shadow-lg transition-all ${
-                showDebugInfo
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-blue-600 hover:bg-blue-50'
-              }`}
-              title="View loading info"
-            >
-              <Info size={20} />
-            </button>
-
-            {/* Debug Info Panel */}
-            {showDebugInfo && (
-              <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-xl p-4 text-xs text-gray-700 border border-gray-200 min-w-64">
-                <div className="font-semibold mb-3 text-blue-600">Virtual Scrolling Info</div>
-                <div className="mb-3 whitespace-nowrap">{debugInfo}</div>
-              </div>
-            )}
-          </div>
-        )}
 
         <div>
           {/* Grid/Masonry View */}
