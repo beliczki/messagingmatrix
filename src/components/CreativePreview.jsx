@@ -75,10 +75,10 @@ const CreativePreview = ({
   // Checkerboard pattern for transparent PNG images
   const checkerboardStyle = isPng ? {
     backgroundImage: `
-      linear-gradient(45deg, #333 25%, transparent 25%),
-      linear-gradient(-45deg, #333 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #333 75%),
-      linear-gradient(-45deg, transparent 75%, #333 75%)
+      linear-gradient(45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.15) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.15) 75%)
     `,
     backgroundSize: '30px 30px',
     backgroundPosition: '0 0, 0 15px, 15px -15px, -15px 0px'

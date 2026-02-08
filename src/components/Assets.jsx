@@ -395,10 +395,10 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
   // Checkerboard pattern for transparency
   const checkerboardStyle = {
     backgroundImage: `
-      linear-gradient(45deg, #ccc 25%, transparent 25%),
-      linear-gradient(-45deg, #ccc 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #ccc 75%),
-      linear-gradient(-45deg, transparent 75%, #ccc 75%)
+      linear-gradient(45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.15) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.15) 75%)
     `,
     backgroundSize: '10px 10px',
     backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px'
@@ -445,7 +445,7 @@ const Assets = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) =>
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
-      <div className="matrix-view-container" style={{ backgroundColor: 'transparent' }}>
+      <div className="matrix-view-container" style={{ backgroundColor: bgColor }}>
         <MediaLibraryBase
         items={filteredByFilters}
         lookAndFeel={lookAndFeel}

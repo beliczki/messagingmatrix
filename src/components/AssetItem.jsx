@@ -14,10 +14,10 @@ const AssetItem = ({
   // Checkerboard pattern for transparent images
   const checkerboardStyle = hasTransparency ? {
     backgroundImage: `
-      linear-gradient(45deg, #ccc 25%, transparent 25%),
-      linear-gradient(-45deg, #ccc 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #ccc 75%),
-      linear-gradient(-45deg, transparent 75%, #ccc 75%)
+      linear-gradient(45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(128,128,128,0.15) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(128,128,128,0.15) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(128,128,128,0.15) 75%)
     `,
     backgroundSize: '20px 20px',
     backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
