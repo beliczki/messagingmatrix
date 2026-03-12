@@ -1,39 +1,39 @@
 {
     "default_size": "300x250",
     "placeholders": {
-        "messaging_card_id": {
-            "type": "var",
-            "default": "",
-            "binding-messagingmatrix": "id"
-        },
         "advert_id": {
             "type": "var",
-            "default": "",
+	        "default": "",
             "binding-messagingmatrix": "POMS_ID"
         },
         "advert_mc": {
             "type": "var",
-            "default": "",
+	        "default": "",
             "binding-messagingmatrix": "Number"
         },
         "advert_variant": {
             "type": "var",
-            "default": "",
+	        "default": "",
             "binding-messagingmatrix": "Variant"
         },
         "advert_name": {
             "type": "var",
-            "default": "",
+	        "default": "",
             "binding-messagingmatrix": ""
+        },
+        "pmmid": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "PMMID"
         },
         "click_url": {
             "type": "url",
-            "default": "",
+	        "default": "",
             "binding-messagingmatrix": "Final_Trafficked_URL"
         },
         "template_variant_class": {
             "type": "tag",
-            "options": "animated, topRoundedFrame, bottomRoundedFrame, fullSurfaceColor, objectGfx, fullCanvas, video, noSticker, teal, turqoise, turkiz, pink, peach, orange, stone, purple, aubergine, green, apple, forest",
+            "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage, stickerImage",
             "default": "",
             "binding-messagingmatrix": "Template_variant_classes"
         },
@@ -106,6 +106,15 @@
             "type": "image",
 	        "default": "",
             "binding-messagingmatrix": "Image3",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_4": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image4",
             "path-messagingmatrix": "/api/drive/proxy/",
             "path-adform": "",
             "path-poms": "/HU-hu/background/",

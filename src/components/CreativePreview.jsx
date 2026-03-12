@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Info, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Info, ExternalLink, Image } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
@@ -369,11 +369,7 @@ const CreativePreview = ({
     populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
 
     // Add size class to body for CSS-based text formatting visibility
-    if (/<body[^>]*class=/i.test(populatedHtml)) {
-      populatedHtml = populatedHtml.replace(/<body([^>]*class=["'])([^"']*)(['"'][^>]*)>/i, `<body$1$2 size-${sizeKey}$3>`);
-    } else {
-      populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
-    }
+    populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
     populatedHtml = populatedHtml.replace(
       /url\(['"]?empty\.png['"]?\)/gi,
       `url('/api/templates/${tplName}/empty.png')`
@@ -395,7 +391,7 @@ const CreativePreview = ({
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
-            <ImageIcon size={16} />
+            <Image size={16} />
             Canvas Mode {canvasMode ? 'ON' : 'OFF'}
           </button>
           {canvasMode && !canvasDataUrl && (

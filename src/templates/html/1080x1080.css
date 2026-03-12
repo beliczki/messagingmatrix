@@ -1,15 +1,15 @@
 /* ------------------------------------------- */
 /* ------------------------------------------- */
-/* 300x250 */
+/* 1080x1080 */
 /* ------------------------------------------- */
 /* ------------------------------------------- */
 
 html {
-  font-size: 14px;
+  font-size: 32px;
 }
 #adContainer {
-  width: 300px !important;
-  height: 250px !important;
+  width: 1080px !important;
+  height: 1080px !important;
 }
 
 
@@ -39,5 +39,5 @@ body #cardContainer {
 /* text format helpers  */
 /* -----------------------------------------*/
 
-.sizebr.br300x250 { display: inline-block; }
-.size-300x250 .text-300x250 {display: inline;}
+.sizebr.br1080x1080 {display: inline-block;} 
+.size-1080x1080 .text-1080x1080 {display: inline;}

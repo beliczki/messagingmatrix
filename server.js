@@ -394,8 +394,7 @@ app.get('/api/config-basic', (req, res) => {
           cobranding: {
             enabled: false,
             logoUrl: ''
-          },
-          capsuleDesign: false
+          }
         }
       });
     }
@@ -2069,9 +2068,9 @@ app.get('/api/templates', (req, res) => {
         const templatePath = path.join(templatesDir, dirent.name);
         const templateJsonPath = path.join(templatePath, 'template.json');
 
-        // Get all files in template directory (exclude subdirectories)
+        // Get all files in template directory
         const files = fs.existsSync(templatePath)
-          ? fs.readdirSync(templatePath).filter(f => fs.statSync(path.join(templatePath, f)).isFile())
+          ? fs.readdirSync(templatePath)
           : [];
 
         // Extract dimensions from CSS filenames (e.g., "300x250.css" -> "300x250")
