@@ -1,356 +1,179 @@
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-/* 970x250 */
-/* ------------------------------------------- */
-/* ------------------------------------------- */
 html {
-  font-size: 20px;
+  width: 970px;
+  height: 250px;
+  /*font-size: 12px;*/
+  font-size: 15px;
+  overflow: hidden;
 }
 
-body {
-    #adContainer {
-        width: 970px !important;
-        height: 250px !important;
-    }
-
-    #backgroundContainer {
-        width: 45%;
-        left: 55%;
-    }
-
-    main {
-        width: 55%;
-    }
-
-    #textContainer,
-    #logoContainer {
-        padding: 1.5rem;
-    }
-
-    #textContainer {
-        padding-bottom: 1rem;
-        padding-top: 3.5rem;
-    }
-
-    #copyWrapper1,
-    #copyWrapper2,
-    #disclaimerWrapper1,
-    #headlineWrapper  { 
-        width:85%; 
-    }
-    
-    #stickerContainer {
-        transform: scale(0.65);
-    }
-
-    #buttonWrapper  { 
-        font-size:0.8rem; 
-    }
-
-    #cardContainer {
-        top: auto;
-        transform-origin: 50% 100%;
-        bottom: 1rem;
-        right: -9rem;
-      }
-
-    #disclaimerWrapper1  { 
-        display:block; 
-    }
+.size_indicator {
+    background-color: rgb(234, 255, 0);
 }
 
 
+.text_content_container {
+  width: 55%;
+  height: 80%;
+}
 
-body .topRoundedFrame {
-    #frameContainer::before {
-        /*top: 1.5rem;
-        right: 1.5rem;*/
-        display: none;
-    }
-   
-    #logoWrapper { 
-        /*margin-top:1.5rem;*/
-        margin-top:0rem;
-        
-    }
-    #textContainer {
-        /*padding-top:2rem;*/
-        padding-top:3.5rem;
-        
-    }
+.logo_container {
+  width: 100%;
+  height: 2.4rem;
+}
 
+.logo_container,
+.inner_text_content_container,
+.cta_container,
+.disclaimer_text_1 {
+  margin-left: 2rem;
+}
+
+/*.cta_container {
+  padding: 0.4rem 1.4rem;
+  border-radius: 1.5rem;
+  font-size: 1.3rem;
+}*/
+
+.cta_container {
+  padding: 0.43rem 1.6rem;
+  border-radius: 1.5rem;
+}
+
+.image_content_container {
+  height: 100%;
+  width: 45%;
+}
+
+.background_image_container {
+  width: 100%;
+  height: 100%;
+}
+
+.sticker_container {
+  left: 29rem;
+  top: 4.5rem;
+ /* width: 7.2rem;
+  height: 7.2rem;*/
+      width: 6rem;
+    height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+.frame_container {
+  display: none !important;
+}
+
+.frame_container::before {
+  display: none !important;
+}
+
+.card_image_container {
+  width: 5.6rem;
+  height: 5.6rem;
+  bottom: 1.2rem;
+  right: 21.6rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' START */
+
+.topRoundedFrame .frame_container::before {
+  display: none;
+}
+
+.topRoundedFrame .scene_2 {
+  align-items: center !important;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' START */
+
+.bottomRoundedFrame .frame_container::before {
+  display: none;
+}
+
+.bottomRoundedFrame .scene_2 {
+  align-items: center !important;
+}
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' START */
+
+.fullSurfaceColor .text_content_container {
+  padding: 0rem 1.2rem;
+}
+
+.fullSurfaceColor .logo_container {
+  height: 2.8rem;
+}
+
+.fullSurfaceColor .sticker_container {
+  left: unset;
+  right: 4.8rem;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+.fullSurfaceColor .card_image_container {
+  right: 32.4rem;
+  left: unset;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' START */
+
+.fullSurfaceColor.objectGfx .background_image_container {
+  /*width: 18.4rem;
+  height: 14.4rem;
+  position: absolute;
+  bottom: 0;
+  top: 0;
+  margin: auto;
+  right: 12.8rem; */
+  
+      width: 20.4rem;
+    height: 15.4rem;
+    position: absolute;
+    bottom: 0;
+    right: 11.8rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' END */
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' START */
+
+.fullCanvas .background_image {
+    width: 139%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 0px 0px;
+}
+
+.fullCanvas .text_content_container {
+        width: 20rem;
+    height: 2rem;
+    z-index: 1000;
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.9rem;
+    /* text-align: center; */
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+}
+
+.fullCanvas .inner_text_content_container {
+    margin: 0 !important;
 }
 
 
-body .bottomRoundedFrame {
-    #textContainer { 
-        padding-bottom:2rem;
-    }
-
-    #cardContainer { 
-        bottom:2rem; 
-    }
+.fullCanvas .copy_text_2 {
+    font-size: 25px;
 }
 
-
-body .imageAndColor2 {
-    #backgroundContainer {
-        left: 0%;
-        height: 100%;
-        width: 45%;
-    }
-
-    main {
-        left: 45%;
-        height: 100%;
-        width: 55%;
-        bottom: auto;
-        top: 0%;
-    }
-
-    #logoContainer { 
-        top:0px; 
-
-        img { 
-            height:2rem; 
-        }
-    }
-
-    #textContainer  { 
-        padding-top: 1rem;
-    }
-    
-    #headlineWrapper {
-        margin-top: 0;
-    }
-    
-    #copyWrapper1 {
-        margin-top: 0.5rem;
-    }
-
-    #headlineWrapper,
-    #copyWrapper1,
-    #copyWrapper2{ 
-        width: 70%;
-    }
-
-    #buttonWrapper  { 
-        margin-top: auto; 
-    }
-
-    #stickerContainer  {
-        transform-origin: 100% 0%;
-        right: 1rem;
-        top: 1rem;
-    }
-
-    #cardContainer  {
-        transform-origin: 100% 100%;
-        transform: scale(0.45);
-        left: -11rem;
-        right: auto;
-        top: auto;
-        bottom: 1rem;
-    }
-
-    .topRoundedFrame{
-        #logoWrapper { 
-            /*margin-top:1.5rem;*/
-            margin-top:0rem;
-        }
-
-        #textContainer {
-            /*padding-top:2rem;*/
-            padding-top:1rem;
-        }
-    }
-    
-    &.topRoundedFrame,
-    &.bottomRoundedFrame {
-        #stickerContainer { 
-            right:2rem; 
-        }
-    }
-
-    &.bottomRoundedFrame {
-        #cardContainer { 
-            bottom:2rem; 
-        }
-    }
-    
-    &.animated main {
-        left:100%;
-        top: 0%;
-        animation-name: color-box-animate-in-4;
-    }
-    
-    &.animated #backgroundContainer {
-        width: 100%;
-        height: 100%;
-        animation-name: background-animate-in-4!important;
-    }
-}
-
-
-body .fullSurfaceColor {
-
-    #copyWrapper1,
-    #copyWrapper2,
-    #disclaimerWrapper1,
-    #headlineWrapper {
-        width: 55%;
-    }
-    
-    #logoContainer { 
-        top:0px; 
-
-        img { 
-            height:2rem; 
-        }
-    }
-
-    #headlineWrapper {
-        margin-top: auto;
-    }
-    
-    #stickerContainer {
-        transform: scale(0.65) translateY(-50%);
-        transform-origin: 100% 0%;
-        right: 4rem;
-        top: 50%;
-    }
-
-    #objectWrapper {
-        width: 35%;
-        bottom: 5%;
-        height: 90%;
-        left: auto;
-        right: 15%;
-    }
-    
-    &.largeGfx {
-        #objectWrapper { 
-            width: 35%;
-            height: 110%;
-            right: 12%;
-            bottom: -5%;
-        }
-    }
-    
-    &.smallGfx {
-        #objectWrapper {
-            >div {
-                background-size: 55%;
-            }
-        }
-    }
-    
-    &.bottomSticker{ 
-        /*#stickerContainer{
-            top: auto;
-            bottom: 1rem;
-        }*/
-        
-        /*#stickerContainer{
-            top: -1.5rem;
-            bottom: unset;
-        }*/
-        #objectWrapper {
-            top: unset;
-            bottom: 5%;
-        }
-        
-        #stickerContainer {
-            top: 50%;
-            bottom: unset;
-        }
-    }
-    
-    &.largeGfx.bottomSticker {
-        #objectWrapper {
-            bottom: -5%;
-        }
-    }
-
-    #cardContainer {
-        transform-origin: 100% 100%;
-        transform: scale(0.65);
-        right: 2rem;
-        top: auto;
-        bottom: 1rem;
-    }
-
-    #cardWrapper > div { 
-        background-position: right bottom; 
-    }
-
-    /*&.bottomRoundedFrame {
-        #cardContainer { 
-            bottom:2rem; 
-        }
-    }*/
-}
-
-
-body .fullSurfaceImage {
-
-    #copyWrapper1,
-    #copyWrapper2,
-    #disclaimerWrapper1,
-    #headlineWrapper {
-        width: 50%;
-    }
-
-    #headlineWrapper {
-        margin-top: auto;
-    }
-
-    #objectWrapper {
-        width: 35%;
-        bottom: 5%;
-        height: 90%;
-        left: auto;
-        right: 10%;
-    }
-
-    #stickerContainer {
-        transform-origin: 100% 0%;
-        top: 2rem;
-    }
-
-    #cardContainer {
-        transform-origin: 100% 100%;
-        transform: scale(0.65);
-        right: 2rem;
-        top: auto;
-        bottom: 1rem;
-    }
-
-    #cardWrapper>div {
-        background-position: right bottom;
-    }
-
-    /*&.bottomRoundedFrame {
-        #cardContainer { 
-            bottom:2rem; 
-        }
-    }*/
-}
-
-
-
-/* -----------------------------------------*/
-/* positioning based on Image cropping  PSD */
-/* -----------------------------------------*/
-.campaignImage #imageWrapper div {
-background-size: 193%;
-  background-position: -241px -128px;
-}
-
-/* -----------------------------------------*/
-/* text format helpers  */
-/* -----------------------------------------*/
-
-.sizebr.br970x250 { display:inline-block;} 
-.size-970x250 .text-970x250 {display: inline;}
-
+/* TEMPLATE VARIANT CLASS 'fullCanvas' END */

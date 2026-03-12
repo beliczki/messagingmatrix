@@ -244,7 +244,11 @@ const CreativeLibraryItem = ({
           populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
 
           // Add size class to body for CSS-based text formatting visibility
-          populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
+          if (/<body[^>]*class=/i.test(populatedHtml)) {
+            populatedHtml = populatedHtml.replace(/<body([^>]*class=["'])([^"']*)(['"'][^>]*)>/i, `<body$1$2 size-${sizeKey}$3>`);
+          } else {
+            populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
+          }
           populatedHtml = populatedHtml.replace(
             /url\(['"]?empty\.png['"]?\)/gi,
             `url('/api/templates/${templateName}/empty.png')`

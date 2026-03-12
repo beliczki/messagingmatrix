@@ -1,158 +1,339 @@
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-/* 300x250 */
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-
 html {
-  font-size: 21px;
+  width: 300px;
+  height: 600px;
+  font-size: 16px;
+  overflow: hidden;
 }
 
-body #adContainer {
-  width: 300px !important;
-  height: 600px !important;
+.size_indicator {
+    background-color: rgb(0, 4, 255);
 }
 
-body #backgroundContainer { width:100%; height:40%; left:0px; }
-body main { width: 100%; height: 60%; top:40%; display: flex; }
-body #logoContainer { top:40%; }
-body .topRoundedFrame #logoWrapper { margin-top:0rem;}
-body #logoContainer img { height:1.8rem; }
-body #textContainer  { padding-top: 3rem; width:100%;}
-body #headlineWrapper  { padding-top: 0;}
-body #stickerContainer  {
-  transform-origin: 100% 0%;
-  transform: scale(0.45);
-  right: 2rem;
-  top: -2.5rem;
+.scene_2 {
+  flex-direction: column-reverse !important;
+  align-items: center !important;
 }
-body #cardContainer  {
-  transform-origin: 0% 0%;
-  transform: scale(0.45);
+
+.text_content_container {
+  width: 87%;
+  height: 26rem;
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.inner_text_content_container {
+  width: 90% !important;
+}
+
+.logo_container {
+  width: 100%;
+  height: 2.25rem;
+}
+/*
+.cta_container {
+  padding: 0.5rem 1.8rem;
+  padding: 0.4rem 1.3rem;
+  border-radius: 1.5rem;
+  font-size: 1.2rem;
+} */
+
+.cta_container {
+  padding: 0.43rem 1.6rem;
+  border-radius: 1.5rem;
+}
+
+.image_content_container {
+  height: 21rem;
+  width: 100%;
+}
+
+.background_image_container {
+  width: 100%;
+  height: 100%;
+}
+
+.sticker_container {
+  /*right: 2.5rem;
+  top: 11.5rem;
+  width: 5rem;
+  height: 5rem;
+  padding: 0.5rem;
+  transform: rotate(10deg); */
+  
+ /* right: 1.6rem;
+  top: 12rem;
+  width: 6rem;
+  height: 6rem;*/
+  padding: 0.5rem;
+  transform: rotate(10deg);
+  
+      right: 2.5rem;
+    top: 12rem;
+    width: 5rem;
+    height: 5rem;
+    
+    font-size: 13.5px;
+}
+
+.frame_container {
+  height: 100%;
+  top: 0;
+  left: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.frame_container::before {
+  height: 120%;
+  width: 120%;
+  border-radius: 2rem;
+  border: 2px solid white;
+}
+
+.card_image_container {
+  width: 7rem;
+  height: 7rem;
+  top: 10rem;
+  left: 2rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' START */
+
+.topRoundedFrame .frame_container::before {
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' START */
+
+.bottomRoundedFrame .frame_container::before {
+  bottom: 1.25rem;
+  right: 1.25rem;
+}
+
+.bottomRoundedFrame .text_content_container {
+  margin-bottom: 2.5rem;
+  height: 23.5rem;
+}
+
+.bottomRoundedFrame.animated .card_image_container {
+  width: 7rem;
+  height: 7rem;
+  top: 9rem;
   left: 1rem;
-  right: auto;
-  top: -5.5rem;
 }
-body #copyWrapper1,
-body #copyWrapper2,
-body #disclaimerWrapper1,
-body #headlineWrapper  { width:90%; }
 
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' END */
 
-body .imageAndColor2 #backgroundContainer { height:50%; }
-body .imageAndColor2 main { height: 50%; top:50%; }
-body .imageAndColor2.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
-body .imageAndColor2 #logoContainer { top:0px; }
-body .imageAndColor2 #logoContainer img { height:2rem; }
-body .imageAndColor2 #textContainer  { padding-top: 1rem;}
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' START */
 
+.fullSurfaceColor .scene_2 {
+  flex-direction: column !important;
+}
 
+.fullSurfaceColor .text_content_container {
+  height: 14rem;
+}
 
-body .fullSurfaceColor main { width: 100%; height: 100%; top:0;}
-body .fullSurfaceColor.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
-body .fullSurfaceColor #logoContainer { top:0px; }
-body .fullSurfaceColor #logoContainer img { height:2.4rem; }
+.fullSurfaceColor .cta_container {
+  position: absolute;
+  bottom: 2.25rem;
+}
+.fullSurfaceColor .disclaimer_text_1 {
+  position: absolute;
+  bottom: 0.5rem;
+}
 
-body .fullSurfaceColor #textContainer { width: 100%; height: 50%; bottom: 0; top: auto; position: absolute; padding-top:1rem;}
-body .fullSurfaceColor #buttonWrapper { margin-top: 1rem; margin-bottom:0; }
-body .fullSurfaceColor #headlineWrapper {  margin-top:auto;}
-body .fullSurfaceColor #headlineWrapper,
-body .fullSurfaceColor #copyWrapper1,
-body .fullSurfaceColor #copyWrapper2 { width:100%;}
-body .fullSurfaceColor #disclaimerWrapper1 {  margin-bottom:0; }
-body .fullSurfaceColor #stickerContainer  { transform: scale(0.5); top: -2rem; transform-origin: 100% 0%; }
-body .fullSurfaceColor.bottomRoundedFrame #stickerContainer  { top: -2.5rem; }
-body .fullSurfaceColor #objectWrapper { width:100%; height:45%; left:0; right:0; top:4rem;}
-body .fullSurfaceColor.largeGfx #objectWrapper { width: 130%; height: 52%; left: -15%; right: -15%; top: 2.5rem; }
+.fullSurfaceColor .logo_container {
+  height: 3.1rem;
+}
 
-body .fullSurfaceColor.bottomSticker #textContainer {   height:100%; padding-top:4.5rem;}
-body .fullSurfaceColor.bottomSticker #headlineWrapper {  margin-top:1rem;}
-body .fullSurfaceColor.bottomSticker #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
-body .fullSurfaceColor.bottomSticker #disclaimerWrapper1 {  margin-bottom:auto; width:50%;}
-body .fullSurfaceColor.bottomSticker #stickerContainer  {  bottom: 13%; top: auto; right: 8%; }
-body .fullSurfaceColor.bottomSticker #objectWrapper{  bottom:5%; top:auto; }
-body .fullSurfaceColor.bottomSticker.largeGfx #objectWrapper{  bottom:-10%;  }
+.fullSurfaceColor .sticker_container {
+  /*left: unset;
+  right: 1rem;
+  top: 15.5rem;
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg); */
+  
+  left: unset;
+  right: 1rem;
+  top: 16rem;
+  transform: rotate(10deg);
+}
 
-body .fullSurfaceImage #backgroundContainer { height:100%; }
-body .fullSurfaceImage main { width: 100%; height: 100%; top:0; background:none !important;}
-body .fullSurfaceImage #logoContainer { top:0px; }
-body .fullSurfaceImage.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
-body .fullSurfaceImage #logoContainer { top:0px; }
+.fullSurfaceColor .card_image_container {
+  width: 5rem;
+  height: 5rem;
+  top: 20rem;
+  left: 1rem;
+}
 
-body .fullSurfaceImage #textContainer {   width: 100%; height: 50%; bottom: 0; top: auto; position: absolute; padding-top:1rem;}
-body .fullSurfaceImage #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
-body .fullSurfaceImage #headlineWrapper {  margin-top:auto;}
-body .fullSurfaceImage #disclaimerWrapper1 {  margin-bottom:0; }
-body .fullSurfaceImage #stickerContainer  { transform: scale(0.5); top: -2rem; }
+.animated.fullSurfaceColor .scene_2 {
+  flex-direction: column !important;
+}
 
-body.fullSurfaceImage.bottomSticker #textContainer {   height:100%; padding-top:4.5rem;}
-body .fullSurfaceImage.bottomSticker #headlineWrapper {  margin-top:1rem;}
-body .fullSurfaceImage.bottomSticker #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
-body .fullSurfaceImage.bottomSticker #disclaimerWrapper1 {  margin-bottom:auto; width:50%;}
-body .fullSurfaceImage.bottomSticker #stickerContainer  {  bottom: 13%; top: auto; right: 8%; }
+.animated.fullSurfaceColor .text_content_container {
+  height: 14rem;
+}
 
+.animated.fullSurfaceColor .cta_container {
+  position: absolute;
+  bottom: 2.25rem;
+}
+.animated.fullSurfaceColor .disclaimer_text_1 {
+  position: absolute;
+  bottom: 0.5rem;
+}
 
-body .animated #backgroundContainer {
-  width: 100%;
+.animated.fullSurfaceColor .logo_container {
+  height: 3.1rem;
+}
+
+.animated.fullSurfaceColor .sticker_container {
+  /*left: unset;
+  right: 1rem;
+  top: 15.5rem;
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg); */
+  
+  left: unset;
+  right: 1rem;
+  top: 16rem;
+  transform: rotate(10deg);
+}
+
+.animated.fullSurfaceColor .card_image_container {
+  width: 5rem;
+  height: 5rem;
+  top: 20rem;
+  left: 1rem;
+}
+/*
+.animated.fullSurfaceColor .scene_2 {
+  justify-content: flex-end !important;
+}
+
+.animated.fullSurfaceColor .text_content_container {
   height: 100%;
-  left: 0px;
-  animation-name: background-animate-in-300x600;
-}
-@keyframes background-animate-in-300x600 {
-  0% { height: 100%; }
-  100% { height: 40%; }
 }
 
-body .animated.imageAndColor2 #backgroundContainer {
-  width: 100%;
+.animated.fullSurfaceColor .logo_container {
+  height: 3.1rem;
+  margin-bottom: 13rem;
+}
+
+.animated.fullSurfaceColor .sticker_container {
+  left: unset;
+  right: 2.5rem;
+  top: 13rem;
+  width: 5rem;
+  height: 5rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+.animated.fullSurfaceColor .card_image_container {
+  width: 5rem;
+  height: 5rem;
+  top: 12rem;
+  left: 1rem;
+}
+*/
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' START */
+
+.fullSurfaceColor.animated.objectGfx .image_content_container {
+        position: absolute !important;
+    bottom: 5rem !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: unset !important;
+    margin: auto !important;
+    height: 12rem !important;
+    width: 87% !important;
+}
+
+.fullSurfaceColor .image_content_container {
+        position: absolute !important;
+    bottom: 5rem !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: unset !important;
+    margin: auto !important;
+    height: 12rem !important;
+    width: 87% !important;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' END */
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' START */
+.fullCanvas .background_image {
+    width: 100%;
+    height: 162%;
+    object-fit: cover;
+    object-position: -1052px -371px;
+}
+
+.fullCanvas .text_content_container {
+        width: 15rem;
+    height: 2rem !important;
+    z-index: 1000;
+    position: absolute;
+    bottom: 4.25rem;
+    left: 2rem;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+}
+
+.fullCanvas .copy_text_2 {
+    font-size: 23px;
+}
+
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' END */
+
+/* ANIMATIONS START */
+
+.animated .image_content_container {
+  position: absolute;
+  right: 0;
+  top: 0;
   height: 100%;
-  animation-name: background-animate-in-2-300x600;
-}
-@keyframes background-animate-in-2-300x600 {
-  0% { height: 100%; }
-  100% { height: 50%; }
+  -webkit-animation: scale-down-top 2s cubic-bezier(0.175, 0.885, 0.32, 1.275)
+    2s both !important;
+  animation: scale-down-top 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) 2s both !important;
 }
 
-body .animated main {
-  left: 0%;
-  width:100%;
-  top:100%;
-  animation-name: color-box-animate-in-300x600
-}
-@keyframes color-box-animate-in-300x600 {
-  0% { top: 100%; }
-  100% { top: 40%; }
+.animated .text_content_container {
+  height: 300px;
 }
 
-body .animated.imageAndColor2 main {
-  left: 0%;
-  width:100%;
-  top:100%;
-  animation-name: color-box-animate-in-2-300x600
+/**
+ * ----------------------------------------
+ * animation scale-down-right
+ * ----------------------------------------
+ */
+@-webkit-keyframes scale-down-top {
+  0% {
+    height: 100%;
+  }
+  100% {
+    height: 244px;
+  }
 }
-@keyframes color-box-animate-in-2-300x600 {
-  0% { top: 100%; }
-  100% { top: 50%; }
+@keyframes scale-down-top {
+  0% {
+    height: 100%;
+  }
+  100% {
+    height: 244px;
+  }
 }
-
-body .animated.fullSurfaceColor main { width: 100%; height: 100%; top:0; animation-name:none;}
-body .animated.fullSurfaceImage #backgroundContainer { height: 100%; animation-name:none;}
-body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;}
-
-/* -----------------------------------------*/
-/* positioning based on Image cropping  PSD */
-/* -----------------------------------------*/
-.campaignImage #imageWrapper div {
-  background-size: 400%;
-  background-position: -450px -2px;
-}
-
-/* -----------------------------------------*/
-/* text format helpers  */
-/* -----------------------------------------*/
-.sizebr.br300x600 {display: inline-block;}
-.size-300x600 .text-300x600{display: inline;}
-
-
-
-

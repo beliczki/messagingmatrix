@@ -1,119 +1,210 @@
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-/* 640x360 */
-/* ------------------------------------------- */
-/* ------------------------------------------- */
 html {
-  font-size: 21px;
+  width: 640px;
+  height: 360px;
+  /*font-size: 14px;*/
+  font-size: 16px;
+  overflow: hidden;
 }
 
-body #adContainer {
-  width: 640px !important;
-  height: 360px !important;
+.size_indicator {
+    background-color: rgb(0, 255, 89);
 }
 
-body #copyWrapper1,
-body #copyWrapper2,
-body #disclaimerWrapper1,
-body #headlineWrapper  { width:85%; }
-body #disclaimerWrapper1  { display:block; }
-body #buttonWrapper  { font-size:0.8rem; }
-body #textContainer { padding-bottom:1rem;}
-body #cardContainer {
-  top: auto;
-  transform-origin: 50% 100%;
-  bottom: 1rem;
+.text_content_container {
+  width: 50%;
+  height: 85%;
 }
 
-body .bottomRoundedFrame #textContainer { padding-bottom:2rem;}
-body .bottomRoundedFrame #cardContainer { bottom:2rem; }
-
-
-body .imageAndColor2 #backgroundContainer { left:0%; height:100%; width:50%; }
-body .imageAndColor2 main {left:50%; height:100%; width:50%; bottom:auto; top:0%;}
-body .imageAndColor2.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
-body .imageAndColor2.topRoundedFrame #textContainer { padding-top:2rem;}
-body .imageAndColor2 #logoContainer { top:0px; }
-body .imageAndColor2 #logoContainer img { height:2rem; }
-body .imageAndColor2 #textContainer  { padding-top: 1rem;}
-body .imageAndColor2 #headlineWrapper  { width: 65%;;}
-body .imageAndColor2 #buttonWrapper  { margin-top: 1rem; }
-
-body .imageAndColor2 #stickerContainer  {
-  transform-origin: 100% 0%;
-  transform: scale(0.45);
-  right: 1rem;
-  top: 1rem;
-}
-body .imageAndColor2.topRoundedFrame #stickerContainer,
-body .imageAndColor2.bottomRoundedFrame #stickerContainer { right:2rem; }
-body .imageAndColor2.topRoundedFrame #stickerContainer { top:2rem; }
-
-body .imageAndColor2 #cardContainer  {
-  transform-origin: 100% 100%;
-  transform: scale(0.45);
-  left: -11rem;
-  right: auto;
-  top: auto;
-  bottom: 1rem;
-}
-body .imageAndColor2.bottomRoundedFrame #cardContainer { bottom:2rem; }
-
-
-body .fullSurfaceColor #copyWrapper1,
-body .fullSurfaceColor #copyWrapper2,
-body .fullSurfaceColor #disclaimerWrapper1,
-body .fullSurfaceColor #headlineWrapper  { width:50%; }
-body .fullSurfaceColor #headlineWrapper  { margin-top:auto; }
-
-body .fullSurfaceColor #objectWrapper { width:50%; /*bottom:5%;*/ height:90%; left:auto; right:10%; }
-body .fullSurfaceColor.largeGfx #objectWrapper { width: 55%; height: 100%; right: 3%; }
-body .fullSurfaceColor.bottomSticker #objectWrapper { /*bottom: 0%;*/ top: auto; }
-body .fullSurfaceColor #stickerContainer  { transform-origin: 100% 0%; transform: scale(0.55); top: 2rem; }
-body .fullSurfaceColor.bottomSticker #stickerContainer { top: unset; bottom: 1rem; transform-origin: 100% 100%; }
-body .fullSurfaceColor #cardContainer  {  transform-origin: 100% 100%;  transform: scale(0.65);  right: 2rem;  top: auto; bottom: 1rem;}
-body .fullSurfaceColor #cardWrapper > div { background-position: right bottom; }
-body .fullSurfaceColor.bottomRoundedFrame #cardContainer { bottom:2rem; }
-
-
-body .fullSurfaceImage #copyWrapper1,
-body .fullSurfaceImage #copyWrapper2,
-body .fullSurfaceImage #disclaimerWrapper1,
-body .fullSurfaceImage #headlineWrapper  { width:50%; }
-body .fullSurfaceImage #headlineWrapper  { margin-top:auto; }
-
-body .fullSurfaceImage #objectWrapper { width:50%; bottom:5%; height:90%; left:auto; right:10%; }
-body .fullSurfaceImage #stickerContainer  { transform-origin: 100% 0%; transform: scale(0.55); top: 2rem; }
-body .fullSurfaceImage #cardContainer  {  transform-origin: 100% 100%;  transform: scale(0.65);  right: 2rem;  top: auto; bottom: 1rem;}
-body .fullSurfaceImage #cardWrapper > div { background-position: right bottom; }
-body .fullSurfaceImage.bottomRoundedFrame #cardContainer { bottom:2rem; }
-
-body .animated.imageAndColor2 main {
-  left:100%;
-  top: 0%;
-  animation-name: color-box-animate-in-3;
+.inner_text_content_container {
+  width: 70% !important;
 }
 
-body #adContainer.animated.imageAndColor2 #backgroundContainer {
+.logo_container {
+  width: 100%;
+  height: 2.6rem;
+}
+
+.logo_container,
+.inner_text_content_container,
+.cta_container,
+.disclaimer_text_1 {
+  margin-left: 1.3rem;
+}
+
+.cta_container {
+  padding: 0.43rem 1.6rem;
+  border-radius: 1.5rem;
+}
+
+.image_content_container {
+  height: 100%;
+  width: 50%;
+}
+
+.background_image_container {
   width: 100%;
   height: 100%;
-  animation-name: background-animate-in-3;
 }
 
-
-
-/* -----------------------------------------*/
-/* positioning based on Image cropping  PSD */
-/* -----------------------------------------*/
-.campaignImage #imageWrapper div {
-background-size: 193%;
-  background-position: -241px -128px;
+.sticker_container {
+  left: 0;
+  right: 0;
+  margin: auto;
+  top: 4rem;
+  /*width: 5.25rem;
+  height: 5.25rem;*/
+  
+      width: 6rem;
+    height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
 }
 
-/* -----------------------------------------*/
-/* text format helpers  */
-/* -----------------------------------------*/
+.frame_container {
+  height: 100%;
+  top: 0;
+  left: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
 
-.sizebr.br640x360 { display:inline-block;}
-.size-640x360 .text-640x360 {display: inline;}
+.frame_container::before {
+  height: 120%;
+  width: 120%;
+  border-radius: 2rem;
+  border: 2px solid white;
+}
 
+.card_image_container {
+  width: 6rem;
+  height: 6rem;
+  bottom: 1.3rem;
+  left: 0;
+  right: 0;
+  margin: auto;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' START */
+
+.topRoundedFrame .frame_container::before {
+  top: 1.3rem;
+  right: 1.3rem;
+}
+
+.topRoundedFrame .text_content_container {
+  height: 80%;
+  margin-bottom: 1.3rem;
+}
+
+.topRoundedFrame .sticker_container {
+  top: 5.6rem;
+}
+
+.topRoundedFrame .logo_container {
+  height: 2.3rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' START */
+
+.bottomRoundedFrame .frame_container::before {
+  bottom: 1.3rem;
+  right: 1.3rem;
+}
+
+.bottomRoundedFrame .text_content_container {
+  height: 85%;
+  margin-top: 0.8rem;
+}
+
+.bottomRoundedFrame .sticker_container {
+  top: 4rem;
+}
+
+.bottomRoundedFrame .card_image_container {
+  bottom: 2.6rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' START */
+
+.fullSurfaceColor .text_content_container {
+  padding: 0rem 1.3rem;
+}
+
+.fullSurfaceColor .logo_container {
+  height: 3rem;
+}
+
+.fullSurfaceColor .sticker_container {
+  left: unset;
+  right: 2.45rem;
+  top: 2.45rem;
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+.fullSurfaceColor .card_image_container {
+  right: 3rem;
+  left: unset;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' START */
+
+.fullSurfaceColor.objectGfx .background_image_container {
+ /* width: 14rem;
+  height: 14rem;
+  position: absolute;
+  bottom: 1.3rem;
+  right: 6rem; */
+  
+  width: 18rem;
+    height: 16rem;
+    position: absolute;
+    bottom: 0rem;
+    right: 4rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' END */
+
+/*.fullSurfaceColor.objectGfx.noSticker .background_image_container {
+    width: 19rem;
+    height: 18rem;
+    position: absolute;
+    bottom: 1.3rem;
+    right: 3rem;
+}*/
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' START */
+
+.fullCanvas .background_image {
+    width: 212%;
+    height: 100%;
+    object-fit: cover;
+    object-position: -331px -372px;
+}
+
+.fullCanvas .text_content_container {
+        width: 20rem;
+    height: 2rem !important;
+    z-index: 1000;
+    position: absolute;
+    bottom: 2.25rem;
+    left: 19.3rem;
+    /* text-align: center; */
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+}
+
+.fullCanvas .copy_text_2 {
+    font-size: 25px;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' END */

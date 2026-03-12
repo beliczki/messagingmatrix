@@ -147,7 +147,11 @@ const ExportImagesDialog = ({
     );
 
     // Add size class to body
-    populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
+    if (/<body[^>]*class=/i.test(populatedHtml)) {
+      populatedHtml = populatedHtml.replace(/<body([^>]*class=["'])([^"']*)(['"'][^>]*)>/i, `<body$1$2 size-${sizeKey}$3>`);
+    } else {
+      populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);
+    }
 
     // Create off-screen container
     const container = document.createElement('div');

@@ -1,43 +1,198 @@
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-/* 300x250 */
-/* ------------------------------------------- */
-/* ------------------------------------------- */
-
 html {
-  font-size: 14px;
-}
-#adContainer {
-  width: 300px !important;
-  height: 250px !important;
-}
-
-
-/* -----------------------------------------*/
-/* positioning based on Image cropping  PSD */
-/* -----------------------------------------*/
-.campaignImage #imageWrapper div {
-  background-size: 210%;
-  background-position: -776px -352px;
+  width: 300px;
+  height: 250px;
+  font-size: 10px;
+  overflow: hidden;
 }
 
-
-/* -----------------------------------------*/
-/* card positioning ----------------------- */
-/* -----------------------------------------*/
-body #cardContainer {
-  transform-origin: 0% 100%;
-  transform: scale(0.6);
-  right: auto;
-  left: 166px;
-  top:auto;
-  bottom: 1rem;
+.size_indicator {
+    background-color: rgb(255, 17, 0);
 }
 
+.text_content_container {
+  width: 50%;
+  height: 85%;
+}
 
-/* -----------------------------------------*/
-/* text format helpers  */
-/* -----------------------------------------*/
+.logo_container {
+  width: 100%;
+  height: 3rem;
+}
 
-.sizebr.br300x250 { display: inline-block; }
-.size-300x250 .text-300x250 {display: inline;}
+.logo_container,
+.inner_text_content_container,
+.cta_container,
+.disclaimer_text_1 {
+  margin-left: 1.5rem;
+}
+/*
+.cta_container {
+  padding: 0.5rem 1.8rem;
+  border-radius: 1.5rem;
+}
+*/
+.cta_container {
+  padding: 0.43rem 1.6rem;
+  border-radius: 1.5rem;
+}
+
+.image_content_container {
+  height: 100%;
+  width: 50%;
+}
+
+.background_image_container {
+  width: 100%;
+  height: 100%;
+}
+
+.sticker_container {
+  left: 0;
+  right: 0;
+  margin: auto;
+  top: 4.5rem;
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+.frame_container {
+  height: 100%;
+  top: 0;
+  left: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.frame_container::before {
+  height: 120%;
+  width: 120%;
+  border-radius: 2rem;
+  border: 2px solid white;
+}
+
+.card_image_container {
+  width: 7rem;
+  height: 7rem;
+  bottom: 1.5rem;
+  left: 50%;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' START */
+
+.topRoundedFrame .frame_container::before {
+  top: 1.5rem;
+  right: 1.5rem;
+}
+
+.topRoundedFrame .text_content_container {
+  height: 80%;
+  margin-bottom: 1.5rem;
+}
+
+.topRoundedFrame .sticker_container {
+  top: 6.5rem;
+}
+
+.topRoundedFrame .logo_container {
+  height: 2.7rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'topRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' START */
+
+.bottomRoundedFrame .frame_container::before {
+  bottom: 1.5rem;
+  right: 1.5rem;
+}
+
+.bottomRoundedFrame .text_content_container {
+  height: 85%;
+  margin-top: 1rem;
+}
+
+.bottomRoundedFrame .sticker_container {
+  top: 4.5rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'bottomRoundedFrame' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' START */
+
+.fullSurfaceColor .text_content_container {
+  padding: 0rem 1.5rem;
+}
+
+.fullSurfaceColor .logo_container {
+  height: 3.5rem;
+}
+
+.fullSurfaceColor .sticker_container {
+  left: unset;
+  right: 2.8rem;
+  top: 2.8rem;
+ /* width: 8.2rem;
+  height: 8.2rem;*/
+  
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  transform: rotate(10deg);
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor' END */
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' START */
+
+.fullCanvas .background_image {
+    width: 338% !important;
+    height: 390% !important;
+    object-fit: cover !important;
+    object-position: -1056px 0px !important;
+}
+
+.fullCanvas .text_content_container {
+        width: 15rem;
+    height: 2rem;
+    z-index: 1000;
+    position: absolute;
+    bottom: 2rem;
+    right: 1.4rem;
+        text-align: center;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.fullCanvas .copy_text_2 {
+    font-size: 14px;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullCanvas' END */
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' START */
+
+.fullSurfaceColor.objectGfx .background_image_container {
+  /*width: 12.5rem;
+  height: 12.5rem;
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;*/
+      width: 14rem;
+    height: 12.5rem;
+    position: absolute;
+    bottom: 0rem;
+    right: 0.5rem;
+}
+
+/* TEMPLATE VARIANT CLASS 'fullSurfaceColor objectGfx' END */
+
+.fullSurfaceColor.objectGfx.noSticker .background_image_container {
+        width: 14rem;
+    height: 18.5rem;
+    position: absolute;
+    bottom: 0rem;
+    right: 0.5rem;
+}
