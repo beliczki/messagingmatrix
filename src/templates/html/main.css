@@ -132,7 +132,7 @@ main {
 #buttonWrapper span {
   display: inline-block;
   padding: 0.25rem 1.25rem;
-  border-radius: 0.3rem;
+  border-radius: 3rem;
   cursor: pointer;
   transition: all 0.5s;
 }
@@ -441,7 +441,7 @@ p:empty,
 .fullSurfaceColor #textContainer { padding-top: 3.4rem; width: 100%;}
 .fullSurfaceColor #headlineWrapper,
 .fullSurfaceColor #copyWrapper1,
-.fullSurfaceColor #copyWrapper2 { width: 50%; }
+.fullSurfaceColor #copyWrapper2 { width: 55%; }
 .fullSurfaceColor #headlineWrapper {  margin-top: 1rem;}
 .fullSurfaceColor #stickerContainer  { transform: scale(0.65); transform-origin: 100% 100%; right: 2rem; top: -1.5rem; }
 
@@ -474,6 +474,16 @@ p:empty,
 
 
 
+.preCompBg main { width: 100%; height: 100%; display: flex; background: none !important;}
+.preCompBg #logoContainer img { height:2.4rem; }
+.preCompBg #textContainer { padding-top: 3.4rem; width: 100%;}
+.preCompBg #headlineWrapper,
+.preCompBg #copyWrapper1,
+.preCompBg #copyWrapper2 { width: 55%;}
+.preCompBg #headlineWrapper {  margin-top: 1rem;}
+.preCompBg #stickerContainer  { display:none; }
+.preCompBg #objectContainer  { display:none; }
+.preCompBg #backgroundContainer { width:100%; left:0; }
 
 
 

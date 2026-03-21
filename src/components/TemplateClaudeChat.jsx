@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { MessageSquare, Send, Loader, RefreshCw, ChevronDown, ChevronUp, GripHorizontal, Code } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Bot, Send, Loader, RefreshCw, X, Code } from 'lucide-react';
 import { callClaudeAPI } from '../api/claude-proxy';
 
 /**
  * Specialized Claude Chat for Template Editing
- * Helps modify template HTML, CSS, and JSON with clear, simple, commented code
+ * Matches the Matrix AI Assistant design pattern:
+ * - bottom-panel pill trigger button
+ * - dialog via createPortal with iOS-style animations
  */
 const TemplateClaudeChat = forwardRef(({
   templateName,
@@ -20,14 +23,8 @@ const TemplateClaudeChat = forwardRef(({
   const [isConfigured, setIsConfigured] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [height, setHeight] = useState(() => {
-    const saved = localStorage.getItem('template_claude_chat_height');
-    return saved ? parseInt(saved) : window.innerHeight * 0.5;
-  });
-  const [isResizing, setIsResizing] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const messagesEndRef = useRef(null);
-  const resizeStartY = useRef(0);
-  const resizeStartHeight = useRef(0);
 
   // Load API key from .env or localStorage on mount
   useEffect(() => {
@@ -73,36 +70,22 @@ Provide clear, actionable suggestions.`;
     }
   }));
 
-  // Handle resize
-  const handleResizeStart = (e) => {
-    e.preventDefault();
-    setIsResizing(true);
-    resizeStartY.current = e.clientY;
-    resizeStartHeight.current = height;
+  // Close with animation (matching Matrix AI assistant pattern)
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsCollapsed(true);
+      setIsClosing(false);
+    }, 200);
   };
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e) => {
-      const deltaY = resizeStartY.current - e.clientY;
-      const newHeight = Math.max(200, Math.min(window.innerHeight * 0.9, resizeStartHeight.current + deltaY));
-      setHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      localStorage.setItem('template_claude_chat_height', height.toString());
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, height]);
+  const handleToggle = () => {
+    if (!isCollapsed) {
+      handleClose();
+    } else {
+      setIsCollapsed(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -169,32 +152,7 @@ ${currentFileContent}
 When providing code modifications, always:
 1. Explain what you're changing and why
 2. Provide the complete modified code in a code block
-3. Highlight the key changes with comments
-
-Example response:
-"I'll improve the HTML structure by adding semantic tags and accessibility attributes.
-
-\`\`\`html
-<!DOCTYPE html>
-<html>
-<head>
-  <!-- Template metadata -->
-  <meta charset="UTF-8">
-  <title>Ad Template</title>
-</head>
-<body>
-  <!-- Main container with ARIA label -->
-  <div class="ad-container" role="main" aria-label="Advertisement">
-    <!-- Content goes here -->
-  </div>
-</body>
-</html>
-\`\`\`
-
-Key changes:
-- Added semantic HTML5 tags
-- Added ARIA labels for accessibility
-- Added helpful comments"`;
+3. Highlight the key changes with comments`;
   };
 
   const sendMessageProgrammatic = async (messageText) => {
@@ -236,7 +194,7 @@ Key changes:
       if (codeBlocks.length > 0) {
         const infoMessage = {
           role: 'system',
-          content: `💡 ${codeBlocks.length} code block(s) found. Review the code above, and if you'd like to apply it, copy and paste it into the editor.`
+          content: `${codeBlocks.length} code block(s) found. Review the code above, and if you'd like to apply it, copy and paste it into the editor.`
         };
         setMessages(prev => [...prev, infoMessage]);
       }
@@ -263,232 +221,363 @@ Key changes:
     setMessages([]);
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="fixed bottom-0 right-0 bg-white shadow-lg rounded-tl-lg z-50 border-t-2 border-purple-500">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="px-4 py-3 flex items-center gap-2 hover:bg-gray-50 rounded-tl-lg transition-colors"
-        >
-          <MessageSquare size={20} className="text-purple-600" />
-          <span className="font-semibold text-gray-800">Template AI Assistant</span>
-          {isConfigured ? (
-            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Ready</span>
-          ) : (
-            <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded">Setup Required</span>
-          )}
-          <ChevronUp size={20} className="text-gray-600" />
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="fixed bottom-0 right-0 bg-white shadow-2xl flex flex-col z-50 rounded-tl-lg border-t-2 border-purple-500"
-      style={{ height: `${height}px`, width: '50%', minWidth: '600px' }}
-    >
-      {/* Resize Handle */}
+    <>
+      {/* Bottom Panel Button — matches Matrix AI assistant */}
       <div
-        onMouseDown={handleResizeStart}
-        className={`w-full h-2 flex items-center justify-center cursor-ns-resize hover:bg-purple-200 transition-colors ${isResizing ? 'bg-purple-300' : 'bg-purple-100'}`}
-        title="Drag to resize"
+        className="bottom-panel"
+        onClick={handleToggle}
       >
-        <GripHorizontal size={16} className="text-purple-600" />
+        <Bot size={20} className="bottom-panel-icon" />
+        <span className="bottom-panel-title">AI Assistant</span>
+        {isLoading && (
+          <span className="bottom-panel-btn" style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <Loader size={10} className="animate-spin" />
+            Thinking...
+          </span>
+        )}
       </div>
 
-      {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between bg-gradient-to-r from-purple-50 to-white">
-        <div className="flex items-center gap-2">
-          <Code size={20} className="text-purple-600" />
-          <span className="font-semibold text-gray-800">Template AI Assistant</span>
-          <span className="text-xs text-gray-500">• {templateName}</span>
-          {isConfigured && <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Ready</span>}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={clearChat}
-            className="p-1.5 hover:bg-purple-100 rounded transition-colors"
-            title="New chat"
+      {/* Dialog — rendered via portal when expanded */}
+      {(!isCollapsed || isClosing) && createPortal(
+        <div
+          className={`dialog-overlay overlay-animated ${isClosing ? 'closing' : 'open'}`}
+          onClick={handleClose}
+        >
+          <div
+            className={`dialog dialog-animated ${isClosing ? 'closing' : 'open'}`}
+            onClick={(e) => e.stopPropagation()}
           >
-            <RefreshCw size={16} className="text-gray-600" />
-          </button>
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="p-1.5 hover:bg-purple-100 rounded transition-colors"
-            title="Collapse"
-          >
-            <ChevronDown size={20} className="text-gray-600" />
-          </button>
-        </div>
-      </div>
+            <div className="dialog-layout" style={{ flexDirection: 'column', height: '100%' }}>
+              {/* Header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: 'var(--space-4)',
+                borderBottom: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Bot size={24} style={{ color: 'white' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ color: 'white', fontSize: '16px', fontWeight: 600 }}>AI Assistant</span>
+                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+                      Templates — {templateName} / {currentFileName}
+                    </span>
+                  </div>
+                </div>
 
-      {/* Config Panel */}
-      {showConfig && (
-        <div className="border-b px-4 py-3 bg-amber-50">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Claude API Key
-            </label>
-            {import.meta.env.VITE_ANTHROPIC_API_KEY ? (
-              <div className="px-3 py-2 bg-green-50 border border-green-300 rounded text-sm text-green-700">
-                ✓ API key configured in .env file
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                  />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Config toggle */}
                   <button
-                    onClick={saveApiKey}
-                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm transition-colors"
+                    onClick={() => setShowConfig(!showConfig)}
+                    style={{
+                      padding: '8px 12px',
+                      background: showConfig ? 'rgba(255,255,255,0.2)' : 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: isConfigured ? 'rgba(255,255,255,0.7)' : '#fbbf24',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
                   >
-                    Save
+                    {isConfigured ? 'API Key' : 'Setup API Key'}
                   </button>
-                  {isConfigured && (
-                    <button
-                      onClick={removeApiKey}
-                      className="px-4 py-2 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm transition-colors"
-                    >
-                      Remove
-                    </button>
+                  {/* New chat */}
+                  <button
+                    onClick={clearChat}
+                    style={{
+                      padding: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'rgba(255,255,255,0.7)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="New chat"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                  {/* Close */}
+                  <button
+                    onClick={handleClose}
+                    style={{
+                      padding: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'rgba(255,255,255,0.7)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Config Panel */}
+              {showConfig && (
+                <div style={{
+                  padding: 'var(--space-4)',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.05)'
+                }}>
+                  {import.meta.env.VITE_ANTHROPIC_API_KEY ? (
+                    <div style={{
+                      padding: '8px 12px',
+                      background: 'rgba(34,197,94,0.15)',
+                      borderRadius: '6px',
+                      color: '#86efac',
+                      fontSize: '13px'
+                    }}>
+                      API key configured in .env file
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="sk-ant-..."
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            background: 'rgba(255,255,255,0.1)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            borderRadius: '6px',
+                            color: 'white',
+                            fontSize: '13px',
+                            outline: 'none'
+                          }}
+                        />
+                        <button
+                          onClick={saveApiKey}
+                          className="btn btn-primary"
+                          style={{ fontSize: '13px', padding: '8px 16px' }}
+                        >
+                          Save
+                        </button>
+                        {isConfigured && (
+                          <button
+                            onClick={removeApiKey}
+                            className="btn btn-danger"
+                            style={{ fontSize: '13px', padding: '8px 16px' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>
+                        Your API key is stored locally in your browser.
+                      </span>
+                    </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-500">
-                  Your API key is stored locally in your browser. Get your key from{' '}
-                  <a
-                    href="https://console.anthropic.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-purple-600 hover:underline"
+              )}
+
+              {/* Messages */}
+              <div style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: 'var(--space-4)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(255,255,255,0.15) transparent'
+              }}>
+                {messages.length === 0 && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: 1,
+                    gap: '12px',
+                    opacity: 0.6
+                  }}>
+                    <Code size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    <span style={{ color: 'white', fontSize: '14px', fontWeight: 500 }}>
+                      Ask Claude to help modify your template code
+                    </span>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
+                      Currently editing: {currentFileName}
+                    </span>
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '16px',
+                      background: 'rgba(255,255,255,0.05)',
+                      borderRadius: '8px',
+                      maxWidth: '400px',
+                      width: '100%'
+                    }}>
+                      <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', fontWeight: 600 }}>
+                        Try asking:
+                      </span>
+                      <ul style={{
+                        margin: '8px 0 0 16px',
+                        padding: 0,
+                        color: 'rgba(255,255,255,0.5)',
+                        fontSize: '12px',
+                        listStyle: 'disc',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <li>"Add comments to explain the code"</li>
+                        <li>"Improve the HTML structure"</li>
+                        <li>"Reorganize the CSS with clear sections"</li>
+                        <li>"Add a new placeholder to template.json"</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {messages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: msg.role === 'user' ? 'flex-end' :
+                                     msg.role === 'system' ? 'center' :
+                                     'flex-start'
+                    }}
                   >
-                    console.anthropic.com
-                  </a>
-                </p>
-              </>
-            )}
+                    <div style={{
+                      maxWidth: msg.role === 'system' ? '100%' : '85%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      lineHeight: 1.5,
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+                      ...(msg.role === 'user' ? {
+                        background: 'rgba(255,255,255,0.2)',
+                        color: 'white'
+                      } : msg.role === 'system' ? {
+                        background: 'rgba(97,175,239,0.15)',
+                        color: 'rgba(255,255,255,0.8)',
+                        fontSize: '12px'
+                      } : {
+                        background: 'rgba(255,255,255,0.08)',
+                        color: 'rgba(255,255,255,0.9)'
+                      })
+                    }}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <Loader size={14} className="animate-spin" style={{ color: 'rgba(255,255,255,0.6)' }} />
+                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px' }}>Claude is thinking...</span>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div style={{
+                padding: 'var(--space-4)',
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex',
+                gap: '8px'
+              }}>
+                {!isConfigured ? (
+                  <div style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: '13px',
+                    padding: '8px 0'
+                  }}>
+                    <button
+                      onClick={() => setShowConfig(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.8)',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        fontSize: '13px'
+                      }}
+                    >
+                      Configure your API key
+                    </button> to start chatting
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          sendMessage();
+                        }
+                      }}
+                      placeholder={`Ask Claude to modify ${currentFileName}...`}
+                      disabled={isLoading}
+                      style={{
+                        flex: 1,
+                        padding: '10px 14px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '13px',
+                        outline: 'none',
+                        opacity: isLoading ? 0.5 : 1
+                      }}
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={isLoading || !input.trim()}
+                      style={{
+                        padding: '10px 16px',
+                        background: isLoading || !input.trim() ? 'rgba(255,255,255,0.1)' : 'white',
+                        color: isLoading || !input.trim() ? 'rgba(255,255,255,0.3)' : 'var(--color-primary)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontWeight: 600,
+                        fontSize: '13px'
+                      }}
+                    >
+                      <Send size={14} />
+                      Send
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-8">
-            <Code size={48} className="mx-auto mb-4 text-purple-300" />
-            <p className="text-sm font-medium mb-2">
-              Ask Claude to help modify your template code
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              Currently editing: <span className="font-mono text-purple-600">{currentFileName}</span>
-            </p>
-            <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg text-left">
-              <p className="text-xs font-semibold text-purple-800 mb-3 flex items-center gap-2">
-                <Code size={14} />
-                ✨ Template Editing Assistant
-              </p>
-              <div className="text-xs text-gray-700 space-y-2">
-                <p className="font-semibold text-purple-700">Try asking:</p>
-                <ul className="list-disc list-inside ml-2 space-y-1 text-gray-600">
-                  <li>"Add comments to explain the code"</li>
-                  <li>"Improve the HTML structure with semantic tags"</li>
-                  <li>"Add accessibility attributes to this template"</li>
-                  <li>"Reorganize the CSS with clear sections"</li>
-                  <li>"Add a new placeholder to template.json"</li>
-                  <li>"Optimize this code for better performance"</li>
-                </ul>
-                <div className="mt-3 pt-3 border-t border-purple-200">
-                  <p className="font-semibold text-purple-700 mb-1">Code Quality Focus:</p>
-                  <p className="text-gray-600">Claude will provide clear, commented, and well-organized code following best practices.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${
-              msg.role === 'user' ? 'justify-end' :
-              msg.role === 'system' ? 'justify-center' :
-              'justify-start'
-            }`}
-          >
-            <div
-              className={`${
-                msg.role === 'system' ? 'max-w-full' : 'max-w-[85%]'
-              } rounded-lg px-4 py-2.5 ${
-                msg.role === 'user'
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : msg.role === 'system'
-                  ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                  : 'bg-gray-100 text-gray-800 shadow-sm'
-              }`}
-            >
-              <p className="text-sm whitespace-pre-wrap font-mono leading-relaxed">{msg.content}</p>
-            </div>
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg px-4 py-2 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Loader size={16} className="animate-spin text-purple-600" />
-                <span className="text-sm text-gray-600">Claude is thinking...</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="border-t px-4 py-3 bg-gray-50">
-        {!isConfigured ? (
-          <div className="text-center text-sm text-gray-500">
-            <button
-              onClick={() => setShowConfig(true)}
-              className="text-purple-600 hover:underline font-medium"
-            >
-              Configure your API key
-            </button> to start chatting with Claude
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder={`Ask Claude to modify ${currentFileName}...`}
-              disabled={isLoading}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={isLoading || !input.trim()}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
-            >
-              <Send size={16} />
-              Send
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 });
 

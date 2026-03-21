@@ -547,3 +547,25 @@ input[type="date"]::-webkit-datetime-edit,
   color: var(--color-primary);
   border-color: var(--color-white);
 }
+
+/* --- Capsule design overrides --- */
+
+/* Pill-shape Tailwind-styled interactive elements (Settings, Users, Templates) */
+.capsule-design :is(input, select, button, a):is(.rounded, .rounded-md, .rounded-lg) {
+  border-radius: 9999px;
+}
+
+/* Pin dropdown layers to original radius */
+.capsule-design .dropdown-menu {
+  border-radius: 7px;
+}
+
+.capsule-design .dropdown-item {
+  border-radius: 5px;
+}
+
+/* Pin textareas to original radius */
+.capsule-design .form-textarea,
+.capsule-design textarea {
+  border-radius: 5px;
+}

@@ -812,6 +812,31 @@ Guidelines for creating instructions:
               </div>
             </div>
 
+            {/* Capsule Design */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Capsule Design
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange('lookAndFeel.capsuleDesign', !config.lookAndFeel?.capsuleDesign)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                      config.lookAndFeel?.capsuleDesign ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        config.lookAndFeel?.capsuleDesign ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-600">Pill-shaped buttons, inputs, and dropdowns</span>
+                </div>
+              </div>
+            </div>
+
             {/* Cobranding */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pb-6 border-b border-gray-200">
               {/* Cobranding Toggle */}

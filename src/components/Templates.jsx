@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FileCode, Menu, Edit, AlertCircle, X, Code, Eye, Save, ChevronDown, AlertTriangle, ChevronLeft, ChevronRight, Moon, Grid, Sun, Type, Image, Video, Link, Tag, Palette, Filter } from 'lucide-react';
+import { FileCode, Menu, Edit, AlertCircle, X, Code, Eye, Save, ChevronDown, AlertTriangle, ChevronLeft, ChevronRight, Moon, Grid, Sun, Type, Image, Video, Link, Tag, Palette, Filter, Check, GripVertical } from 'lucide-react';
 import { apiGet, apiPost } from '../utils/api';
 import TemplatePreview from './TemplatePreview';
 import CodeEditor from './CodeEditor';
@@ -200,42 +201,75 @@ const Templates = ({ onMenuToggle, currentModuleName, matrixData, lookAndFeel })
           onSave={loadTemplates}
           messages={matrixData?.messages || []}
           textFormatting={matrixData?.textFormatting || []}
+          lookAndFeel={lookAndFeel}
+          matrixData={matrixData}
+          saveProgress={saveProgress}
+          onMatrixSave={handleSaveWithProgress}
+          onClearReload={clearAndReloadApp}
         />
       )}
 
-      {/* Bottom Bar */}
-      <BottomBar>
-        <MatrixStatePanel
-          audiences={matrixData?.audiences || []}
-          topics={matrixData?.topics || []}
-          messages={matrixData?.messages || []}
-          keywords={matrixData?.keywords || {}}
-          assets={matrixData?.assets || []}
-          creatives={matrixData?.creatives || []}
-          textFormatting={matrixData?.textFormatting || []}
-          feedData={[]}
-          lastSync={matrixData?.lastSync}
-          isSaving={matrixData?.isSaving}
-          saveProgress={saveProgress}
-          onSave={handleSaveWithProgress}
-          onClearReload={clearAndReloadApp}
-          onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
-          downloadFeedCSV={() => {}}
-          changeTracking={matrixData?.changeTracking}
-          originalState={matrixData?.originalState}
-          // Templates are stored as files, not in spreadsheet
-          activeTabs={[]}
-          isFullyLoaded={matrixData?.isFullyLoaded}
-        />
-      </BottomBar>
+      {/* Bottom Bar — only when editor is NOT open (editor renders its own) */}
+      {!editingTemplate && (
+        <BottomBar>
+          <MatrixStatePanel
+            audiences={matrixData?.audiences || []}
+            topics={matrixData?.topics || []}
+            messages={matrixData?.messages || []}
+            keywords={matrixData?.keywords || {}}
+            assets={matrixData?.assets || []}
+            creatives={matrixData?.creatives || []}
+            textFormatting={matrixData?.textFormatting || []}
+            feedData={[]}
+            lastSync={matrixData?.lastSync}
+            isSaving={matrixData?.isSaving}
+            saveProgress={saveProgress}
+            onSave={handleSaveWithProgress}
+            onClearReload={clearAndReloadApp}
+            onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+            downloadFeedCSV={() => {}}
+            changeTracking={matrixData?.changeTracking}
+            originalState={matrixData?.originalState}
+            activeTabs={[]}
+            isFullyLoaded={matrixData?.isFullyLoaded}
+          />
+        </BottomBar>
+      )}
     </div>
   );
 };
 
 // Template Editor Dialog Component
-const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps, textFormatting = [] }) => {
+const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps, textFormatting = [], lookAndFeel, matrixData, saveProgress, onMatrixSave, onClearReload }) => {
   // Ref for Claude Chat
   const claudeChatRef = useRef(null);
+
+  // Status color helpers (same as MC editor)
+  const defaultStatusColors = {
+    INCOMING: '#8B5CF6', NAMING: '#F59E0B', CONTENT: '#EC4899',
+    PREVIEW: '#3B82F6', APPROVED: '#10B981', ACTIVE: '#06B6D4',
+    INACTIVE: '#9CA3AF', ERROR: '#EF4444', DEAD: '#64748B', MEMORY: '#06B6D4'
+  };
+  const statusColors = { ...defaultStatusColors, ...(lookAndFeel?.statusColors || {}) };
+  const getStatusColor = (status) => {
+    const s = (status || 'INCOMING').toUpperCase();
+    return statusColors[s] || statusColors['INCOMING'] || '#8B5CF6';
+  };
+  const getTextColor = (hexColor) => {
+    const hex = (hexColor || '#8B5CF6').replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff';
+  };
+
+  // Color presets for background picker
+  const colorPresets = [
+    lookAndFeel?.headerColor || '#2870ed',
+    lookAndFeel?.secondaryColor1 || '#eb4c79',
+    lookAndFeel?.secondaryColor2 || '#02a3a4',
+    lookAndFeel?.secondaryColor3 || '#711c7a'
+  ];
 
   // Find the last modified file to load initially
   const getInitialFile = () => {
@@ -283,7 +317,9 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   const [jsonError, setJsonError] = useState('');
   const [htmlValid, setHtmlValid] = useState(true);
   const [htmlWarnings, setHtmlWarnings] = useState([]);
-  const [previewBackground, setPreviewBackground] = useState('light'); // 'dark', 'checkboard', 'light'
+  const [previewBackground, setPreviewBackground] = useState(() => {
+    return localStorage.getItem('templateEditor_previewBg') || 'light';
+  });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalContent, setOriginalContent] = useState('');
 
@@ -293,10 +329,120 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     return saved === 'true';
   });
 
+  const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
+  const [mcDropdownOpen, setMcDropdownOpen] = useState(false);
+
   // Persist skipAnimation to localStorage
   useEffect(() => {
     localStorage.setItem('templateEditor_skipAnimation', skipAnimation);
   }, [skipAnimation]);
+
+  // Persist previewBackground
+  useEffect(() => {
+    localStorage.setItem('templateEditor_previewBg', previewBackground);
+  }, [previewBackground]);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!sizeDropdownOpen && !mcDropdownOpen) return;
+      if (e.target.closest('.dropdown')) return;
+      setSizeDropdownOpen(false);
+      setMcDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sizeDropdownOpen, mcDropdownOpen]);
+
+  // Draggable divider state
+  const [splitRatio, setSplitRatio] = useState(() => {
+    const saved = localStorage.getItem('templateEditor_splitRatio');
+    return saved ? parseFloat(saved) : 0.5;
+  });
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('templateEditor_splitRatio', splitRatio);
+  }, [splitRatio]);
+
+  // Draggable placeholder panel width
+  const [placeholderWidth, setPlaceholderWidth] = useState(() => {
+    const saved = localStorage.getItem('templateEditor_placeholderWidth');
+    return saved ? parseInt(saved, 10) : 384; // 384 = w-96
+  });
+  const placeholderDragRef = useRef(false);
+  const previewPanelRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('templateEditor_placeholderWidth', placeholderWidth);
+  }, [placeholderWidth]);
+
+  const handlePlaceholderDragStart = useCallback((e) => {
+    e.preventDefault();
+    placeholderDragRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.querySelectorAll('iframe').forEach(f => { f.style.pointerEvents = 'none'; });
+
+    const handleMouseMove = (e) => {
+      if (!placeholderDragRef.current || !previewPanelRef.current) return;
+      const rect = previewPanelRef.current.getBoundingClientRect();
+      const w = rect.right - e.clientX;
+      setPlaceholderWidth(Math.max(280, Math.min(rect.width * 0.85, w)));
+    };
+
+    const handleMouseUp = () => {
+      placeholderDragRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.querySelectorAll('iframe').forEach(f => { f.style.pointerEvents = ''; });
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const handleDividerMouseDown = useCallback((e) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    const isWide = isWideFormatRef.current;
+    document.body.style.cursor = isWide ? 'row-resize' : 'col-resize';
+    document.body.style.userSelect = 'none';
+    // Disable pointer events on iframes to prevent them from swallowing mouse events
+    document.querySelectorAll('iframe').forEach(f => { f.style.pointerEvents = 'none'; });
+
+    const handleMouseMove = (e) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      let ratio;
+      if (isWide) {
+        // Vertical: preview on top (order 1), code on bottom (order 2)
+        // splitRatio controls code size, so preview = 1 - splitRatio
+        const y = e.clientY - rect.top;
+        ratio = 1 - Math.max(0.2, Math.min(0.8, y / rect.height));
+      } else {
+        const x = e.clientX - rect.left;
+        ratio = Math.max(0.2, Math.min(0.8, x / rect.width));
+      }
+      setSplitRatio(ratio);
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.querySelectorAll('iframe').forEach(f => { f.style.pointerEvents = ''; });
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
   const [typeFilters, setTypeFilters] = useState({
     text: true,
     image: true,
@@ -306,8 +452,8 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     style: true
   });
 
-  // Filter out deleted messages
-  const messages = messagesFromProps.filter(m => m.status !== 'deleted');
+  // Filter to messages using this template, exclude deleted
+  const messages = messagesFromProps.filter(m => m.status !== 'deleted' && m.template === template.name);
 
   // Sort messages for navigation
   const sortedMessages = messages.sort((a, b) => {
@@ -551,7 +697,7 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
     try {
       setIsLoading(true);
       setError('');
-      const response = await apiGet(`/api/templates/${template.name}/${selectedFile}`);
+      const response = await apiGet(`/api/templates/${template.name}/${selectedFile}?editor=1`);
       if (!response.ok) throw new Error('Failed to load file');
       const data = await response.json();
       setFileContent(data.content);
@@ -643,31 +789,22 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   };
 
   // Helper function to get icon based on placeholder type
-  const getTypeIcon = (type, size = 14, forceWhite = false) => {
-    const colorClass = forceWhite ? 'text-white' :
-      type === 'text' ? 'text-gray-500' :
-      type === 'image' ? 'text-purple-600' :
-      type === 'video' ? 'text-red-600' :
-      type === 'url' ? 'text-blue-600' :
-      type === 'tag' ? 'text-green-600' :
-      type === 'style' ? 'text-pink-600' :
-      'text-gray-500';
+  const typeColorMap = {
+    text: '#9ca3af', image: '#a855f7', video: '#ef4444',
+    url: '#3b82f6', tag: '#22c55e', style: '#ec4899'
+  };
 
+  const getTypeIcon = (type, size = 14, colorOverride = null) => {
+    const color = colorOverride || typeColorMap[type] || '#9ca3af';
+    const iconStyle = { color };
     switch (type) {
-      case 'text':
-        return <Type size={size} className={colorClass} />;
-      case 'image':
-        return <Image size={size} className={colorClass} />;
-      case 'video':
-        return <Video size={size} className={colorClass} />;
-      case 'url':
-        return <Link size={size} className={colorClass} />;
-      case 'tag':
-        return <Tag size={size} className={colorClass} />;
-      case 'style':
-        return <Palette size={size} className={colorClass} />;
-      default:
-        return <Type size={size} className={colorClass} />;
+      case 'text': return <Type size={size} style={iconStyle} />;
+      case 'image': return <Image size={size} style={iconStyle} />;
+      case 'video': return <Video size={size} style={iconStyle} />;
+      case 'url': return <Link size={size} style={iconStyle} />;
+      case 'tag': return <Tag size={size} style={iconStyle} />;
+      case 'style': return <Palette size={size} style={iconStyle} />;
+      default: return <Type size={size} style={iconStyle} />;
     }
   };
 
@@ -725,41 +862,35 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   const [width, height] = previewSize.split('x').map(Number);
   const aspectRatio = width / height;
   const isWideFormat = aspectRatio >= 2.5; // Consider it wide if width is 2.5x or more than height
+  const isWideFormatRef = useRef(isWideFormat);
+  isWideFormatRef.current = isWideFormat;
 
   const getFilePreview = () => {
     // Determine background style based on selection
-    let backgroundClass = '';
     let backgroundStyle = {};
 
     if (previewBackground === 'dark') {
-      backgroundClass = 'bg-gray-800';
+      backgroundStyle = { backgroundColor: '#1f2937' };
     } else if (previewBackground === 'light') {
-      backgroundClass = 'bg-white';
-    } else { // checkboard
-      backgroundClass = 'bg-gray-50';
+      backgroundStyle = { backgroundColor: '#ffffff' };
+    } else if (previewBackground === 'checkboard') {
       backgroundStyle = {
+        backgroundColor: '#f9fafb',
         backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)',
         backgroundSize: '20px 20px',
         backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
       };
+    } else {
+      // Custom color from color presets
+      backgroundStyle = { backgroundColor: previewBackground };
     }
 
     // Always show complete template preview regardless of selected file
     return (
       <div
-        className={`w-full h-full flex items-center justify-center overflow-auto p-4 rounded-lg border border-gray-300 relative ${backgroundClass}`}
+        className="w-full h-full flex items-center justify-center overflow-auto p-4 relative"
         style={backgroundStyle}
       >
-        {/* Skip animation checkbox - top left corner */}
-        <label className="absolute top-2 left-2 flex items-center gap-2 text-sm text-gray-600 cursor-pointer bg-white/80 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={skipAnimation}
-            onChange={(e) => setSkipAnimation(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span>skip animation</span>
-        </label>
         {templateHtmlContent ? (
           <TemplatePreview
             templateHtml={templateHtmlContent}
@@ -785,70 +916,139 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white shadow-xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col relative overflow-hidden">
+    <div className="dialog-overlay">
+      <div className="dialog-panel blue-dialog template-editor-dialog" style={{ display: 'flex', flexDirection: 'column' }}>
         {/* Dialog Header */}
-        <div className="px-6 py-4 border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-800">Edit Template: {template.name}</h3>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
-            >
-              <X size={20} className="text-gray-500" />
+        <div className="template-editor-header">
+          <div className="template-editor-header-left">
+            <h3 className="template-editor-title">Template Editor: {template.name}</h3>
+            {/* Status messages */}
+            {error && <span className="template-editor-status error">{error}</span>}
+            {success && <span className="template-editor-status success">{success}</span>}
+          </div>
+          <div className="template-editor-header-right">
+            {/* Size Selector — dropdown with shadow layers */}
+            <div className={`dropdown ${sizeDropdownOpen ? 'open' : ''}`}>
+              <button
+                className="dropdown-trigger"
+                onClick={() => { setSizeDropdownOpen(!sizeDropdownOpen); setMcDropdownOpen(false); }}
+              >
+                <span>{previewSize}</span>
+                <ChevronDown size={16} />
+              </button>
+              <div className="dropdown-menu">
+                {(template.dimensions && template.dimensions.length > 0
+                  ? template.dimensions
+                  : ['300x250', '300x600', '640x360', '970x250']
+                ).map(dim => (
+                  <div
+                    key={dim}
+                    className={`dropdown-item ${previewSize === dim ? 'selected' : ''}`}
+                    onClick={() => { setPreviewSize(dim); setSizeDropdownOpen(false); }}
+                  >
+                    {dim}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* MC Navigation: < [indicator] > with dropdown */}
+            <div className="dialog-nav" style={{ marginBottom: 0 }}>
+              <button
+                onClick={handlePrevious}
+                disabled={messages.length === 0}
+                className="dialog-nav-btn"
+                title="Previous message"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div className={`dropdown ${mcDropdownOpen ? 'open' : ''}`} style={{ flex: 1 }}>
+                <button
+                  className="dropdown-trigger"
+                  onClick={() => { setMcDropdownOpen(!mcDropdownOpen); setSizeDropdownOpen(false); }}
+                  disabled={messages.length === 0}
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    borderRadius: '6px',
+                    backgroundColor: selectedMessage ? getStatusColor(selectedMessage.status) : undefined,
+                    color: selectedMessage ? getTextColor(getStatusColor(selectedMessage.status)) : undefined
+                  }}
+                >
+                  <span>{selectedMessage ? `MC${selectedMessage.number}${selectedMessage.variant || ''}` : 'No MC'}</span>
+                  <ChevronDown size={14} />
+                </button>
+                <div className="dropdown-menu mc-dropdown-menu">
+                  {uniqueCards.map((msg) => {
+                    const sc = getStatusColor(msg.status);
+                    const key = `${msg.number}${msg.variant || ''}`;
+                    const isSelected = selectedMessage && `${selectedMessage.number}${selectedMessage.variant || ''}` === key;
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`dropdown-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => { setSelectedMessage(msg); setMcDropdownOpen(false); }}
+                      >
+                        <span
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: sc,
+                            flexShrink: 0
+                          }}
+                        />
+                        MC{msg.number}{msg.variant || ''}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                onClick={handleNext}
+                disabled={messages.length === 0}
+                className="dialog-nav-btn"
+                title="Next message"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <button onClick={onClose} className="dialog-nav-btn" title="Close">
+              <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* Messages */}
-        {(error || success) && (
-          <div className="px-6 pt-4 flex-shrink-0">
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                <AlertCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
-                <p className="text-red-800 text-sm">{error}</p>
-              </div>
-            )}
-            {success && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-                <Save size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
-                <p className="text-green-800 text-sm">{success}</p>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Main Content - Side by Side or Top to Bottom */}
-        <div className={`flex-1 p-6 flex ${isWideFormat ? 'flex-col' : ''} gap-4 overflow-hidden relative`}>
+        <div ref={containerRef} className={`flex-1 p-4 flex ${isWideFormat ? 'flex-col' : ''} overflow-hidden relative`}>
           {/* Slide-in File Menu */}
           <div
-            className={`absolute top-0 left-0 bottom-0 w-96 bg-white shadow-xl border-r z-10 transform transition-transform duration-300 ease-in-out ${
+            className={`absolute top-0 left-0 bottom-0 w-96 z-10 transform transition-all duration-300 ease-in-out ${
               fileMenuOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
+            style={{ backgroundColor: 'var(--color-primary)', boxShadow: fileMenuOpen ? '8px 0 30px rgba(0,0,0,0.4), 4px 0 10px rgba(0,0,0,0.2)' : 'none' }}
           >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h4 className="font-semibold text-gray-700 flex items-center gap-2">
-                <FileCode size={18} />
-                Files
-              </h4>
+            <div className="flex items-center gap-2 p-4" style={{ borderBottom: '1px solid var(--white-10)' }}>
               <button
                 onClick={() => setFileMenuOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded"
+                className="dialog-nav-btn"
+                style={{ width: 28, height: 28 }}
+                title="Close files panel"
               >
-                <X size={20} />
+                <Menu size={14} />
               </button>
+              <h4 className="font-semibold flex items-center gap-2" style={{ color: 'var(--color-white)' }}>
+                Files
+              </h4>
             </div>
             <div className="p-4 space-y-1 overflow-auto" style={{ maxHeight: 'calc(100% - 64px)' }}>
               {(template.filesWithMeta || template.files.map(f => ({ name: f }))).map((fileInfo) => {
                 const fileName = typeof fileInfo === 'string' ? fileInfo : fileInfo.name;
-                console.log('File info:', fileInfo);
                 const fileDate = fileInfo.lastModified ? new Date(fileInfo.lastModified).toLocaleString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit'
                 }) : null;
-                console.log('File date:', fileDate);
 
                 return (
                   <button
@@ -857,16 +1057,19 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
                       setSelectedFile(fileName);
                       setFileMenuOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded transition-colors text-sm ${
-                      selectedFile === fileName
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
-                    }`}
+                    className="w-full text-left px-3 py-2 rounded transition-colors text-sm"
+                    style={{
+                      color: 'var(--color-white)',
+                      background: selectedFile === fileName ? 'var(--white-25)' : 'transparent',
+                      fontWeight: selectedFile === fileName ? 600 : 400
+                    }}
+                    onMouseEnter={(e) => { if (selectedFile !== fileName) e.currentTarget.style.background = 'var(--white-10)'; }}
+                    onMouseLeave={(e) => { if (selectedFile !== fileName) e.currentTarget.style.background = 'transparent'; }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium truncate">{fileName}</span>
+                      <span className="truncate">{fileName}</span>
                       {fileDate && (
-                        <span className={`text-xs whitespace-nowrap ${selectedFile === fileName ? 'text-blue-100' : 'text-gray-500'}`}>
+                        <span className="text-xs whitespace-nowrap" style={{ opacity: 0.6 }}>
                           {fileDate}
                         </span>
                       )}
@@ -877,78 +1080,72 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
             </div>
           </div>
 
-          {/* Overlay */}
+          {/* Overlay (click to close, no darkening) */}
           {fileMenuOpen && (
             <div
-              className="absolute inset-0 bg-black bg-opacity-30 z-5"
+              className="absolute inset-0 z-5"
               onClick={() => setFileMenuOpen(false)}
             />
           )}
 
           {/* Code Editor */}
-          <div className="flex-1 overflow-hidden flex flex-col" style={{ order: isWideFormat ? 2 : 1 }}>
-            <div className="flex items-center justify-between gap-2 mb-2 py-1">
+          <div className="overflow-hidden flex flex-col" style={{ order: isWideFormat ? 2 : 1, flex: `0 0 ${isWideFormat ? `${(1 - splitRatio) * 100}%` : `${splitRatio * 100}%`}` }}>
+            <div className="template-editor-code-toolbar">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setFileMenuOpen(true)}
-                  className="p-2 hover:bg-gray-100 rounded transition-colors"
+                  className="dialog-nav-btn"
                   title="Select file"
                 >
-                  <Menu size={18} className="text-gray-600" />
+                  <Menu size={14} />
                 </button>
-                <span className="text-sm font-medium text-blue-600">{selectedFile}</span>
+                <span className="template-editor-filename">{selectedFile}</span>
                 {hasUnsavedChanges && (
-                  <span className="text-xs text-red-600 font-semibold">● Unsaved</span>
+                  <span className="template-editor-status error">Unsaved</span>
                 )}
-                <span className="text-gray-400">|</span>
-                <h4 className="text-sm font-semibold text-gray-700">Code Editor</h4>
                 {selectedFile && selectedFile.endsWith('.json') && (
-                  <>
-                    <span className="text-gray-400">|</span>
-                    {jsonValid ? (
-                      <span className="text-xs text-green-600 font-semibold">✓ Valid JSON</span>
-                    ) : (
-                      <span className="text-xs text-red-600 font-semibold" title={jsonError}>✗ Invalid JSON</span>
-                    )}
-                  </>
+                  jsonValid ? (
+                    <span className="template-editor-status success">Valid JSON</span>
+                  ) : (
+                    <span className="template-editor-status error" title={jsonError}>Invalid JSON</span>
+                  )
                 )}
                 {selectedFile && selectedFile.endsWith('.html') && (
-                  <>
-                    <span className="text-gray-400">|</span>
-                    {htmlValid ? (
-                      <span className="text-xs text-green-600 font-semibold">✓ Valid HTML</span>
-                    ) : (
-                      <span className="text-xs text-amber-600 font-semibold" title={htmlWarnings.join(', ')}>⚠ HTML Warnings ({htmlWarnings.length})</span>
-                    )}
-                  </>
+                  htmlValid ? (
+                    <span className="template-editor-status success">Valid HTML</span>
+                  ) : (
+                    <span className="template-editor-status error" title={htmlWarnings.join(', ')}>HTML Warnings ({htmlWarnings.length})</span>
+                  )
                 )}
               </div>
               <button
                 onClick={handleSave}
                 disabled={isSaving || (selectedFile && selectedFile.endsWith('.json') && !jsonValid)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="dialog-nav-btn"
+                style={{ width: 'auto', padding: '0 12px', gap: 6, display: 'flex', alignItems: 'center' }}
+                title="Save file"
               >
                 <Save size={14} />
-                {isSaving ? 'Updating...' : 'Update'}
+                <span style={{ fontSize: '13px' }}>{isSaving ? 'Updating...' : 'Update'}</span>
               </button>
             </div>
             {isLoading ? (
-              <div className="flex items-center justify-center h-full text-gray-500">
+              <div className="flex items-center justify-center h-full" style={{ color: 'rgba(255,255,255,0.5)' }}>
                 Loading...
               </div>
             ) : (
               <>
-                <div className={`flex-1 border rounded transition-colors overflow-hidden ${
-                  hasUnsavedChanges ? 'border-blue-500' : 'border-gray-300'
-                }`}>
+                <div className="flex-1 overflow-hidden" style={{ borderRadius: '0 0 0 14px', backgroundColor: '#282c34' }}>
                   <CodeEditor
                     value={fileContent}
                     onChange={setFileContent}
                     language={
                       selectedFile.endsWith('.css') ? 'css' :
+                      selectedFile.endsWith('.js') ? 'javascript' :
                       selectedFile.endsWith('.json') ? 'json' :
                       'html'
                     }
+                    theme="dark"
                     className="border-0"
                   />
                 </div>
@@ -973,129 +1170,98 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
             )}
           </div>
 
+          {/* Draggable Divider */}
+          <div
+            className={`template-editor-divider ${isWideFormat ? 'horizontal' : ''}`}
+            onMouseDown={handleDividerMouseDown}
+            style={{ order: 2 }}
+          >
+            <GripVertical size={12} style={isWideFormat ? { transform: 'rotate(90deg)' } : undefined} />
+          </div>
+
           {/* Preview */}
-          <div className="flex-1 overflow-hidden flex flex-col relative" style={{ order: isWideFormat ? 1 : 2 }}>
+          <div ref={previewPanelRef} className="flex-1 overflow-hidden flex flex-col relative" style={{ order: isWideFormat ? 1 : 3 }}>
             {/* Slide-in Placeholder Menu */}
             <div
-              className={`absolute top-0 right-0 bottom-0 w-96 bg-white shadow-xl border-l z-10 transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 bottom-0 z-10 flex transform transition-all duration-300 ease-in-out ${
                 placeholderMenuOpen ? 'translate-x-0' : 'translate-x-full'
               }`}
+              style={{ width: placeholderWidth, boxShadow: placeholderMenuOpen ? '-8px 0 30px rgba(0,0,0,0.4), -4px 0 10px rgba(0,0,0,0.2)' : 'none' }}
             >
-              <div className="p-4 border-b">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-gray-700">Placeholder Mappings</h4>
-                  <button
-                    onClick={() => setPlaceholderMenuOpen(false)}
-                    className="p-2 hover:bg-gray-100 rounded"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                {/* Type Filter Switches */}
-                <div className="flex flex-wrap gap-1 items-center">
-                  <Filter size={14} className="text-gray-500 mr-1" />
-                  <button
-                    onClick={() => toggleTypeFilter('text')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.text
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle text placeholders"
-                  >
-                    {getTypeIcon('text', 14, typeFilters.text)}
-                  </button>
-                  <button
-                    onClick={() => toggleTypeFilter('image')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.image
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle image placeholders"
-                  >
-                    {getTypeIcon('image', 14, typeFilters.image)}
-                  </button>
-                  <button
-                    onClick={() => toggleTypeFilter('video')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.video
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle video placeholders"
-                  >
-                    {getTypeIcon('video', 14, typeFilters.video)}
-                  </button>
-                  <button
-                    onClick={() => toggleTypeFilter('url')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.url
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle URL placeholders"
-                  >
-                    {getTypeIcon('url', 14, typeFilters.url)}
-                  </button>
-                  <button
-                    onClick={() => toggleTypeFilter('tag')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.tag
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle tag placeholders"
-                  >
-                    {getTypeIcon('tag', 14, typeFilters.tag)}
-                  </button>
-                  <button
-                    onClick={() => toggleTypeFilter('style')}
-                    className={`p-1.5 transition-colors rounded border ${
-                      typeFilters.style
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-400 border-gray-300'
-                    }`}
-                    title="Toggle style placeholders"
-                  >
-                    {getTypeIcon('style', 14, typeFilters.style)}
-                  </button>
-                  <span className="text-gray-300 mx-1">|</span>
-                  <button
-                    onClick={toggleAllFilters}
-                    className="px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded border border-gray-300 transition-colors"
-                    title={Object.values(typeFilters).filter(Boolean).length > Object.keys(typeFilters).length / 2 ? "Deselect all" : "Select all"}
-                  >
-                    {Object.values(typeFilters).filter(Boolean).length > Object.keys(typeFilters).length / 2 ? "Deselect all" : "Select all"}
-                  </button>
-                </div>
+              {/* Drag handle for resizing */}
+              <div
+                className="template-editor-divider"
+                onMouseDown={handlePlaceholderDragStart}
+                style={{ flexShrink: 0, backgroundColor: 'var(--color-primary)' }}
+              >
+                <GripVertical size={12} />
               </div>
-              <div className="p-4 space-y-2 overflow-auto" style={{ maxHeight: 'calc(100% - 128px)' }}>
+              <div className="flex-1 flex flex-col min-w-0" style={{ backgroundColor: 'var(--color-primary)' }}>
+                <div className="p-4" style={{ borderBottom: '1px solid var(--white-10)', flexShrink: 0 }}>
+                  <div className="flex items-center mb-3" style={{ justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+                    <h4 className="font-semibold" style={{ color: 'var(--color-white)', marginRight: 'auto' }}>Placeholder Mappings</h4>
+                    <button
+                      onClick={() => setPlaceholderMenuOpen(false)}
+                      className="dialog-nav-btn"
+                      title="Close placeholder panel"
+                    >
+                      <Menu size={14} />
+                    </button>
+                  </div>
+                  {/* Type Filter Switches */}
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <Filter size={14} style={{ color: 'var(--white-50)' }} className="mr-1" />
+                    {['text', 'image', 'video', 'url', 'tag', 'style'].map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => toggleTypeFilter(type)}
+                        className="p-1.5 transition-colors rounded"
+                        style={{
+                          background: typeFilters[type] ? 'rgba(255,255,255,0.9)' : 'transparent',
+                          border: 'none'
+                        }}
+                        title={`Toggle ${type} placeholders`}
+                      >
+                        {getTypeIcon(type, 14, typeFilters[type] ? typeColorMap[type] : '#ffffff')}
+                      </button>
+                    ))}
+                    <span style={{ color: 'var(--white-20)' }} className="mx-1">|</span>
+                    <button
+                      onClick={toggleAllFilters}
+                      className="px-2 py-1 text-xs font-medium rounded transition-colors"
+                      style={{ color: 'var(--white-70)', background: 'transparent', border: 'none' }}
+                      title={Object.values(typeFilters).filter(Boolean).length > Object.keys(typeFilters).length / 2 ? "Deselect all" : "Select all"}
+                    >
+                      {Object.values(typeFilters).filter(Boolean).length > Object.keys(typeFilters).length / 2 ? "Deselect all" : "Select all"}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4 space-y-2 flex-1 template-editor-scroll" style={{ overflowY: 'auto' }}>
                 {getPlaceholderMappings()
                   .filter(({ type }) => typeFilters[type])
                   .map(({ placeholder, binding, value, found, type }) => (
-                  <div key={placeholder} className="bg-gray-50 rounded p-2 border border-gray-200">
+                  <div key={placeholder} className="rounded p-2" style={{ background: 'var(--white-10)', borderLeft: `3px solid ${typeColorMap[type] || '#9ca3af'}` }}>
                     <div className="flex items-center gap-2 mb-1">
-                      {getTypeIcon(type)}
-                      <span className="text-xs font-mono text-gray-500">{`{{${placeholder}}}`}</span>
-                      <span className="text-gray-400">←</span>
+                      {getTypeIcon(type, 14, '#ffffff')}
+                      <span className="text-xs font-mono" style={{ color: 'var(--white-50)' }}>{`{{${placeholder}}}`}</span>
+                      <span style={{ color: 'var(--white-30)' }}>←</span>
                       {binding === 'Unknown' || !binding ? (
                         <>
-                          <AlertTriangle size={12} className="text-red-600" />
-                          <span className="text-xs font-semibold text-red-600">Unknown</span>
+                          <AlertTriangle size={12} style={{ color: '#fca5a5' }} />
+                          <span className="text-xs font-semibold" style={{ color: '#fca5a5' }}>Unknown</span>
                         </>
                       ) : (
-                        <span className="text-xs font-semibold text-blue-600">{binding}</span>
+                        <span className="text-xs font-semibold" style={{ color: '#93c5fd' }}>{binding}</span>
                       )}
                     </div>
                     {binding !== 'Unknown' && binding && (
                       <div className="text-xs pl-1">
                         {found ? (
-                          <div className="text-gray-700 truncate" title={value}>
+                          <div className="truncate" style={{ color: 'var(--white-80)' }} title={value}>
                             {value}
                           </div>
                         ) : (
-                          <div className="text-amber-600 italic">
+                          <div className="italic" style={{ color: '#fbbf24' }}>
                             {value ? `Default: ${value}` : 'Not found'}
                           </div>
                         )}
@@ -1104,156 +1270,127 @@ const TemplateEditor = ({ template, onClose, onSave, messages: messagesFromProps
                   </div>
                 ))}
                 {getPlaceholderMappings().filter(({ type }) => typeFilters[type]).length === 0 && (
-                  <div className="text-center text-gray-500 text-sm py-8">
+                  <div className="text-center text-sm py-8" style={{ color: 'var(--white-50)' }}>
                     {getPlaceholderMappings().length === 0
                       ? 'No placeholders found in template'
                       : 'No placeholders match the selected filters'}
                   </div>
                 )}
               </div>
+              </div>
             </div>
 
-            {/* Overlay */}
+            {/* Overlay (click to close, no darkening) */}
             {placeholderMenuOpen && (
               <div
-                className="absolute inset-0 bg-black bg-opacity-30 z-5"
+                className="absolute inset-0 z-5"
                 onClick={() => setPlaceholderMenuOpen(false)}
               />
             )}
 
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h4 className="text-sm font-semibold text-gray-700">Template Preview</h4>
+            <div className="template-editor-code-toolbar">
               <div className="flex items-center gap-2">
                 {/* Background Switcher */}
-                <div className="flex items-center border border-gray-300 rounded overflow-hidden">
+                <div className="template-editor-bg-switcher">
                   <button
                     onClick={() => setPreviewBackground('dark')}
-                    className={`p-2 transition-colors ${
-                      previewBackground === 'dark'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`template-editor-bg-btn ${previewBackground === 'dark' ? 'active' : ''}`}
                     title="Dark background"
                   >
-                    <Moon size={16} />
+                    <Moon size={14} />
                   </button>
                   <button
                     onClick={() => setPreviewBackground('checkboard')}
-                    className={`p-2 transition-colors border-x border-gray-300 ${
-                      previewBackground === 'checkboard'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`template-editor-bg-btn ${previewBackground === 'checkboard' ? 'active' : ''}`}
                     title="Checkboard background"
                   >
-                    <Grid size={16} />
+                    <Grid size={14} />
                   </button>
                   <button
                     onClick={() => setPreviewBackground('light')}
-                    className={`p-2 transition-colors ${
-                      previewBackground === 'light'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`template-editor-bg-btn ${previewBackground === 'light' ? 'active' : ''}`}
                     title="Light background"
                   >
-                    <Sun size={16} />
+                    <Sun size={14} />
                   </button>
                 </div>
-
-                {/* Message Navigation */}
+                {/* Color Presets */}
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={handlePrevious}
-                    disabled={messages.length === 0}
-                    className="p-2 hover:bg-gray-100 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Previous message"
-                  >
-                    <ChevronLeft size={16} className="text-gray-600" />
-                  </button>
-
-                  <div className="relative">
-                    <select
-                      value={selectedMessage ? `${selectedMessage.number}${selectedMessage.variant || ''}` : ''}
-                      onChange={(e) => {
-                        const cardKey = e.target.value;
-                        const message = uniqueCards.find(m => `${m.number}${m.variant || ''}` === cardKey);
-                        setSelectedMessage(message);
-                      }}
-                      disabled={messages.length === 0}
-                      className="px-3 py-2 pr-8 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white text-sm"
-                    >
-                      {messages.length === 0 ? (
-                        <option>No messages</option>
-                      ) : (
-                        uniqueCards.map((msg) => (
-                          <option key={msg.id} value={`${msg.number}${msg.variant || ''}`}>
-                            {msg.number}{msg.variant || ''}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-
-                  <button
-                    onClick={handleNext}
-                    disabled={messages.length === 0}
-                    className="p-2 hover:bg-gray-100 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Next message"
-                  >
-                    <ChevronRight size={16} className="text-gray-600" />
-                  </button>
+                  {colorPresets.map((color, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setPreviewBackground(color)}
+                      className={`template-editor-color-preset ${previewBackground === color ? 'active' : ''}`}
+                      style={{ backgroundColor: color }}
+                      title={index === 0 ? 'Primary Color' : `Secondary ${index}`}
+                    />
+                  ))}
                 </div>
-
-                {/* Size Selector */}
-                <select
-                  value={previewSize}
-                  onChange={(e) => setPreviewSize(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  {template.dimensions && template.dimensions.length > 0 ? (
-                    template.dimensions.map((dimension) => (
-                      <option key={dimension} value={dimension}>
-                        {dimension}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="300x250">300x250</option>
-                      <option value="300x600">300x600</option>
-                      <option value="640x360">640x360</option>
-                      <option value="970x250">970x250</option>
-                    </>
-                  )}
-                </select>
-
-                {/* Placeholder Menu Button */}
+                {/* Skip Animation Toggle */}
                 <button
-                  onClick={() => setPlaceholderMenuOpen(true)}
-                  className="p-2 hover:bg-gray-100 rounded transition-colors"
-                  title="View placeholder mappings"
+                  className={`skip-animation-btn ${skipAnimation ? 'checked' : ''}`}
+                  onClick={() => setSkipAnimation(!skipAnimation)}
+                  title="Skip animation in preview"
                 >
-                  <Menu size={18} className="text-gray-600" />
+                  <span className="checkbox-box">
+                    <Check size={12} />
+                  </span>
+                  Skip animation
                 </button>
               </div>
+
+              {/* Placeholder Menu Button */}
+              <button
+                onClick={() => setPlaceholderMenuOpen(true)}
+                className="dialog-nav-btn"
+                title="View placeholder mappings"
+              >
+                <Menu size={14} />
+              </button>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden" style={{ borderRadius: '0 0 14px 0' }}>
               {getFilePreview()}
             </div>
           </div>
         </div>
 
-        {/* Claude Chat for Template Editing */}
-        <TemplateClaudeChat
-          ref={claudeChatRef}
-          templateName={template.name}
-          templateFiles={template.files}
-          currentFileContent={fileContent}
-          currentFileName={selectedFile}
-          onApplyCode={(code) => setFileContent(code)}
-        />
       </div>
+
+      {/* Bottom Bar — rendered via portal, same structure as Matrix module */}
+      {createPortal(
+        <BottomBar>
+          <MatrixStatePanel
+            audiences={matrixData?.audiences || []}
+            topics={matrixData?.topics || []}
+            messages={matrixData?.messages || []}
+            keywords={matrixData?.keywords || {}}
+            assets={matrixData?.assets || []}
+            creatives={matrixData?.creatives || []}
+            textFormatting={matrixData?.textFormatting || []}
+            feedData={[]}
+            lastSync={matrixData?.lastSync}
+            isSaving={matrixData?.isSaving}
+            saveProgress={saveProgress}
+            onSave={onMatrixSave}
+            onClearReload={onClearReload}
+            onRegenerateTopicKeys={matrixData?.regenerateTopicKeys}
+            downloadFeedCSV={() => {}}
+            changeTracking={matrixData?.changeTracking}
+            originalState={matrixData?.originalState}
+            activeTabs={[]}
+            isFullyLoaded={matrixData?.isFullyLoaded}
+          />
+          <TemplateClaudeChat
+            ref={claudeChatRef}
+            templateName={template.name}
+            templateFiles={template.files}
+            currentFileContent={fileContent}
+            currentFileName={selectedFile}
+            onApplyCode={(code) => setFileContent(code)}
+          />
+        </BottomBar>,
+        document.body
+      )}
     </div>
   );
 };

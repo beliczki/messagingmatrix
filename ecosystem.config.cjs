@@ -51,10 +51,7 @@ module.exports = {
     },
     {
       name: 'messagingmatrix-frontend',
-      script: 'npm',
-      args: 'run dev',
-      interpreter: 'cmd',
-      interpreter_args: '/c',
+      script: './node_modules/vite/bin/vite.js',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,

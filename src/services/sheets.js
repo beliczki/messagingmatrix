@@ -153,7 +153,11 @@ class SheetsService {
           const data = await response.json();
           const values = data.values || [];
           console.log(`Loaded ${sheetName} from Google Sheets:`, values);
-          localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
+          try {
+            localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
+          } catch (e) {
+            console.warn(`localStorage quota exceeded for ${sheetName}, skipping local cache`);
+          }
           return values;
         } else {
           const error = await response.json();
@@ -172,8 +176,12 @@ class SheetsService {
   // Write data to localStorage and Google Sheets
   async write(sheetName, values) {
     console.log(`📝 [write] Starting write for ${sheetName} with ${values?.length || 0} rows`);
-    // Always save to localStorage
-    localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
+    // Save to localStorage (skip large sheets like Feed to avoid quota errors)
+    try {
+      localStorage.setItem(`${this.storageKey}_${sheetName}`, JSON.stringify(values));
+    } catch (e) {
+      console.warn(`localStorage quota exceeded for ${sheetName}, skipping local cache`);
+    }
 
     // Try to write to Google Sheets via server API if configured
     console.log(`📝 [write] spreadsheetId:`, this.spreadsheetId ? 'configured' : 'NOT SET');

@@ -240,8 +240,14 @@ const CreativeLibraryItem = ({
           const templateName = creative.messageData?.template || 'html';
 
           // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
-          const baseTag = `<base href="/api/templates/${templateName}/">`;
+          const templateBase = `/api/templates/${templateName}/`;
+          const baseTag = `<base href="${templateBase}">`;
           populatedHtml = populatedHtml.replace(/<head>/i, `<head>\n${baseTag}`);
+          // Rewrite relative script src to absolute (base tag unreliable in srcDoc iframes)
+          populatedHtml = populatedHtml.replace(
+            /<script([^>]*)\ssrc="(?!https?:\/\/|\/\/)([^"]+)"/gi,
+            (match, attrs, src) => `<script${attrs} src="${templateBase}${src}"`
+          );
 
           // Add size class to body for CSS-based text formatting visibility
           populatedHtml = populatedHtml.replace(/<body([^>]*)>/i, `<body$1 class="size-${sizeKey}">`);

@@ -15,6 +15,8 @@ const DEFAULT_STATUS_COLORS = {
   MEMORY: '#06B6D4'
 };
 
+const INACTIVE_MC_STATUSES = ['INACTIVE', 'DEAD', 'ERROR'];
+
 // Move MessageCard outside to prevent recreation on every render
 const MessageCard = memo(({
   msg,
@@ -31,7 +33,8 @@ const MessageCard = memo(({
   onEditMessage,
   setActiveTab,
   lastClickRef,
-  staticTemplates = []
+  staticTemplates = [],
+  isDefault = false
 }) => {
   const status = (msg.status || 'INCOMING').toUpperCase();
   // Use lookAndFeel.statusColors with proper defaults
@@ -141,6 +144,20 @@ const MessageCard = memo(({
           <Image size={12} />
         </span>
       )}
+      {isDefault && (
+        <span style={{
+          position: 'absolute',
+          top: '2px',
+          right: '3px',
+          backgroundColor: '#000',
+          color: '#fff',
+          fontSize: '8px',
+          fontWeight: '700',
+          lineHeight: '1',
+          padding: '2px 3px',
+          borderRadius: '3px'
+        }}>D</span>
+      )}
       {displayMode === 'informative' && msg.name && (
         <span style={{
           fontSize: '0.7rem',
@@ -201,7 +218,8 @@ const MatrixGridView = ({
   dragOriginCell,
   onMessageMouseDown,
   onMessageMouseUp,
-  staticTemplates = []
+  staticTemplates = [],
+  defaultPMMIDMap = {}
 }) => {
   const scrollContainerRef = useRef(null);
   const tableRef = useRef(null);
@@ -334,17 +352,19 @@ const MatrixGridView = ({
     });
   }
 
-  // Count messages per audience (across all visible topics)
+  // Count messages per audience (across all visible topics) — active vs total
   const audienceMessageCounts = useMemo(() => {
     const counts = {};
     visibleAudiences.forEach(aud => {
-      let count = 0;
+      let total = 0;
+      let active = 0;
       visibleTopics.forEach(topic => {
         const msgs = getMessages(topic.key, aud.key);
         const filtered = filterMessages(msgs);
-        count += filtered.length;
+        total += filtered.length;
+        active += filtered.filter(m => !INACTIVE_MC_STATUSES.includes((m.status || 'INCOMING').toUpperCase())).length;
       });
-      counts[aud.key] = count;
+      counts[aud.key] = { active, total };
     });
     return counts;
   }, [visibleAudiences, visibleTopics, getMessages, mcFilter, statusFilters]);
@@ -489,6 +509,14 @@ const MatrixGridView = ({
                 const secondaryColor2 = lookAndFeel?.secondaryColor2 || '#02a3a4';
                 const productBorderColor = strategyLower.startsWith('pro') ? secondaryColor1 :
                                           strategyLower.startsWith('rem') ? secondaryColor2 : secondaryColor1;
+                const audStatus = (aud.status || '').toUpperCase();
+                const isAudInactive = audStatus === 'INACTIVE';
+                // Buying platform tag color
+                const buyingPlatform = (aud.buying_platform || '').toLowerCase();
+                const platformColor = buyingPlatform.includes('adform') ? 'rgba(20, 184, 166, 0.7)' :   // teal
+                                      buyingPlatform.includes('dv360') || buyingPlatform.includes('dbm') ? 'rgba(34, 197, 94, 0.7)' : // green
+                                      'rgba(255, 255, 255, 0.2)';
+                const mcCounts = audienceMessageCounts[aud.key] || { active: 0, total: 0 };
                 return (
                   <th
                     key={aud.key}
@@ -502,7 +530,7 @@ const MatrixGridView = ({
                       minWidth: cellWidth,
                       height: '8.5rem',
                       backgroundColor: 'var(--color-primary)',
-                      opacity: 0.85,
+                      opacity: isAudInactive ? 0.45 : 0.85,
                       backdropFilter: 'blur(12px)',
                       WebkitBackdropFilter: 'blur(12px)',
                       borderBottom: `3px solid ${productBorderColor}`,
@@ -516,21 +544,33 @@ const MatrixGridView = ({
                     onMouseEnter={() => updateHoverHighlight(null, null)}
                   >
                     <div className="group relative">
-                      {/* Product tag on top */}
-                      {aud.product && (
-                        <span className="audience-tag product" style={{
-                          background: 'rgba(255, 255, 255, 0.2)',
-                          color: 'white',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '0.65rem',
-                          fontWeight: '500',
-                          display: 'inline-block',
-                          marginBottom: '8px'
-                        }}>
-                          {aud.product}
-                        </span>
-                      )}
+                      {/* Product + Platform tags on top */}
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: (aud.product || aud.buying_platform) ? '8px' : 0 }}>
+                        {aud.product && (
+                          <span className="audience-tag product" style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            color: 'white',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600'
+                          }}>
+                            {aud.product}
+                          </span>
+                        )}
+                        {aud.buying_platform && (
+                          <span className="audience-tag platform" style={{
+                            background: platformColor,
+                            color: 'white',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600'
+                          }}>
+                            {aud.buying_platform}
+                          </span>
+                        )}
+                      </div>
                       {/* Name */}
                       <div className="audience-name" style={{
                         fontWeight: '600',
@@ -546,7 +586,8 @@ const MatrixGridView = ({
                           display: 'flex',
                           gap: '4px',
                           flexWrap: 'wrap',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          alignItems: 'center'
                         }}>
                           {strategyPrefix && (
                             <span className="audience-tag" style={{
@@ -582,16 +623,14 @@ const MatrixGridView = ({
                           }}>
                             {aud.key}
                           </span>
-                          {audienceMessageCounts[aud.key] > 0 && (
-                            <span className="audience-tag message-count" style={{
-                              background: 'rgba(255, 255, 255, 0.35)',
-                              color: 'white',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '0.65rem',
-                              fontWeight: '600'
+                          {mcCounts.total > 0 && (
+                            <span style={{
+                              color: 'rgba(255, 255, 255, 0.7)',
+                              fontSize: '0.6rem',
+                              fontWeight: '400',
+                              marginLeft: '2px'
                             }}>
-                              {audienceMessageCounts[aud.key]} MC
+                              {mcCounts.active} active mc / {mcCounts.total}
                             </span>
                           )}
                         </div>
@@ -734,6 +773,7 @@ const MatrixGridView = ({
                   {visibleAudiences.map((aud, audIndex) => {
                     const allCellMsgs = getMessages(topic.key, aud.key);
                     const cellMsgs = filterMessages(allCellMsgs);
+                    const isAudInactive = (aud.status || '').toUpperCase() === 'INACTIVE';
 
                     const isHoverCell = dragHoverCell && dragHoverCell.topic === topic.key && dragHoverCell.audience === aud.key;
                     const isDragging = draggedMsg !== null || isDraggingSelected;
@@ -763,12 +803,13 @@ const MatrixGridView = ({
                           minWidth: cellWidth,
                           padding: '12px',
                           backgroundColor: cellBgColor,
-                          transition: 'background 0.15s ease',
+                          transition: 'background 0.15s ease, opacity 0.15s ease',
                           verticalAlign: cellMsgs.length === 0 ? 'middle' : 'top',
                           position: 'relative',
                           borderRight: '1px solid rgba(255,255,255,0.1)',
                           borderBottom: '1px solid rgba(255,255,255,0.1)',
-                          height: cellMsgs.length === 0 ? '80px' : 'auto'
+                          height: cellMsgs.length === 0 ? '80px' : 'auto',
+                          opacity: isAudInactive ? 0.4 : 1
                         }}
                         onDragOver={(e) => onDragOver(e, topic.key, aud.key)}
                         onDrop={(e) => onDrop(e, topic.key, aud.key)}
@@ -863,6 +904,7 @@ const MatrixGridView = ({
                               setActiveTab={setActiveTab}
                               lastClickRef={lastClickRef}
                               staticTemplates={staticTemplates}
+                              isDefault={defaultPMMIDMap[`${msg.number || ''}${msg.variant || ''}`] === String(msg.id)}
                             />
                           ))}
 
@@ -954,8 +996,8 @@ const MatrixGridView = ({
                             );
                           })()}
 
-                          {/* Add message button - shows on cell hover, bigger when cell is empty (hidden in selection mode) */}
-                          {!isSelectMode && !spacePressed && !isDraggingSelected && (
+                          {/* Add message button - shows on cell hover, bigger when cell is empty (hidden in selection mode and inactive audiences) */}
+                          {!isSelectMode && !spacePressed && !isDraggingSelected && !isAudInactive && (
                             <button
                               onClick={() => onAddMessage(topic.key, aud.key)}
                               className="hidden group-hover/cell:flex"

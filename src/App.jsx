@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Routes, Route, useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package } from 'lucide-react';
+import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package, Maximize, Minimize } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
 import './App.css';
@@ -48,6 +48,7 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const menuContentRef = useRef(null);
   const selectorRef = useRef(null);
 
@@ -71,6 +72,22 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
       navigate('/matrix', { replace: true });
     }
   }, [currentModule, isAdmin, navigate, currentModuleConfig]);
+
+  // Fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  // Sync state with browser fullscreen changes (e.g. user presses Esc)
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
 
   // Update active index when module changes (using filtered modules)
   useEffect(() => {
@@ -166,6 +183,15 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
         onClick={() => setMenuOpen(!menuOpen)}
       >
         <Menu size={24} />
+      </button>
+
+      {/* Fullscreen Toggle Button */}
+      <button
+        className="fullscreen-btn"
+        onClick={toggleFullscreen}
+        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
       </button>
 
       {/* Menu Panel */}
@@ -415,6 +441,28 @@ const App = () => {
     };
     document.documentElement.style.setProperty('--font-family', fontMap[fontFamily] || fontMap['Inter']);
   }, [lookAndFeel?.fontFamily]);
+
+  // Update border-radius for capsule design
+  useEffect(() => {
+    const root = document.documentElement;
+    if (lookAndFeel?.capsuleDesign) {
+      root.classList.add('capsule-design');
+      root.style.setProperty('--radius-sm', '6px');
+      root.style.setProperty('--radius-md', '9999px');
+      root.style.setProperty('--radius-lg', '9999px');
+      root.style.setProperty('--radius-xl', '9999px');
+      root.style.setProperty('--radius-2xl', '20px');
+      root.style.setProperty('--radius-3xl', '24px');
+    } else {
+      root.classList.remove('capsule-design');
+      root.style.removeProperty('--radius-sm');
+      root.style.removeProperty('--radius-md');
+      root.style.removeProperty('--radius-lg');
+      root.style.removeProperty('--radius-xl');
+      root.style.removeProperty('--radius-2xl');
+      root.style.removeProperty('--radius-3xl');
+    }
+  }, [lookAndFeel?.capsuleDesign]);
 
   // Show loading state while checking authentication
   if (loading) {

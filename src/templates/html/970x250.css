@@ -347,6 +347,11 @@ background-size: 193%;
   background-position: -241px -128px;
 }
 
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: 0px 0px;
+}
+
 /* -----------------------------------------*/
 /* text format helpers  */
 /* -----------------------------------------*/

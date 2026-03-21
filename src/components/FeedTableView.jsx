@@ -187,6 +187,11 @@ const FeedTableView = ({
                       // Evaluate pattern to get cell value
                       let cellValue = evaluatePattern(pattern, context);
 
+                      // Strip line breaks from cell values
+                      if (cellValue) {
+                        cellValue = cellValue.replace(/[\r\n]+/g, ' ').replace(/\\n/g, ' ').trim();
+                      }
+
                       // Truncate long fields for display (but keep full data in title)
                       let displayValue = cellValue;
                       if (cellValue) {

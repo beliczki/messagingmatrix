@@ -722,27 +722,32 @@ const PublicPreviewView = ({ previewId }) => {
               if (htmlResponse.ok) {
                 htmlText = await htmlResponse.text();
 
-                // Extract images from <img> tags
-                const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-                let match;
-                while ((match = imgRegex.exec(htmlText)) !== null) {
-                  const imgSrc = match[1];
-                  // Extract filename from URL (could be /api/drive/proxy/filename or just filename)
-                  const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
-                  if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+                // Extract image filenames from all relevant attributes
+                const addImageFromUrl = (url) => {
+                  if (!url || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return;
+                  const filename = url.includes('/') ? url.split('/').pop() : url;
+                  if (filename && filename !== 'empty.png') {
                     imagesToFetch.add(filename);
                   }
+                };
+
+                // Extract from data-placeholder attributes (runtime-applied image URLs)
+                const dataPlaceholderRegex = /data-placeholder=["']([^"']+)["']/g;
+                let match;
+                while ((match = dataPlaceholderRegex.exec(htmlText)) !== null) {
+                  addImageFromUrl(match[1]);
                 }
 
-                // Extract images from background-image:url(...) in inline styles
+                // Extract from <img> src attributes
+                const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+                while ((match = imgRegex.exec(htmlText)) !== null) {
+                  addImageFromUrl(match[1]);
+                }
+
+                // Extract from background-image:url(...) in inline styles
                 const bgImageRegex = /background-image\s*:\s*url\(['"]?([^'")\s]+)['"]?\)/g;
                 while ((match = bgImageRegex.exec(htmlText)) !== null) {
-                  const imgSrc = match[1];
-                  // Extract filename from URL
-                  const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
-                  if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
-                    imagesToFetch.add(filename);
-                  }
+                  addImageFromUrl(match[1]);
                 }
               }
             } catch (error) {
@@ -761,10 +766,11 @@ const PublicPreviewView = ({ previewId }) => {
                 let match;
                 while ((match = cssUrlRegex.exec(cssText)) !== null) {
                   const urlPath = match[1];
-                  // Extract filename from URL
-                  const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
-                  if (filename && !urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
-                    imagesToFetch.add(filename);
+                  if (!urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
+                    const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
+                    if (filename && filename !== 'empty.png') {
+                      imagesToFetch.add(filename);
+                    }
                   }
                 }
               }
@@ -772,15 +778,14 @@ const PublicPreviewView = ({ previewId }) => {
               console.error('Failed to fetch CSS:', error);
             }
 
-            // Fetch all image files from Drive
+            // Fetch all image files from Drive API
             for (const imgSrc of imagesToFetch) {
               try {
-                // Use the same Drive proxy endpoint that works for display
                 const driveResponse = await apiGet(`/api/drive/proxy/${imgSrc}`);
                 if (driveResponse.ok) {
                   const imgBlob = await driveResponse.blob();
                   adFolder.file(imgSrc, imgBlob);
-                  console.log(`✓ Downloaded ${imgSrc} from Drive`);
+                  console.log(`✓ Downloaded ${imgSrc}`);
                 } else {
                   console.warn(`Skipping ${imgSrc} - not found (${driveResponse.status})`);
                 }
@@ -789,30 +794,41 @@ const PublicPreviewView = ({ previewId }) => {
               }
             }
 
-            // Add HTML with relative paths (replace /api/drive/proxy/ with just filenames)
+            // Add HTML with relative paths
             if (htmlText) {
               let cleanedHtml = htmlText;
-
-              // Replace all /api/drive/proxy/{filename} with just {filename}
+              // Replace /cache/drive/ and /api/drive/proxy/ paths with just filenames
+              cleanedHtml = cleanedHtml.replace(/\/cache\/drive\//g, '');
               cleanedHtml = cleanedHtml.replace(/\/api\/drive\/proxy\//g, '');
-
               adFolder.file('index.html', cleanedHtml);
             }
 
-            // Add CSS (already has relative paths from server)
+            // Add CSS with relative paths
             if (cssText) {
-              adFolder.file('styles.css', cssText);
+              let cleanedCss = cssText;
+              cleanedCss = cleanedCss.replace(/\/cache\/drive\//g, '');
+              cleanedCss = cleanedCss.replace(/\/api\/drive\/proxy\//g, '');
+              adFolder.file('styles.css', cleanedCss);
             }
 
-            // Fetch and add manifest.json
-            try {
-              const manifestResponse = await fetch(`${folderPath}/manifest.json`);
-              if (manifestResponse.ok) {
-                const manifestBlob = await manifestResponse.blob();
-                adFolder.file('manifest.json', manifestBlob);
+            // Fetch and add support files (manifest, thm, dynamic content)
+            const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js'];
+            for (const fileName of supportFiles) {
+              try {
+                const fileResponse = await fetch(`${folderPath}/${fileName}`);
+                if (fileResponse.ok) {
+                  const contentType = fileResponse.headers.get('content-type') || '';
+                  if (contentType.includes('text') || contentType.includes('json') || contentType.includes('javascript')) {
+                    const text = await fileResponse.text();
+                    adFolder.file(fileName, text);
+                  } else {
+                    const blob = await fileResponse.blob();
+                    adFolder.file(fileName, blob);
+                  }
+                }
+              } catch (error) {
+                console.error(`Failed to fetch ${fileName}:`, error);
               }
-            } catch (error) {
-              console.error('Failed to fetch manifest:', error);
             }
           } else {
             // Regular asset (image, video, etc.)
@@ -866,27 +882,32 @@ const PublicPreviewView = ({ previewId }) => {
         if (htmlResponse.ok) {
           htmlText = await htmlResponse.text();
 
-          // Extract images from <img> tags
-          const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-          let match;
-          while ((match = imgRegex.exec(htmlText)) !== null) {
-            const imgSrc = match[1];
-            // Extract filename from URL (could be /api/drive/proxy/filename or just filename)
-            const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
-            if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
+          // Extract image filenames from all relevant attributes
+          const addImageFromUrl = (url) => {
+            if (!url || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return;
+            const filename = url.includes('/') ? url.split('/').pop() : url;
+            if (filename && filename !== 'empty.png') {
               imagesToFetch.add(filename);
             }
+          };
+
+          // Extract from data-placeholder attributes (runtime-applied image URLs)
+          const dataPlaceholderRegex = /data-placeholder=["']([^"']+)["']/g;
+          let match;
+          while ((match = dataPlaceholderRegex.exec(htmlText)) !== null) {
+            addImageFromUrl(match[1]);
           }
 
-          // Extract images from background-image:url(...) in inline styles
+          // Extract from <img> src attributes
+          const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+          while ((match = imgRegex.exec(htmlText)) !== null) {
+            addImageFromUrl(match[1]);
+          }
+
+          // Extract from background-image:url(...) in inline styles
           const bgImageRegex = /background-image\s*:\s*url\(['"]?([^'")\s]+)['"]?\)/g;
           while ((match = bgImageRegex.exec(htmlText)) !== null) {
-            const imgSrc = match[1];
-            // Extract filename from URL
-            const filename = imgSrc.includes('/') ? imgSrc.split('/').pop() : imgSrc;
-            if (filename && !imgSrc.startsWith('http://') && !imgSrc.startsWith('https://')) {
-              imagesToFetch.add(filename);
-            }
+            addImageFromUrl(match[1]);
           }
         }
       } catch (error) {
@@ -905,10 +926,11 @@ const PublicPreviewView = ({ previewId }) => {
           let match;
           while ((match = cssUrlRegex.exec(cssText)) !== null) {
             const urlPath = match[1];
-            // Extract filename from URL
-            const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
-            if (filename && !urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
-              imagesToFetch.add(filename);
+            if (!urlPath.startsWith('http://') && !urlPath.startsWith('https://') && !urlPath.startsWith('data:')) {
+              const filename = urlPath.includes('/') ? urlPath.split('/').pop() : urlPath;
+              if (filename && filename !== 'empty.png') {
+                imagesToFetch.add(filename);
+              }
             }
           }
         }
@@ -916,15 +938,14 @@ const PublicPreviewView = ({ previewId }) => {
         console.error('Failed to fetch CSS:', error);
       }
 
-      // Fetch all image files from Drive
+      // Fetch all image files from Drive API
       for (const imgSrc of imagesToFetch) {
         try {
-          // Use the same Drive proxy endpoint that works for display
           const driveResponse = await apiGet(`/api/drive/proxy/${imgSrc}`);
           if (driveResponse.ok) {
             const imgBlob = await driveResponse.blob();
             zip.file(imgSrc, imgBlob);
-            console.log(`✓ Downloaded ${imgSrc} from Drive`);
+            console.log(`✓ Downloaded ${imgSrc}`);
           } else {
             console.warn(`Skipping ${imgSrc} - not found (${driveResponse.status})`);
           }
@@ -933,30 +954,40 @@ const PublicPreviewView = ({ previewId }) => {
         }
       }
 
-      // Add HTML with relative paths (replace /api/drive/proxy/ with just filenames)
+      // Add HTML with relative paths
       if (htmlText) {
         let cleanedHtml = htmlText;
-
-        // Replace all /api/drive/proxy/{filename} with just {filename}
+        cleanedHtml = cleanedHtml.replace(/\/cache\/drive\//g, '');
         cleanedHtml = cleanedHtml.replace(/\/api\/drive\/proxy\//g, '');
-
         zip.file('index.html', cleanedHtml);
       }
 
-      // Add CSS (already has relative paths from server)
+      // Add CSS with relative paths
       if (cssText) {
-        zip.file('styles.css', cssText);
+        let cleanedCss = cssText;
+        cleanedCss = cleanedCss.replace(/\/cache\/drive\//g, '');
+        cleanedCss = cleanedCss.replace(/\/api\/drive\/proxy\//g, '');
+        zip.file('styles.css', cleanedCss);
       }
 
-      // Fetch and add manifest.json
-      try {
-        const manifestResponse = await fetch(`${folderPath}/manifest.json`);
-        if (manifestResponse.ok) {
-          const manifestBlob = await manifestResponse.blob();
-          zip.file('manifest.json', manifestBlob);
+      // Fetch and add support files (manifest, thm, dynamic content)
+      const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js'];
+      for (const fileName of supportFiles) {
+        try {
+          const fileResponse = await fetch(`${folderPath}/${fileName}`);
+          if (fileResponse.ok) {
+            const contentType = fileResponse.headers.get('content-type') || '';
+            if (contentType.includes('text') || contentType.includes('json') || contentType.includes('javascript')) {
+              const text = await fileResponse.text();
+              zip.file(fileName, text);
+            } else {
+              const blob = await fileResponse.blob();
+              zip.file(fileName, blob);
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to fetch ${fileName}:`, error);
         }
-      } catch (error) {
-        console.error('Failed to fetch manifest:', error);
       }
 
       // Generate ZIP file

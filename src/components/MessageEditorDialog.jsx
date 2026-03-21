@@ -44,7 +44,10 @@ const MessageEditorDialog = ({
   assistantSelections = { text: {}, images: [] },
   onBrewWithAssistant,
   onApplyAssistantSelection,
-  onClearAssistantSelections
+  onClearAssistantSelections,
+  // Default PMMID props
+  defaultPMMIDMap = {},
+  onToggleDefaultPMMID
 }) => {
   // Compute trafficking fields automatically
   const computedTrafficking = useMemo(() => {
@@ -238,8 +241,24 @@ const MessageEditorDialog = ({
     }
   };
 
+  // Auto-save refs (declared early so handleClose can flush)
+  const autoSaveTimerRef = useRef(null);
+  const pendingAutoSaveRef = useRef(null);
+  const flushRef = useRef(null); // Holds executeAutoSave once available
+
   // Handle close with animation
   const handleClose = useCallback(() => {
+    // Flush any pending auto-save before closing
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (pendingAutoSaveRef.current) {
+      // Use a microtask so executeAutoSave (defined later) is available via ref
+      const pending = pendingAutoSaveRef.current;
+      pendingAutoSaveRef.current = null;
+      flushRef.current?.(pending);
+    }
     setIsClosing(true);
     setTimeout(() => {
       setEditingMessage(null);
@@ -309,12 +328,85 @@ const MessageEditorDialog = ({
     return () => clearTimeout(timer);
   }, [editingMessage?.id]);
 
-  // Auto-save debounce timer ref
-  const autoSaveTimerRef = useRef(null);
+  // Core save logic — shared by debounced auto-save and flush
+  const executeAutoSave = useCallback((updatedMessage) => {
+    const allFields = {
+      name: updatedMessage.name,
+      number: updatedMessage.number,
+      variant: updatedMessage.variant,
+      status: updatedMessage.status,
+      poms_id: updatedMessage.poms_id,
+      start_date: updatedMessage.start_date,
+      end_date: updatedMessage.end_date,
+      template: updatedMessage.template,
+      headline: updatedMessage.headline,
+      copy1: updatedMessage.copy1,
+      copy2: updatedMessage.copy2,
+      disclaimer: updatedMessage.disclaimer,
+      flash: updatedMessage.flash,
+      cta: updatedMessage.cta,
+      landingUrl: updatedMessage.landingUrl,
+      template_variant_classes: updatedMessage.template_variant_classes,
+      image1: updatedMessage.image1,
+      image2: updatedMessage.image2,
+      image3: updatedMessage.image3,
+      image4: updatedMessage.image4,
+      image5: updatedMessage.image5,
+      image6: updatedMessage.image6,
+      video1: updatedMessage.video1,
+      comment: updatedMessage.comment,
+      headline_style: updatedMessage.headline_style,
+      copy1_style: updatedMessage.copy1_style,
+      copy2_style: updatedMessage.copy2_style,
+      disclaimer_style: updatedMessage.disclaimer_style,
+      flash_style: updatedMessage.flash_style,
+      cta_style: updatedMessage.cta_style,
+      css: updatedMessage.css
+    };
+
+    // Update message in matrix state
+    updateMessage(updatedMessage.id, allFields);
+
+    // Find synced messages (same number + variant, different id)
+    const variantCopies = messages.filter(m =>
+      m.id !== updatedMessage.id &&
+      m.number === updatedMessage.number &&
+      m.variant === updatedMessage.variant &&
+      m.status !== 'deleted'
+    );
+
+    // Sync to variant copies
+    if (variantCopies.length > 0) {
+      const excludeFields = [
+        'audience', 'pmmid', 'id', 'version',
+        'utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_term', 'utm_cd26', 'final_trafficked_url'
+      ];
+      if (statusSyncMode === 'unique') {
+        excludeFields.push('status');
+      }
+
+      const syncUpdates = Object.keys(allFields)
+        .filter(key => !excludeFields.includes(key))
+        .reduce((obj, key) => {
+          obj[key] = allFields[key];
+          return obj;
+        }, {});
+
+      variantCopies.forEach(syncedMsg => {
+        updateMessage(syncedMsg.id, syncUpdates);
+      });
+    }
+  }, [messages, updateMessage, statusSyncMode]);
+
+  // Keep flushRef in sync so handleClose can call executeAutoSave
+  flushRef.current = executeAutoSave;
 
   // Event-based auto-save function (called from onChange handlers)
   const triggerAutoSave = useCallback((updatedMessage) => {
     if (!autoSave || !updatedMessage) return;
+
+    // Store pending message for flush
+    pendingAutoSaveRef.current = updatedMessage;
 
     // Clear existing timer
     if (autoSaveTimerRef.current) {
@@ -323,76 +415,22 @@ const MessageEditorDialog = ({
 
     // Debounce: wait 500ms before saving
     autoSaveTimerRef.current = setTimeout(() => {
-
-      // Build all fields to save
-      const allFields = {
-        name: updatedMessage.name,
-        number: updatedMessage.number,
-        variant: updatedMessage.variant,
-        status: updatedMessage.status,
-        poms_id: updatedMessage.poms_id,
-        start_date: updatedMessage.start_date,
-        end_date: updatedMessage.end_date,
-        template: updatedMessage.template,
-        headline: updatedMessage.headline,
-        copy1: updatedMessage.copy1,
-        copy2: updatedMessage.copy2,
-        disclaimer: updatedMessage.disclaimer,
-        flash: updatedMessage.flash,
-        cta: updatedMessage.cta,
-        landingUrl: updatedMessage.landingUrl,
-        template_variant_classes: updatedMessage.template_variant_classes,
-        image1: updatedMessage.image1,
-        image2: updatedMessage.image2,
-        image3: updatedMessage.image3,
-        image4: updatedMessage.image4,
-        image5: updatedMessage.image5,
-        image6: updatedMessage.image6,
-        video1: updatedMessage.video1,
-        comment: updatedMessage.comment,
-        headline_style: updatedMessage.headline_style,
-        copy1_style: updatedMessage.copy1_style,
-        copy2_style: updatedMessage.copy2_style,
-        disclaimer_style: updatedMessage.disclaimer_style,
-        flash_style: updatedMessage.flash_style,
-        cta_style: updatedMessage.cta_style,
-        css: updatedMessage.css
-      };
-
-      // Update message in matrix state
-      updateMessage(updatedMessage.id, allFields);
-
-      // Find synced messages (same number + variant, different id)
-      const variantCopies = messages.filter(m =>
-        m.id !== updatedMessage.id &&
-        m.number === updatedMessage.number &&
-        m.variant === updatedMessage.variant &&
-        m.status !== 'deleted'
-      );
-
-      // Sync to variant copies
-      if (variantCopies.length > 0) {
-        const excludeFields = [
-          'audience', 'pmmid', 'id', 'version',
-          'utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_term', 'utm_cd26', 'final_trafficked_url'
-        ];
-        if (statusSyncMode === 'unique') {
-          excludeFields.push('status');
-        }
-
-        const syncUpdates = Object.keys(allFields)
-          .filter(key => !excludeFields.includes(key))
-          .reduce((obj, key) => {
-            obj[key] = allFields[key];
-            return obj;
-          }, {});
-
-        variantCopies.forEach(syncedMsg => {
-          updateMessage(syncedMsg.id, syncUpdates);
-        });
-      }
+      pendingAutoSaveRef.current = null;
+      executeAutoSave(updatedMessage);
     }, 500);
-  }, [autoSave, messages, updateMessage, statusSyncMode]);
+  }, [autoSave, executeAutoSave]);
+
+  // Flush any pending auto-save immediately (call before navigation)
+  const flushAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (pendingAutoSaveRef.current) {
+      executeAutoSave(pendingAutoSaveRef.current);
+      pendingAutoSaveRef.current = null;
+    }
+  }, [executeAutoSave]);
 
   // Cleanup auto-save timer on unmount
   useEffect(() => {
@@ -1027,8 +1065,16 @@ const MessageEditorDialog = ({
     const templateName = editingMessage.template || 'html';
 
     // Inject base tag for relative URL resolution (scripts like thm.js, dynamic.content.js)
-    const baseTag = `<base href="/api/templates/${templateName}/">`;
+    const templateBase = `/api/templates/${templateName}/`;
+    const baseTag = `<base href="${templateBase}">`;
     html = html.replace(/<head>/i, `<head>\n${baseTag}`);
+
+    // Also rewrite relative script src attributes to absolute paths
+    // (base tag in srcDoc iframes is unreliable in some browsers)
+    html = html.replace(
+      /<script([^>]*)\ssrc="(?!https?:\/\/|\/\/)([^"]+)"/gi,
+      (match, attrs, src) => `<script${attrs} src="${templateBase}${src}"`
+    );
 
     if (templateConfig && templateConfig.placeholders) {
       Object.keys(templateConfig.placeholders).forEach(placeholderName => {
@@ -1206,11 +1252,18 @@ const MessageEditorDialog = ({
       return true;
     });
 
-  // Group by unique variant (number + variant) and keep only one representative per variant
+  // Group by unique variant (number + variant) and keep one representative per variant.
+  // Prefer the copy in the same audience as the currently-editing message so navigation
+  // doesn't jump to a different audience copy (which may have stale / different field values).
+  const currentAudience = editingMessage?.audience;
   const variantMap = new Map();
   filteredMessages.forEach(m => {
     const variantKey = `${m.number}-${m.variant || 'a'}`;
-    if (!variantMap.has(variantKey)) {
+    const existing = variantMap.get(variantKey);
+    if (!existing) {
+      variantMap.set(variantKey, m);
+    } else if (m.audience === currentAudience && existing.audience !== currentAudience) {
+      // Replace with the copy that matches the current audience
       variantMap.set(variantKey, m);
     }
   });
@@ -2000,6 +2053,7 @@ const MessageEditorDialog = ({
               <button
                 onClick={() => {
                   if (uniqueVariants.length === 0) return;
+                  flushAutoSave();
                   const targetIndex = hasPrevious ? currentIndex - 1 : uniqueVariants.length - 1;
                   setEditingMessage(uniqueVariants[targetIndex]);
                 }}
@@ -2046,6 +2100,7 @@ const MessageEditorDialog = ({
               <button
                 onClick={() => {
                   if (uniqueVariants.length === 0) return;
+                  flushAutoSave();
                   const targetIndex = hasNext ? currentIndex + 1 : 0;
                   setEditingMessage(uniqueVariants[targetIndex]);
                 }}
@@ -2358,7 +2413,17 @@ const MessageEditorDialog = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">PMMID (Auto-generated)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label className="form-label">PMMID (Auto-generated)</label>
+                        {onToggleDefaultPMMID && (
+                          <button
+                            onClick={() => onToggleDefaultPMMID(editingMessage)}
+                            className={`toggle-tag ${defaultPMMIDMap[`${editingMessage.number || ''}${editingMessage.variant || ''}`] === String(editingMessage.id) ? 'active' : ''}`}
+                          >
+                            default
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={generatePMMID(editingMessage, audiences, settings.getPattern('pmmid'))}

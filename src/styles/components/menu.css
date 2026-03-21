@@ -28,6 +28,35 @@
   height: 24px;
 }
 
+/* --- Fullscreen Toggle Button (below hamburger, matches bottom-bar toggle) --- */
+.fullscreen-btn {
+  position: fixed;
+  top: calc(var(--space-6) + var(--hamburger-size) + 16px);
+  left: calc(var(--space-6) + (var(--hamburger-size) - 28px) / 2);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--main-ui-color);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: var(--z-hamburger);
+  transition: opacity var(--transition-base);
+  opacity: 0.5;
+}
+
+.fullscreen-btn:hover {
+  opacity: 0.9;
+}
+
+.fullscreen-btn svg {
+  color: var(--color-white);
+  width: 14px;
+  height: 14px;
+}
+
 /* --- Menu Panel --- */
 .menu-panel {
   position: fixed;
@@ -55,6 +84,7 @@
   transform: scale(1);
   opacity: 1;
   pointer-events: auto;
+  z-index: calc(var(--z-hamburger) + 1);
 }
 
 .menu-content {
@@ -270,4 +300,25 @@
   .menu-selector {
     height: 40px;
   }
+}
+
+/* --- Capsule design: pin menu elements to original radius --- */
+.capsule-design .menu-panel {
+  border-radius: 14px;
+}
+
+.capsule-design .hamburger-btn {
+  border-radius: 7px;
+}
+
+.capsule-design .fullscreen-btn {
+  border-radius: 50%;
+}
+
+.capsule-design .menu-nav-link {
+  border-radius: 7px;
+}
+
+.capsule-design .menu-nav-indicator {
+  border-radius: 7px;
 }

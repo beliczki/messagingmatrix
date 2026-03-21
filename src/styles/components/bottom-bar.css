@@ -161,6 +161,11 @@
   margin: 0;
 }
 
+/* --- Capsule design: pin bottom panel box to original radius --- */
+.capsule-design .bottom-panel {
+  border-radius: 10px;
+}
+
 /* --- Responsive adjustments --- */
 @media (max-width: 768px) {
   .bottom-bar {

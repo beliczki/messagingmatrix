@@ -437,3 +437,48 @@
   font-weight: 600;
   text-transform: uppercase;
 }
+
+/* --- Capsule design: pin toolbar elements to original radius --- */
+.capsule-design .toolbar {
+  border-radius: 14px;
+}
+
+.capsule-design .toolbar-toggle {
+  border-radius: 7px;
+}
+
+.capsule-design .toolbar-btn {
+  border-radius: 7px;
+}
+
+.capsule-design .toolbar-view-toggle {
+  border-radius: 7px;
+}
+
+.capsule-design .toolbar-view-btn {
+  border-radius: 5px;
+}
+
+.capsule-design .toolbar-search {
+  border-radius: 7px;
+}
+
+.capsule-design .zoom-controls {
+  border-radius: 7px;
+}
+
+.capsule-design .zoom-btn {
+  border-radius: 5px;
+}
+
+.capsule-design .nav-pad-btn {
+  border-radius: 5px;
+}
+
+.capsule-design .filter-dropdown-menu {
+  border-radius: 7px;
+}
+
+.capsule-design .filter-dropdown-item {
+  border-radius: 5px;
+}

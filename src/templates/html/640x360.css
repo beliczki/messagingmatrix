@@ -88,6 +88,8 @@ body .fullSurfaceImage #cardContainer  {  transform-origin: 100% 100%;  transfor
 body .fullSurfaceImage #cardWrapper > div { background-position: right bottom; }
 body .fullSurfaceImage.bottomRoundedFrame #cardContainer { bottom:2rem; }
 
+
+
 body .animated.imageAndColor2 main {
   left:100%;
   top: 0%;
@@ -108,6 +110,11 @@ body #adContainer.animated.imageAndColor2 #backgroundContainer {
 .campaignImage #imageWrapper div {
 background-size: 193%;
   background-position: -241px -128px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: -330px -370px;
 }
 
 /* -----------------------------------------*/

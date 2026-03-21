@@ -522,12 +522,21 @@ const MediaLibraryBase = ({
 
   // Build masonry with placeholders for visible chunks only
   useEffect(() => {
-    if (viewMode === 'list') return;
+    const initialLoadSize = loadChunkSize * 2; // First 2 chunks
+
+    if (viewMode === 'list') {
+      // Reset virtual scroll state for list view when items change
+      setLoadedStart(0);
+      setLoadedEnd(initialLoadSize);
+      setTotalVisible(initialLoadSize);
+      setNextItemIndex(0);
+      chunkBoundaries.current = new Map();
+      return;
+    }
 
     const filtered = filterAssets(items, filterText);
 
     // Only build placeholders for initial visible chunks (not all items!)
-    const initialLoadSize = loadChunkSize * 2; // First 2 chunks
     const visibleItems = filtered.slice(0, initialLoadSize);
 
     // Build masonry layout with only the visible chunk items

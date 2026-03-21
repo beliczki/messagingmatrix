@@ -20,12 +20,7 @@ const BottomBar = ({ children }) => {
   };
 
   const childArray = Children.toArray(children);
-  const showToggle = childArray.length >= 2;
-  const isSides = layout === 'sides' && showToggle;
-
-  if (!showToggle) {
-    return <div className="bottom-bar">{children}</div>;
-  }
+  const isSides = layout === 'sides';
 
   return (
     <div className={`bottom-bar bottom-bar--animated ${isSides ? 'bottom-bar--sides' : ''}`}>

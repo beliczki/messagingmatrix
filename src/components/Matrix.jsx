@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Save, RefreshCw, ExternalLink, AlertCircle, Edit2, X, Trash2, Eye, Settings, ChevronLeft, ChevronRight, Sparkles, Loader, Table, GitBranch, List, Users as UsersIcon } from 'lucide-react';
@@ -20,6 +20,7 @@ import MessageEditorDialog from './MessageEditorDialog';
 import AudienceEditorDialog from './AudienceEditorDialog';
 import TopicEditorDialog from './TopicEditorDialog';
 import OrphanedMessagesDialog from './OrphanedMessagesDialog';
+import InactiveDefaultsDialog from './InactiveDefaultsDialog';
 import MatrixControlPanel from './MatrixControlPanel';
 import FeedTableView from './FeedTableView';
 import MatrixGridView from './MatrixGridView';
@@ -151,7 +152,7 @@ const Matrix = ({
   const [selectedMessages, setSelectedMessages] = useState(new Set());
   const [selectModeCell, setSelectModeCell] = useState(null); // { topic, audience } - cell where selection started
   const [shakingMessageId, setShakingMessageId] = useState(null); // Message currently showing shake animation
-  const [longPressTimer, setLongPressTimer] = useState(null);
+  const longPressTimerRef = useRef(null);
   const [dragHoverCell, setDragHoverCell] = useState(null); // { topic, audience }
   const [isDraggingSelected, setIsDraggingSelected] = useState(false); // Track if we're dragging selected messages (for UI updates)
   const [isCopyModeUI, setIsCopyModeUI] = useState(false); // For UI feedback only (updated in onDragOver)
@@ -534,6 +535,34 @@ const Matrix = ({
   // Template sizes map: { templateName: ['300x250', '640x360', ...] }
   const [templateSizesMap, setTemplateSizesMap] = useState({});
 
+  // Default PMMID map: { "156c": "msg-id-42" } — keyed by number+variant, value is message id
+  const [defaultPMMIDMap, setDefaultPMMIDMap] = useState(() => {
+    try {
+      const stored = localStorage.getItem('matrix_defaultPMMID');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
+  // Persist defaultPMMIDMap to localStorage
+  useEffect(() => {
+    localStorage.setItem('matrix_defaultPMMID', JSON.stringify(defaultPMMIDMap));
+  }, [defaultPMMIDMap]);
+
+  // Toggle default PMMID for a message's number+variant
+  const toggleDefaultPMMID = useCallback((message) => {
+    const nv = `${message.number || ''}${message.variant || ''}`;
+    if (!nv) return;
+    const msgId = String(message.id);
+    setDefaultPMMIDMap(prev => {
+      if (prev[nv] === msgId) {
+        const next = { ...prev };
+        delete next[nv];
+        return next;
+      }
+      return { ...prev, [nv]: msgId };
+    });
+  }, []);
+
   // Fetch template sizes for feed text formatting
   useEffect(() => {
     const fetchTemplateSizes = async () => {
@@ -670,6 +699,27 @@ const Matrix = ({
     }
   }, [messages, audiences, topics]);
 
+  // Detect inactive default PMMID messages after data load
+  const [showInactiveDefaultsDialog, setShowInactiveDefaultsDialog] = useState(false);
+  const inactiveDefaultsCheckedRef = useRef(null); // tracks lastSync to avoid re-showing
+  useEffect(() => {
+    if (!messages?.length || !lastSync || lastSync === inactiveDefaultsCheckedRef.current) return;
+    inactiveDefaultsCheckedRef.current = lastSync;
+
+    const INACTIVE_STATUSES = ['INACTIVE', 'DEAD', 'ERROR'];
+    let hasProblems = false;
+    for (const [, msgId] of Object.entries(defaultPMMIDMap)) {
+      const msg = messages.find(m => String(m.id) === msgId && m.status !== 'deleted');
+      if (!msg || INACTIVE_STATUSES.includes((msg.status || 'INCOMING').toUpperCase())) {
+        hasProblems = true;
+        break;
+      }
+    }
+    if (hasProblems) {
+      setShowInactiveDefaultsDialog(true);
+    }
+  }, [messages, lastSync, defaultPMMIDMap]);
+
   // Load tree and feed structures from settings on mount
   useEffect(() => {
     const loadStructures = async () => {
@@ -779,6 +829,17 @@ const Matrix = ({
       setProductFilters(validFilters);
     }
   }, [audiences, topics]);
+
+  // Clean up stale status filters (statuses that no longer exist in keywords)
+  useEffect(() => {
+    if (statusFilters.length === 0) return;
+    const validStatuses = keywords.messages?.status || ['INCOMING', 'NAMING', 'CONTENT', 'PREVIEW', 'APPROVED', 'ACTIVE', 'INACTIVE', 'ERROR'];
+    const validFilters = statusFilters.filter(s => validStatuses.includes(s));
+    if (validFilters.length !== statusFilters.length) {
+      console.log('🧹 Cleaning up stale status filters:', statusFilters.filter(s => !validStatuses.includes(s)));
+      setStatusFilters(validFilters);
+    }
+  }, [keywords]);
 
   // Sync feedPatterns with feedStructure - ensure all columns have patterns
   useEffect(() => {
@@ -956,7 +1017,7 @@ const Matrix = ({
       return commonMappings[cleanNameLower] || `{{${cleanNameLower}}}`;
     };
 
-    return htmlTemplateMessages.map((msg) => {
+    return htmlTemplateMessages.flatMap((msg) => {
       const status = (msg.status || 'INCOMING').toUpperCase();
       const context = {
         ...msg,
@@ -972,6 +1033,14 @@ const Matrix = ({
 
       // Build feed row object
       const feedRow = {};
+      const msgIdentifiers = {
+        id: String(msg.id),
+        poms_id: msg.poms_id,
+        name: msg.name,
+        number: String(msg.number || ''),
+        variant: msg.variant || '',
+        numberVariant: `${msg.number || ''}${msg.variant || ''}`
+      };
       columns.forEach(colName => {
         const pattern = feedPatterns[colName] || getDefaultPattern(colName);
         let cellValue = evaluatePattern(pattern, context);
@@ -984,24 +1053,79 @@ const Matrix = ({
         );
 
         if (isTextField && cellValue) {
-          // Pass message object with multiple identifiers for MC scope matching
-          const msgIdentifiers = {
-            id: String(msg.id),
-            poms_id: msg.poms_id,
-            name: msg.name,
-            number: String(msg.number || ''),
-            variant: msg.variant || '',
-            numberVariant: `${msg.number || ''}${msg.variant || ''}`
-          };
           cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap[msg.template] || null);
         }
 
         feedRow[colName] = cellValue;
       });
 
-      return feedRow;
+      // Set IsDefault to False for normal rows
+      const isDefaultColName = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'isdefault');
+      if (isDefaultColName) feedRow[isDefaultColName] = 'False';
+
+      // Check if this message is marked as default
+      const nv = `${msg.number || ''}${msg.variant || ''}`;
+      const isDefault = nv && defaultPMMIDMap[nv] === String(msg.id);
+
+      if (!isDefault) return [feedRow];
+
+      // Build default row: re-evaluate columns whose patterns contain {{Audience_Key}}
+      const defaultRow = { ...feedRow };
+      const defaultContext = { ...context, Audience_Key: 'default' };
+      columns.forEach(colName => {
+        const pattern = feedPatterns[colName] || getDefaultPattern(colName);
+        if (pattern.includes('{{Audience_Key}}') || pattern.includes('{{audience_key}}')) {
+          let cellValue = evaluatePattern(pattern, defaultContext);
+          const patternLower = pattern.toLowerCase();
+          const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+          const isTextField = textFields.some(field => patternLower.includes(`{{${field}}}`));
+          if (isTextField && cellValue) {
+            cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap[msg.template] || null);
+          }
+          defaultRow[colName] = cellValue;
+        }
+      });
+
+      // Override advert_id and IsDefault for the default row
+      const advertIdCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'advert_id');
+      if (advertIdCol) defaultRow[advertIdCol] = '1';
+      if (isDefaultColName) defaultRow[isDefaultColName] = 'True';
+
+      // Replace audience portion in PMMID and ReportingLabel with DEFAULT, lineitem with ANY
+      const applyDefaultTransforms = (value) => {
+        let v = value;
+        // Replace between -a_ and -m_ with DEFAULT
+        v = v.replace(/(-a_)[^-]*(-m_)/, '$1DEFAULT$2');
+        // Replace lineitem number at end: -l_<digits> → -l_ANY
+        v = v.replace(/-l_\d+$/, '-l_ANY');
+        return v;
+      };
+      const pmmidCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'pmmid');
+      if (pmmidCol && defaultRow[pmmidCol]) defaultRow[pmmidCol] = applyDefaultTransforms(defaultRow[pmmidCol]);
+      const reportingLabelCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'reportinglabel');
+      if (reportingLabelCol && defaultRow[reportingLabelCol]) defaultRow[reportingLabelCol] = applyDefaultTransforms(defaultRow[reportingLabelCol]);
+
+      return [feedRow, defaultRow];
     });
-  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting, matrixData?.keywords, templateSizesMap]);
+
+    // Strip line breaks from all cell values
+    rows.forEach(row => {
+      columns.forEach(col => {
+        if (typeof row[col] === 'string') {
+          row[col] = row[col].replace(/[\r\n]+/g, ' ').replace(/\\n/g, ' ').trim();
+        }
+      });
+    });
+
+    // Sort default rows first
+    const isDefaultCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'isdefault');
+    if (isDefaultCol) {
+      const defaults = rows.filter(r => r[isDefaultCol] === 'True');
+      const normals = rows.filter(r => r[isDefaultCol] !== 'True');
+      return [...defaults, ...normals];
+    }
+    return rows;
+  }, [messages, audiences, topics, feedStructure, feedPatterns, textFormatting, matrixData?.keywords, templateSizesMap, defaultPMMIDMap]);
 
   // Generate feedFields structure for saving
   const feedFields = useMemo(() => {
@@ -1207,7 +1331,8 @@ const Matrix = ({
   if (deps.audiences !== audiences || deps.audienceFilter !== audienceFilter || deps.productFilters !== productFilters) {
     console.log('🟣 filteredAudiences RECOMPUTING (module-level cache miss)');
     persistentMatrixRefs.cachedFilteredAudiences = audiences.filter(aud => {
-      const matchesText = matchesFilter(aud.name + ' ' + aud.key + ' ' + (aud.strategy || '') + ' ' + (aud.lineitem_id || ''), audienceFilter);
+      const searchText = [aud.name, aud.key, aud.strategy, aud.lineitem_id, aud.buying_platform, aud.data_source, aud.targeting_type].filter(Boolean).join(' ');
+      const matchesText = matchesFilter(searchText, audienceFilter);
       const matchesProduct = productFilters.length === 0 || !aud.product || productFilters.includes(aud.product);
       return matchesText && matchesProduct;
     });
@@ -1254,9 +1379,13 @@ const Matrix = ({
       // Check MC text filter
       if (mcFilter.trim()) {
         const lowerFilter = mcFilter.toLowerCase();
+        const num = String(m.number || '');
         const searchableFields = [
-          String(m.number || ''),
+          num,
+          `mc${num}`,
           m.variant || '',
+          `${num}${m.variant || ''}`,
+          `mc${num}${m.variant || ''}`,
           m.name || '',
           m.headline || '',
           m.copy1 || '',
@@ -1272,10 +1401,18 @@ const Matrix = ({
     });
   }, [messages, mcFilter, filteredAudiences, filteredTopics, statusFilters]);
 
-  // Count messages with dynamic templates (for feed view export)
+  // Count messages with dynamic templates (for feed view export) and default rows
   const dynamicTemplateMessageCount = useMemo(() => {
-    return filteredMessages.filter(m => m.template && m.template !== 'Adobe PSD').length;
-  }, [filteredMessages]);
+    const nonHtmlTemplates = matrixData?.keywords?.messages?.template || [];
+    const count = filteredMessages.filter(m => m.template && m.template.trim() && !nonHtmlTemplates.includes(m.template)).length;
+    // Count how many of those are marked as default (will generate an extra row each)
+    const defaultCount = filteredMessages.filter(m => {
+      if (!m.template || !m.template.trim() || nonHtmlTemplates.includes(m.template)) return false;
+      const nv = `${m.number || ''}${m.variant || ''}`;
+      return nv && defaultPMMIDMap[nv] === String(m.id);
+    }).length;
+    return { count, defaultCount };
+  }, [filteredMessages, matrixData?.keywords, defaultPMMIDMap]);
 
   // Track filtered array changes using module-level refs
   const filteredAudiencesChanged = persistentMatrixRefs.prevFilteredAudiences !== filteredAudiences;
@@ -1330,10 +1467,13 @@ const Matrix = ({
 
   // Handle export filtered feed (called from toolbar)
   const handleExportFilteredFeed = async () => {
-    if (isExporting || dynamicTemplateMessageCount === 0) return;
+    if (isExporting || dynamicTemplateMessageCount.count === 0) return;
 
     setIsExporting(true);
     setExportStatus(null);
+
+    // Yield to let React paint the loading state before heavy computation
+    await new Promise(r => setTimeout(r, 0));
 
     try {
       // Build columns from feedStructure
@@ -1381,31 +1521,116 @@ const Matrix = ({
       }
 
       // Build export data from filtered messages
-      const exportData = dynamicTemplateMessages.map(msg => {
+      const exportData = dynamicTemplateMessages.flatMap(msg => {
         const row = {};
+        const msgIdentifiers = {
+          id: String(msg.id),
+          poms_id: msg.poms_id,
+          name: msg.name,
+          number: String(msg.number || ''),
+          variant: msg.variant || '',
+          numberVariant: `${msg.number || ''}${msg.variant || ''}`
+        };
+        const context = {
+          ...msg,
+          audiences,
+          topics,
+          Audience_Key: msg.audience,
+          Topic_Key: msg.topic,
+          Number: msg.number || '',
+          Variant: msg.variant || '',
+          Version: msg.version || '',
+          status: (msg.status || 'INCOMING').toUpperCase()
+        };
         columns.forEach(colName => {
           const pattern = feedPatterns[colName] || getDefaultPatternForExport(colName);
-          const context = {
-            ...msg,
-            audiences,
-            topics,
-            Audience_Key: msg.audience,
-            Topic_Key: msg.topic,
-            Number: msg.number || '',
-            Variant: msg.variant || '',
-            Version: msg.version || '',
-            status: (msg.status || 'INCOMING').toUpperCase()
-          };
-          row[colName] = evaluatePattern(pattern, context) || '';
+          let cellValue = evaluatePattern(pattern, context) || '';
+
+          // Apply text formatting with spans for text fields (same as feed view)
+          const patternLower = pattern.toLowerCase();
+          const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+          const isTextField = textFields.some(field =>
+            patternLower.includes(`{{${field}}}`)
+          );
+          if (isTextField && cellValue) {
+            cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap[msg.template] || null);
+          }
+
+          row[colName] = cellValue;
         });
-        return row;
+
+        // Set IsDefault to False for normal rows
+        const isDefaultColName = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'isdefault');
+        if (isDefaultColName) row[isDefaultColName] = 'False';
+
+        // Check if this message is marked as default
+        const nv = `${msg.number || ''}${msg.variant || ''}`;
+        const isDefault = nv && defaultPMMIDMap[nv] === String(msg.id);
+
+        if (!isDefault) return [row];
+
+        // Build default row: re-evaluate columns whose patterns contain {{Audience_Key}}
+        const defaultRow = { ...row };
+        const defaultContext = { ...context, Audience_Key: 'default' };
+        columns.forEach(colName => {
+          const pattern = feedPatterns[colName] || getDefaultPatternForExport(colName);
+          if (pattern.includes('{{Audience_Key}}') || pattern.includes('{{audience_key}}')) {
+            let cellValue = evaluatePattern(pattern, defaultContext) || '';
+            const patternLower = pattern.toLowerCase();
+            const textFields = ['headline', 'copy1', 'copy2', 'flash', 'cta', 'disclaimer'];
+            const isTextField = textFields.some(field => patternLower.includes(`{{${field}}}`));
+            if (isTextField && cellValue) {
+              cellValue = applyTextFormattingSpans(cellValue, textFormatting, msgIdentifiers, templateSizesMap[msg.template] || null);
+            }
+            defaultRow[colName] = cellValue;
+          }
+        });
+
+        // Override advert_id and IsDefault for the default row
+        const advertIdCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'advert_id');
+        if (advertIdCol) defaultRow[advertIdCol] = '1';
+        if (isDefaultColName) defaultRow[isDefaultColName] = 'True';
+
+        // Replace audience portion in PMMID and ReportingLabel with DEFAULT, lineitem with ANY
+        const applyDefaultTransforms = (value) => {
+          let v = value;
+          v = v.replace(/(-a_)[^-]*(-m_)/, '$1DEFAULT$2');
+          v = v.replace(/-l_\d+$/, '-l_ANY');
+          return v;
+        };
+        const pmmidCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'pmmid');
+        if (pmmidCol && defaultRow[pmmidCol]) defaultRow[pmmidCol] = applyDefaultTransforms(defaultRow[pmmidCol]);
+        const reportingLabelCol = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'reportinglabel');
+        if (reportingLabelCol && defaultRow[reportingLabelCol]) defaultRow[reportingLabelCol] = applyDefaultTransforms(defaultRow[reportingLabelCol]);
+
+        return [row, defaultRow];
       });
 
-      console.log('📤 [Matrix] Exporting filtered feed:', exportData.length, 'rows');
-      await sheetsService.writeFilteredFeed(columns, exportData);
+      // Sort default rows first (after header)
+      const defaultRows = exportData.filter(r => {
+        const col = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'isdefault');
+        return col && r[col] === 'True';
+      });
+      const normalRows = exportData.filter(r => {
+        const col = columns.find(c => c.toLowerCase().replace(/^[^:]+:/, '').toLowerCase() === 'isdefault');
+        return !col || r[col] !== 'True';
+      });
+      const sortedExportData = [...defaultRows, ...normalRows];
+
+      // Strip line breaks from all cell values
+      sortedExportData.forEach(row => {
+        columns.forEach(col => {
+          if (typeof row[col] === 'string') {
+            row[col] = row[col].replace(/[\r\n]+/g, ' ').replace(/\\n/g, ' ').trim();
+          }
+        });
+      });
+
+      console.log('📤 [Matrix] Exporting filtered feed:', sortedExportData.length, 'rows');
+      await sheetsService.writeFilteredFeed(columns, sortedExportData);
 
       // Create XLSX file and download
-      const wsData = [columns, ...exportData.map(row => columns.map(col => row[col] || ''))];
+      const wsData = [columns, ...sortedExportData.map(row => columns.map(col => row[col] || ''))];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'filtered_feed');
@@ -1805,17 +2030,17 @@ const Matrix = ({
       setSelectModeCell({ topic: msg.topic, audience: msg.audience }); // Track which cell selection started
       justEnteredSelectMode.current = true; // Mark that we just entered select mode
       console.log('📌 Entered select mode with message:', msg.id, 'in cell:', msg.topic, msg.audience);
-      setLongPressTimer(null);
+      longPressTimerRef.current = null;
     }, 500); // 500ms long press
 
-    setLongPressTimer(timer);
+    longPressTimerRef.current = timer;
   };
 
   const handleMessageMouseUp = (e, msg) => {
     // Clear long press timer if it's still pending (means it was a short click)
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
       // If NOT in select mode and we're clearing a timer, it was just a short click
       if (!isSelectMode) {
         return;
@@ -1985,9 +2210,9 @@ const Matrix = ({
   // Handle drag
   const onDragStart = (e, msg) => {
     // Cancel long press timer when drag starts to prevent entering select mode
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
 
     console.log('🔍 onDragStart called:', {
@@ -2388,7 +2613,8 @@ const Matrix = ({
           audiences: filteredAudiences.length,
           topics: filteredTopics.length,
           messages: filteredMessages.length,
-          dynamicTemplateMessages: dynamicTemplateMessageCount
+          dynamicTemplateMessages: dynamicTemplateMessageCount.count,
+          dynamicTemplateDefaults: dynamicTemplateMessageCount.defaultCount
         }}
         // View variant props
         treeOrientation={treeOrientation}
@@ -2459,7 +2685,7 @@ const Matrix = ({
           />
         ) : viewMode === 'feed' ? (
           <FeedTableView
-            messages={messages}
+            messages={filteredMessages}
             audiences={audiences}
             topics={topics}
             feedStructure={feedStructure}
@@ -2517,6 +2743,7 @@ const Matrix = ({
             onMessageMouseDown={handleMessageMouseDown}
             onMessageMouseUp={handleMessageMouseUp}
             staticTemplates={matrixData?.keywords?.messages?.template || []}
+            defaultPMMIDMap={defaultPMMIDMap}
           />
         )}
       </div>
@@ -2524,6 +2751,8 @@ const Matrix = ({
       {/* Message Edit Dialog with Tabs */}
       <MessageEditorDialog
         editingMessage={editingMessage}
+        defaultPMMIDMap={defaultPMMIDMap}
+        onToggleDefaultPMMID={toggleDefaultPMMID}
         setEditingMessage={handleSetEditingMessage}
         audiences={audiences}
         topics={topics}
@@ -2628,6 +2857,33 @@ const Matrix = ({
         setCorrectingMessage={setCorrectingMessage}
         onCorrect={handleCorrectOrphanedMessage}
         onClose={() => setShowOrphanedDialog(false)}
+      />
+
+      {/* Inactive Default PMMID Dialog */}
+      <InactiveDefaultsDialog
+        show={showInactiveDefaultsDialog}
+        defaultPMMIDMap={defaultPMMIDMap}
+        messages={messages}
+        audiences={audiences}
+        onSelectNewDefault={(msg) => {
+          toggleDefaultPMMID(msg);
+          // Check if there are more inactive defaults
+          const INACTIVE_STATUSES = ['INACTIVE', 'DEAD', 'ERROR'];
+          const remaining = Object.entries(defaultPMMIDMap).filter(([nv, id]) => {
+            if (nv === `${msg.number || ''}${msg.variant || ''}`) return false; // just resolved
+            const m = messages.find(x => String(x.id) === id && x.status !== 'deleted');
+            return m && INACTIVE_STATUSES.includes((m.status || 'INCOMING').toUpperCase());
+          });
+          if (remaining.length === 0) setShowInactiveDefaultsDialog(false);
+        }}
+        onRemoveDefault={(nv) => {
+          setDefaultPMMIDMap(prev => {
+            const next = { ...prev };
+            delete next[nv];
+            return next;
+          });
+        }}
+        onClose={() => setShowInactiveDefaultsDialog(false)}
       />
 
       {/* Bottom Bar - Rendered via portal to ensure it's above dialogs */}

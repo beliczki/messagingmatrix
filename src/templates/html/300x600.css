@@ -53,16 +53,16 @@ body .fullSurfaceColor.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
 body .fullSurfaceColor #logoContainer { top:0px; }
 body .fullSurfaceColor #logoContainer img { height:2.4rem; }
 
-body .fullSurfaceColor #textContainer { width: 100%; height: 50%; bottom: 0; top: auto; position: absolute; padding-top:1rem;}
-body .fullSurfaceColor #buttonWrapper { margin-top: 1rem; margin-bottom:0; }
-body .fullSurfaceColor #headlineWrapper {  margin-top:auto;}
+body .fullSurfaceColor #textContainer { width: 100%; height: 100%;  top: 0rem; bottom:auto; position: absolute; padding-top:5rem;}
+body .fullSurfaceColor #buttonWrapper { margin-top: auto; margin-bottom:0; }
+body .fullSurfaceColor #headlineWrapper {  margin-top:0;}
 body .fullSurfaceColor #headlineWrapper,
 body .fullSurfaceColor #copyWrapper1,
 body .fullSurfaceColor #copyWrapper2 { width:100%;}
 body .fullSurfaceColor #disclaimerWrapper1 {  margin-bottom:0; }
-body .fullSurfaceColor #stickerContainer  { transform: scale(0.5); top: -2rem; transform-origin: 100% 0%; }
+body .fullSurfaceColor #stickerContainer  { transform: scale(0.5); top: 47%; transform-origin: 100% 0%; }
 body .fullSurfaceColor.bottomRoundedFrame #stickerContainer  { top: -2.5rem; }
-body .fullSurfaceColor #objectWrapper { width:100%; height:45%; left:0; right:0; top:4rem;}
+body .fullSurfaceColor #objectWrapper { width:100%; height:45%; left:0; right:0; top:auto; bottom: 5%;}
 body .fullSurfaceColor.largeGfx #objectWrapper { width: 130%; height: 52%; left: -15%; right: -15%; top: 2.5rem; }
 
 body .fullSurfaceColor.bottomSticker #textContainer {   height:100%; padding-top:4.5rem;}
@@ -91,6 +91,9 @@ body .fullSurfaceImage.bottomSticker #buttonWrapper {  margin-top: 1rem; margin-
 body .fullSurfaceImage.bottomSticker #disclaimerWrapper1 {  margin-bottom:auto; width:50%;}
 body .fullSurfaceImage.bottomSticker #stickerContainer  {  bottom: 13%; top: auto; right: 8%; }
 
+body .preCompBg main { top:0px; bottom auto;}
+body .preCompBg #backgroundContainer { height:100%;}
+body .preCompBg #logoContainer { top:0px; }
 
 body .animated #backgroundContainer {
   width: 100%;
@@ -145,6 +148,11 @@ body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;
 .campaignImage #imageWrapper div {
   background-size: 400%;
   background-position: -450px -2px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: -1050px -370px;
 }
 
 /* -----------------------------------------*/

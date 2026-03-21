@@ -68,6 +68,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     const saved = localStorage.getItem('creativeLibrary_sizeFilter');
     return saved ? JSON.parse(saved) : [];
   });
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_statusFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Sorting state (persisted to localStorage)
   const [sortColumn, setSortColumn] = useState(() => {
@@ -301,9 +305,17 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       setLoadingDrive(true);
       setSyncProgress({ type: 'loading', message: 'Loading creatives from Drive...' });
 
-      // Load all files from Drive
-      const driveData = await loadDriveAssets('creatives', { pageSize: 1000 });
-      const driveFiles = driveData.files;
+      // Load ALL files from Drive (paginate through all pages)
+      let driveFiles = [];
+      let pageToken = undefined;
+      do {
+        const driveData = await loadDriveAssets('creatives', { pageSize: 1000, pageToken });
+        driveFiles.push(...driveData.files);
+        pageToken = driveData.nextPageToken;
+        if (pageToken) {
+          setSyncProgress({ type: 'loading', message: `Loading creatives from Drive... (${driveFiles.length} so far)` });
+        }
+      } while (pageToken);
 
       // Get current spreadsheet File_driveIDs from matrixData.creatives
       const spreadsheetCreatives = matrixData?.creatives || [];
@@ -723,7 +735,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         extension: creative.File_format,
         url: thumbnailUrl, // Start with thumbnail
         fullResUrl: fullResUrl, // Store full resolution URL for later upgrade
-        product: creative.Product || creative.File_name,
+        product: creative.Product || '',
         size: creative.File_dimensions || '',
         date: creative.File_date || '',
         platforms: [],
@@ -1138,6 +1150,23 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     localStorage.setItem('creativeLibrary_sizeFilter', JSON.stringify(sizeFilter));
   }, [sizeFilter]);
 
+  // Get unique statuses from creatives
+  const availableStatuses = React.useMemo(() => {
+    const statuses = new Set();
+    creatives.forEach(creative => {
+      const status = creative.messageData?.status;
+      if (status && status.trim()) {
+        statuses.add(status.toUpperCase());
+      }
+    });
+    return Array.from(statuses).sort();
+  }, [creatives]);
+
+  // Save status filter to localStorage
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_statusFilter', JSON.stringify(statusFilter));
+  }, [statusFilter]);
+
   // Save sort preferences to localStorage
   useEffect(() => {
     localStorage.setItem('creativeLibrary_sortColumn', sortColumn);
@@ -1212,7 +1241,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         matchesSize = sizeFilter.includes(creative.size);
       }
 
-      return matchesProduct && matchesType && matchesSize;
+      // Status filter
+      let matchesStatus = statusFilter.length === 0; // No filter = show all
+      if (!matchesStatus) {
+        const creativeStatus = (creative.messageData?.status || '').toUpperCase();
+        matchesStatus = statusFilter.includes(creativeStatus);
+      }
+
+      return matchesProduct && matchesType && matchesSize && matchesStatus;
     });
 
     // Sort based on sortColumn and sortDirection
@@ -1300,7 +1336,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       // Apply direction
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [creatives, productFilter, typeFilter, sizeFilter, sortColumn, sortDirection, matrixData?.audiences]);
+  }, [creatives, productFilter, typeFilter, sizeFilter, statusFilter, sortColumn, sortDirection, matrixData?.audiences]);
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -1340,9 +1376,13 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             setTypeFilter={setTypeFilter}
             sizeFilter={sizeFilter}
             setSizeFilter={setSizeFilter}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
             availableProducts={availableProducts}
             typeOptions={typeOptions}
             availableSizes={availableSizes}
+            availableStatuses={availableStatuses}
+            statusColors={settings.getStatusColors?.() || {}}
             filteredCount={filteredCount}
             totalCount={totalItems}
             viewMode={viewMode}

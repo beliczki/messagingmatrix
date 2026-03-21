@@ -1,12 +1,6 @@
 import React from 'react';
 import settings from '../services/settings';
 import { applyTextFormattingSpans } from '../utils/textFormatter';
-import mainCss from '../templates/html/main.css?raw';
-import css300x250 from '../templates/html/300x250.css?raw';
-import css300x600 from '../templates/html/300x600.css?raw';
-import css640x360 from '../templates/html/640x360.css?raw';
-import css970x250 from '../templates/html/970x250.css?raw';
-import css1080x1080 from '../templates/html/1080x1080.css?raw';
 
 /**
  * Reusable template preview component
@@ -70,18 +64,9 @@ const TemplatePreview = ({
     result = result.replace(/<head>/i, `<head>\n${baseTag}`);
 
     // Inject CSS inline - replace <link> tags with <style> tags
-    // Use custom CSS props if provided, otherwise fall back to hardcoded imports
-    const effectiveMainCss = customMainCss !== null ? customMainCss : mainCss;
-
-    const cssMap = {
-      '300x250': css300x250,
-      '300x600': css300x600,
-      '640x360': css640x360,
-      '970x250': css970x250,
-      '1080x1080': css1080x1080
-    };
-
-    const effectiveSizeCss = customSizeCss !== null ? customSizeCss : (cssMap[previewSize] || '');
+    // CSS is always provided via customMainCss/customSizeCss props (loaded from API)
+    const effectiveMainCss = customMainCss || '';
+    const effectiveSizeCss = customSizeCss || '';
 
     if (effectiveMainCss || effectiveSizeCss) {
       const combinedCss = `${effectiveMainCss}\n${effectiveSizeCss}`;

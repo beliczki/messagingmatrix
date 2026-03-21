@@ -651,7 +651,7 @@ const MatrixControlPanel = ({
                     ? 'Exported!'
                     : exportStatus === 'error'
                       ? 'Export Failed'
-                      : `Export Filtered Feed (${filteredCounts.dynamicTemplateMessages || 0})`
+                      : `Export Filtered Feed (${filteredCounts.dynamicTemplateMessages || 0}${(filteredCounts.dynamicTemplateDefaults || 0) > 0 ? ` +${filteredCounts.dynamicTemplateDefaults} Default` : ''})`
                 }
               </button>
             </div>

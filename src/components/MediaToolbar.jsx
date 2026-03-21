@@ -15,9 +15,13 @@ const MediaToolbar = ({
   setTypeFilter,
   sizeFilter = [],
   setSizeFilter,
+  statusFilter = [],
+  setStatusFilter,
   availableProducts = [],
   typeOptions = ['Dynamic HTML', 'Adobe generated'],
   availableSizes = [],
+  availableStatuses = [],
+  statusColors = {},
   // Count props
   filteredCount = 0,
   totalCount = 0,
@@ -60,6 +64,7 @@ const MediaToolbar = ({
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
 
   // Refs
@@ -67,6 +72,7 @@ const MediaToolbar = ({
   const productDropdownRef = useRef(null);
   const typeDropdownRef = useRef(null);
   const sizeDropdownRef = useRef(null);
+  const statusDropdownRef = useRef(null);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, toolbarX: 0, toolbarY: 0 });
 
@@ -93,6 +99,9 @@ const MediaToolbar = ({
       }
       if (sizeDropdownRef.current && !sizeDropdownRef.current.contains(e.target)) {
         setSizeDropdownOpen(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target)) {
+        setStatusDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -147,32 +156,43 @@ const MediaToolbar = ({
     document.removeEventListener('mouseup', handleDragEnd);
   };
 
-  // Toggle helpers
+  // Toggle helpers - use functional updaters to prevent stale closure bugs
   const toggleProduct = (product) => {
     if (!setProductFilter) return;
-    if (productFilter.includes(product)) {
-      setProductFilter(productFilter.filter(p => p !== product));
-    } else {
-      setProductFilter([...productFilter, product]);
-    }
+    setProductFilter(prev =>
+      prev.includes(product) ? prev.filter(p => p !== product) : [...prev, product]
+    );
   };
 
   const toggleType = (type) => {
     if (!setTypeFilter) return;
-    if (typeFilter.includes(type)) {
-      setTypeFilter(typeFilter.filter(t => t !== type));
-    } else {
-      setTypeFilter([...typeFilter, type]);
-    }
+    setTypeFilter(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
   };
 
   const toggleSize = (size) => {
     if (!setSizeFilter) return;
-    if (sizeFilter.includes(size)) {
-      setSizeFilter(sizeFilter.filter(s => s !== size));
-    } else {
-      setSizeFilter([...sizeFilter, size]);
-    }
+    setSizeFilter(prev =>
+      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
+    );
+  };
+
+  const toggleStatus = (status) => {
+    if (!setStatusFilter) return;
+    setStatusFilter(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const getTextColor = (bgColor) => {
+    if (!bgColor) return '#000000';
+    const hex = bgColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
   };
 
   return (
@@ -225,9 +245,10 @@ const MediaToolbar = ({
             </div>
           )}
 
-          {/* Product Filter Dropdown */}
-          {setProductFilter && availableProducts.length > 0 && (
-            <div className="filter-group">
+          {/* Filter Dropdowns - grouped like Matrix toolbar */}
+          <div className="filter-group">
+            {/* Product Filter Dropdown */}
+            {setProductFilter && availableProducts.length > 0 && (
               <div className="filter-dropdown" ref={productDropdownRef}>
                 <button
                   className="filter-pill"
@@ -255,12 +276,10 @@ const MediaToolbar = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Type Filter Dropdown */}
-          {setTypeFilter && typeOptions.length > 0 && (
-            <div className="filter-group">
+            {/* Type Filter Dropdown */}
+            {setTypeFilter && typeOptions.length > 0 && (
               <div className="filter-dropdown" ref={typeDropdownRef}>
                 <button
                   className="filter-pill"
@@ -288,12 +307,53 @@ const MediaToolbar = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Size Filter Dropdown */}
-          {setSizeFilter && availableSizes.length > 0 && (
-            <div className="filter-group">
+            {/* Status Filter Dropdown */}
+            {setStatusFilter && availableStatuses.length > 0 && (
+              <div className="filter-dropdown" ref={statusDropdownRef}>
+                <button
+                  className="filter-pill"
+                  onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                >
+                  <Filter size={16} className="filter-pill-icon" />
+                  <span className="filter-pill-text">Status</span>
+                  <ChevronDown size={16} className={`filter-pill-chevron ${statusDropdownOpen ? 'open' : ''}`} />
+                  <span className={`filter-pill-badge ${statusFilter.length === 0 ? 'zero' : ''}`}>
+                    {statusFilter.length}
+                  </span>
+                </button>
+                {statusDropdownOpen && (
+                  <div className="filter-dropdown-menu">
+                    {availableStatuses.map(status => {
+                      const bgColor = statusColors[status.toUpperCase()] || '#cccccc';
+                      const textColor = getTextColor(bgColor);
+                      return (
+                        <button
+                          key={status}
+                          className="filter-dropdown-item"
+                          onClick={() => toggleStatus(status)}
+                        >
+                          <Check size={16} className={statusFilter.includes(status) ? 'visible' : 'hidden'} />
+                          <span
+                            className="status-chip"
+                            style={{ backgroundColor: bgColor, color: textColor }}
+                          >
+                            {status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {availableStatuses.length === 0 && (
+                      <div className="filter-dropdown-empty">No statuses available</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Size Filter Dropdown */}
+            {setSizeFilter && availableSizes.length > 0 && (
               <div className="filter-dropdown" ref={sizeDropdownRef}>
                 <button
                   className="filter-pill"
@@ -321,8 +381,8 @@ const MediaToolbar = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Text Filter */}
           {setFilterText && (
