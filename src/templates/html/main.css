@@ -48,6 +48,7 @@ body {
   background-color: #efefef;
   position: relative;
   transition: all 0.5s;
+  cursor: pointer;
 }
 
 main,

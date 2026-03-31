@@ -500,30 +500,32 @@
             return;
           }
 
+          // Parse "YYYY-MM-DD HH:mm" as local time (24h)
+          function parseLocalDate(s) {
+            var p = s.trim().split(/[\s\-:T]+/);
+            return new Date(+p[0], +p[1] - 1, +p[2], +p[3] || 0, +p[4] || 0);
+          }
+
           var now = new Date();
           // For testing: now.setDate(now.getDate() + 1);
 
-          var intervals = Object.keys(thmData);
-          for (var i = 0; i < intervals.length; i++) {
-            var interval = intervals[i];
-            var intervalDates = interval.split('_');
-
-            var startDate = Date.parse(intervalDates[0]);
-            var endDate = Date.parse(intervalDates[1]);
-
-            var startDateLaterThanNow = now > startDate;
-            var endDateEarlierThanNow = now <= endDate;
-
-            if (startDateLaterThanNow && endDateEarlierThanNow) {
-              var newValue = thmData[interval];
-              thmElement.innerHTML = newValue;
-              console.log('THM updated to:', newValue, '(from', thmKey + ')');
-              return;
+          // Pick the latest date that is not in the future
+          var best = null;
+          var bestDate = null;
+          var dates = Object.keys(thmData);
+          for (var i = 0; i < dates.length; i++) {
+            var d = parseLocalDate(dates[i]);
+            if (d <= now && (bestDate === null || d > bestDate)) {
+              bestDate = d;
+              best = thmData[dates[i]];
             }
           }
 
-          if (!thmElement.innerHTML || !thmElement.innerHTML.trim().length) {
-            console.error('THM: No matching interval found for', thmKey);
+          if (best) {
+            thmElement.innerHTML = best;
+            console.log('THM updated to:', best, '(from', thmKey + ')');
+          } else {
+            console.error('THM: No matching date found for', thmKey);
           }
         } catch(error) {
           console.error('THM error:', error);

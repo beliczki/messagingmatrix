@@ -1,35 +1,106 @@
-# Messaging Matrix - Claude Code Instructions
+# CLAUDE.md
 
-## IMPORTANT: Current Branch
-**Working on: `redesign` branch** (NOT main)
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This is a major UI/UX redesign branch. All current work should stay on this branch until the redesign is complete.
+## Development Commands
 
----
+```bash
+# Start both frontend and backend concurrently
+npm run dev:all
 
-## CRITICAL: Read This First
-Before making ANY changes, read the relevant documentation in `/docs/`:
-- `DATA_STORAGE_ARCHITECTURE.md` - Where data is stored (Sheets vs SQLite vs memory)
-- `SPECIFICATION.md` - Technical specification
-- `FEATURES.md` - Feature documentation and patterns
+# Start individually
+npm run dev          # Vite dev server on port 5173
+npm run server       # Express backend on port 3003
 
-## Architecture Rules - DO NOT VIOLATE
+# Build & preview
+npm run build        # Production build to dist/
+npm run preview      # Preview production build
+
+# Lint
+npm run lint         # ESLint (--max-warnings 0)
+
+# PM2 (production)
+npm run pm2:start    # Start all processes
+npm run pm2:stop     # Stop all
+npm run pm2:restart  # Restart all
+npm run pm2:logs     # View logs
+
+# Instance management (save/load different project configs)
+npm run instance:save
+npm run instance:load
+npm run instance:list
+
+# Kill/restart dev servers (Windows)
+npm run kill
+npm run restart
+```
+
+There are no tests in this project.
+
+## High-Level Architecture
+
+### Frontend + Backend Split
+- **Frontend**: React 18 + Vite (port 5173), TailwindCSS, React Router with lazy-loaded routes
+- **Backend**: Express server (port 3003) — `server.js` (~4,300 lines, monolithic)
+- **Proxy**: Vite dev server proxies `/api/*` requests to the Express backend
+
+### Data Flow — The Critical Rule
+
+```
+Google Sheets (source of truth) → Load → React Memory (useMatrix) → User edits → Save → Google Sheets
+                                                                                    ↕
+                                                                            SQLite (read cache only)
+```
+
+Matrix data (audiences, topics, messages, assets, creatives, textFormatting) lives **only** in React state via `src/hooks/useMatrix.js`. It is **never** persisted to SQLite on edit. Save writes to Google Sheets.
+
+SQLite (`db/messaging-matrix.db`) stores **app data** (config, users, tasks, shares, processed emails) immediately via API, and caches Sheets data for fast reads.
+
+### Key Layers
+
+| Layer | Location | Role |
+|-------|----------|------|
+| Matrix state | `src/hooks/useMatrix.js` | In-memory state for all matrix data, change tracking |
+| Sheets service | `src/services/sheets.js` | Google Sheets API (read/write via service account JWT) |
+| Settings service | `src/services/settings.js` | Lazy-init config from `/api/config` |
+| Drive storage | `src/services/driveStorage.js` | Google Drive file ops, upload, metadata |
+| Auth context | `src/contexts/AuthContext.jsx` | JWT auth, user session |
+| API server | `server.js` | Express REST API, Google APIs, file serving |
+| Database | `db/index.js` + `db/schema.js` | Drizzle ORM + better-sqlite3, WAL mode |
+| Sync service | `services/syncService.js` | Sheets ↔ SQLite cache sync |
+| Email service | `services/emailService.js` | IMAP email fetch, parse, convert to tasks |
+
+### Server API Endpoint Groups (server.js)
+- `/api/sheets/*` — Google Sheets read/write
+- `/api/cache/*` — SQLite cache sync and diagnostics
+- `/api/config*` — App configuration
+- `/api/claude/*`, `/api/gemini/*`, `/api/grok/*` — AI providers (Claude, Gemini, Grok) with streaming
+- `/api/ai-prompts/*` — Editable AI prompt files
+- `/api/drive/*` — Google Drive (upload, list, proxy, search, quota)
+- `/api/templates*` — Template management and file serving
+- `/api/shares/*`, `/api/share-html/*` — Share gallery system
+- `/api/tasks*`, `/api/task-labels` — Task CRUD
+- `/api/users*` — User management + auth
+- `/api/emails*` — Email integration
+- `/api/assets/*` — Asset registry
+- `/api/messages/search` — Full-text message search
+- `/api/textformatting*` — Text formatting rules
+
+### Frontend Routing (App.jsx)
+Lazy-loaded modules: Matrix, CreativeLibrary, Assets, Monitoring, Templates, Tasks, Users (admin), Settings (admin), Login, PreviewView (public share galleries). Role-based access controls admin routes.
+
+## Architecture Rules — DO NOT VIOLATE
 
 ### 1. Matrix State is IN-MEMORY ONLY
-Matrix data (audiences, topics, messages, assets, creatives, textFormatting) lives in React state in `useMatrix.js`:
 - **DO NOT** create API endpoints for saving matrix data
 - **DO NOT** save to SQLite/database when editing matrix data
 - All changes stay in memory until user clicks "Save"
 - Save goes to Google Sheets, NOT to SQLite
 
-```
-Google Sheets → Load → Memory (useMatrix) → User edits → Save → Google Sheets
-```
-
 **WRONG**: Creating `/api/textformatting/save` to persist formatting changes
 **RIGHT**: Update in-memory state via `setTextFormatting()`, persist only on matrix Save
 
-### 2. ID Generation - ALWAYS Incremental
+### 2. ID Generation — ALWAYS Incremental
 IDs are simple incremental integers as strings: "1", "2", "3", etc.
 
 ```javascript
@@ -38,13 +109,14 @@ const maxId = existingItems.reduce((max, item) => {
   const id = parseInt(item.id, 10);
   return isNaN(id) ? max : Math.max(max, id);
 }, 0);
-const newId = String(maxId + 1); // "81", "82", etc.
+const newId = String(maxId + 1);
 
-// WRONG - Never do this
-const newId = `new-${Date.now()}-${Math.random().toString(36)}`; // NO!
+// WRONG — Never do this
+const newId = `new-${Date.now()}-${Math.random().toString(36)}`;
 ```
 
 ### 3. Data Storage Summary
+
 | Data | Storage | When Persisted |
 |------|---------|----------------|
 | Audiences, Topics, Messages, Assets, Creatives, TextFormatting | Memory (useMatrix.js) | Matrix "Save" button → Google Sheets |
@@ -52,43 +124,34 @@ const newId = `new-${Date.now()}-${Math.random().toString(36)}`; // NO!
 | AI Prompts | Text files (`src/prompts/`) | Immediately via API |
 | UI Preferences | localStorage | Auto on change |
 
-### 4. Core Files
-- `src/hooks/useMatrix.js` - Matrix state management (all matrix data)
-- `src/services/sheets.js` - Google Sheets API interaction
-- `src/services/settings.js` - Settings service
-- `server.js` - Express backend API
-
-### 5. When Adding New Features
+### 4. When Adding New Features
 1. Does it involve matrix data (audiences/topics/messages/assets/creatives/textFormatting)?
    - YES → Add to useMatrix state, NO API calls needed
-   - NO → Maybe needs API/SQLite
+   - NO → Likely needs API/SQLite
 
 2. Does it need to persist immediately?
    - Matrix data: NO, only on explicit Save
    - App data (users, tasks, config): YES, via API
 
-## Anti-Patterns - NEVER DO THESE
+## Anti-Patterns — NEVER DO THESE
 
 1. **DO NOT** create API endpoints for matrix data edits
-2. **DO NOT** use random/UUID IDs - always incremental
+2. **DO NOT** use random/UUID IDs — always incremental
 3. **DO NOT** save matrix data to SQLite (it's just a cache)
-4. **DO NOT** call `window.location.reload()` inside async functions before they complete
+4. **DO NOT** call `window.location.reload()` inside async functions before they complete — use `clearAndReloadApp()` from `src/utils/clearAndReload.js` which selectively clears only `messagingmatrix_data_*` keys (preserving auth/preferences) before reloading
 5. **DO NOT** duplicate classes in HTML (check if exists first)
 
 ## Common Patterns
 
-### Adding to Matrix State
+### Matrix State CRUD
 ```javascript
-// In component
 const { textFormatting, setTextFormatting } = useMatrix(currentUser);
 
-// To add
+// Add
 setTextFormatting([...textFormatting, newEntry]);
-
-// To delete
+// Delete
 setTextFormatting(textFormatting.filter(r => r.id !== idToDelete));
-
-// To update
+// Update
 setTextFormatting(textFormatting.map(r =>
   r.id === idToUpdate ? { ...r, ...updates } : r
 ));
@@ -96,137 +159,82 @@ setTextFormatting(textFormatting.map(r =>
 
 ### Passing State Updaters to Child Components
 ```javascript
-// In Matrix.jsx
+// Parent (Matrix.jsx)
 <MessageEditorDialog
   textFormatting={textFormatting}
-  updateTextFormatting={setTextFormatting}  // Pass the setter
+  updateTextFormatting={setTextFormatting}
 />
 
-// In MessageEditorDialog.jsx
+// Child
 const handleDelete = (id) => {
   updateTextFormatting(textFormatting.filter(r => r.id !== id));
 };
 ```
 
-## Current Features
+## Key Subsystem Notes
 
 ### Change Tracking (useMatrix.js)
-- `originalState`: Deep copy of data when loaded from Google Sheets
+- `originalState`: Deep copy of data when loaded from Sheets
 - `changeTracking`: Computed object with added/modified/deleted per entity type
 - Lenient comparison: empty string = null = undefined
-- Used by MatrixStatePanel to show change count badge on Save button
+- Shown via MatrixStatePanel badge on Save button
 
 ### Text Formatting
-- Rules in `textFormatting` array in useMatrix
+- Rules in `textFormatting` array within useMatrix
 - Fields: `id`, `text_original`, `text_formatted`, `formatting_scope`, `formatting_mc_scope`
-- Scope can be empty (all sizes), array `["300x250"]`, or comma-separated string `"300x250,640x360"`
-- MC scope can be empty (global), array, or comma-separated MC identifiers
-- `textFormatter.js` handles both array and string formats
-
-### Message Editor Dialog
-- Location: `src/components/MessageEditorDialog.jsx`
-- Text formatting UI with inline editing
-- Real-time preview updates via iframe
-- **Auto-save**: 500ms debounced, syncs to variant copies, toggle persisted in localStorage
-- **Status sync mode**: "sync" (all variants same status) or "unique" (independent status)
-
-### Matrix State Panel
-- Location: `src/components/MatrixStatePanel.jsx`
-- Modal overlay with tabbed interface (Audiences, Topics, Messages, etc.)
-- "Changes Only" filter to show only modified items
-- Change count badge on Save button
-
-### Visualization Views
-- **MatrixGridView**: Default grid with sticky headers
-- **Tree2View**: Hierarchical tree visualization (`src/components/tree2/`)
-- **SankeyView**: Flow/chord diagram (`src/components/sankey/`)
-- **TreeView**: Legacy tree view
-
-### Selection Mode (Matrix)
-- Enter by long-pressing a message card (white outline appears)
-- Multi-select within same cell only
-- **Select All**: Circle button in selected cell corner selects all messages in that cell
-- **Move/Copy Here**: Appears on hover in empty cells (same row) - click to perform action
-- Hold Ctrl/Cmd to switch between Move and Copy mode
-- Auto-exits when no messages selected
-
-### Action History & Undo System
-- Location: `src/components/Matrix.jsx` (using `actionHistoryRef`)
-- Uses `useRef` instead of `useState` to avoid stale closure issues in event handlers
-- Logs: add, copy, move operations
-- **Undo add**: Deletes the added message
-- **Undo copy**: Deletes all copied messages
-- **Undo move**: Moves messages back to original audience
-- Change tracking excludes "undone" items (new items with status='deleted')
-
-### Keyboard Shortcuts (Matrix View)
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Z` / `Cmd+Z` | Undo last action |
-| `Ctrl+A` / `Cmd+A` | Select all in cell (selection mode) |
-| `Ctrl` (hold) | Switch to Copy mode (selection mode) |
-| `ESC` | Exit selection mode |
-| `Space` (hold) | Pan mode |
+- Scope: empty (all sizes), array `["300x250"]`, or comma-separated string
+- `src/utils/textFormatter.js` handles both formats
 
 ### Templates & Asset Loading
+**Location**: `src/templates/{templateName}/` — each contains `index.html` (with `{{placeholder}}` syntax), `template.json` (bindings + path config), CSS files, and `empty.png` (required transparent placeholder).
 
-**Location**: `src/templates/{templateName}/`
-
-Each template folder contains:
-- `index.html` - Template HTML with placeholders `{{placeholder_name}}`
-- `template.json` - Config with placeholder bindings and path prefixes
-- `main.css` - Main stylesheet
-- `{width}x{height}.css` - Size-specific styles
-- `empty.png` - Transparent placeholder image (REQUIRED for each template)
-
-**How image/video assets load:**
-
-1. **Message has value** (e.g., `image1: "abc123"` or `image1: "empty.png"`):
-   - Uses `path-messagingmatrix` from template.json (e.g., `/api/drive/proxy/`)
-   - Result: `/api/drive/proxy/abc123` or `/api/drive/proxy/empty.png`
-
-2. **Message field is empty** (`image1: ""`):
-   - Template's hardcoded `url('empty.png')` in HTML stays as-is after placeholder replacement
-   - After population, regex fixes these to `/api/templates/{templateName}/empty.png`
-
-**Key files for template rendering:**
-- `CreativeLibraryItem.jsx` - Masonry view thumbnails
-- `CreativePreview.jsx` - Full preview modal
-- `MessageEditorDialog.jsx` - MC editor preview
-
-**When creating a new template:**
-1. Copy an existing template folder
-2. **MUST include `empty.png`** - transparent 1x1 pixel PNG placeholder
-3. Update `template.json` with correct bindings
-4. CSS files loaded via `/api/templates/{name}/{file}.css`
-
-**Template asset path resolution:**
+**Asset path resolution:**
 ```
-Template HTML: url('empty.png')  →  /api/templates/{name}/empty.png
-Message value: "abc123"          →  /api/drive/proxy/abc123
-Message value: "empty.png"       →  /api/drive/proxy/empty.png (actual asset)
-Message value: ""                →  Template's empty.png stays, fixed by regex
+Message value present  → /api/drive/proxy/{value}
+Message value empty    → /api/templates/{templateName}/empty.png
 ```
+
+Key rendering files: `CreativeLibraryItem.jsx`, `CreativePreview.jsx`, `MessageEditorDialog.jsx`
 
 ### Tasks & MC Status Sync
-**IMPORTANT: Tasks drive MC status**
-- Location: `src/components/Tasks.jsx` - `updateTask()` function
-- When a task's bucket changes, all linked MCs (in `outputContent`) are updated to match
-- Bucket name becomes MC status (e.g., task moves to "APPROVED" bucket → linked MCs get status "APPROVED")
-- MC labels in outputContent format: "MC282a" (number + variant)
-- This ensures workflow consistency: task progress = MC progress
-- Changes are applied via `matrixData.updateMessage()` - requires Matrix Save to persist
+When a task's bucket changes, all linked MCs (in `outputContent`, format "MC282a") get their status updated to match the bucket name. This happens in `Tasks.jsx` → `updateTask()` via `matrixData.updateMessage()` — requires Matrix Save to persist.
+
+### Module-Level Persistent Refs (Matrix.jsx)
+`persistentMatrixRefs` is a **module-level** object (line ~31) that survives component remounts during navigation. It caches filtered audiences/topics and their dependency signatures to avoid recalculating on every re-render. This exists because React Router lazy-loading unmounts/remounts Matrix — normal `useRef` would lose state. See `docs/REACT_PERFORMANCE_REMOUNT_FIX.md` for rationale.
+
+### useRef vs useState for Event Handlers
+Throughout Matrix.jsx, `useRef` is used for values read during drag/click/undo handlers (e.g., `actionHistoryRef`, `draggedMsgRef`, `isCopyModeRef`, `longPressTimerRef`). This prevents stale closure bugs — `useState` values captured in callbacks don't update, but `.current` always reflects the latest value.
+
+### Action History & Undo (Matrix.jsx)
+Uses `useRef` (not `useState`) for `actionHistoryRef` to avoid stale closures. Supports undo for add/copy/move operations. Change tracking excludes "undone" items (new items with status='deleted').
+
+### Database (SQLite + Drizzle ORM)
+- Schema: `db/schema.js` — Drizzle table definitions
+- Connection: `db/index.js` — better-sqlite3 with WAL mode, 5s busy timeout
+- Migration scripts: `scripts/migrate-*.js`
+- Database file: `db/messaging-matrix.db`
+
+## Environment Variables (.env)
 
 ```
-Task bucket: CONTENT → APPROVED
-↓
-Linked MCs: MC287a, MC287b
-↓
-MC status: CONTENT → APPROVED (for both)
+PORT=3003
+JWT_SECRET=<secret>
+GOOGLE_SERVICE_ACCOUNT_PATH=./service-account.json
+VITE_API_URL=https://messagingmatrix.ai
+VITE_ANTHROPIC_API_KEY=<Claude API key>
+GEMINI_API_KEY=<Gemini key>
+GROK_API_KEY=<Grok key>
 ```
 
-### Share Links (Tasks)
-- Tasks can have multiple share links stored in `shareLinks` array
-- Created from Creative Library share dialog with "Add to Task" dropdown
-- Displayed in TaskEditorDialog below Related Content Output
-- Stored in SQLite `tasks.share_links` column (comma-separated)
+### Safe Save Guard (useMatrix.js)
+Prevents saving when no matrix data is loaded (`audiences.length > 0 || topics.length > 0 || messages.length > 0`). This protects against accidentally wiping the spreadsheet with empty data.
+
+## Documentation
+
+Read these before making architectural changes:
+- `docs/DATA_STORAGE_ARCHITECTURE.md` — Where data lives (Sheets vs SQLite vs memory)
+- `docs/SPECIFICATION.md` — Comprehensive technical specification
+- `docs/FEATURES.md` — Feature documentation and patterns
+- `docs/REACT_PERFORMANCE_REMOUNT_FIX.md` — Why Matrix.jsx uses module-level persistent refs
+- `docs/ASSET_NAMING_SYSTEM.md` — Asset metadata parsing from filenames
+- `docs/PERFORMANCE_IMPROVEMENTS.md` — SQLite caching & Drive proxy caching strategies

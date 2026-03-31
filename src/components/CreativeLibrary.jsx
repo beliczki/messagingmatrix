@@ -1145,6 +1145,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     });
   }, [creatives]);
 
+  // Clean up stale sizeFilter entries when availableSizes changes
+  useEffect(() => {
+    if (sizeFilter.length > 0 && availableSizes.length > 0) {
+      const validSizes = sizeFilter.filter(s => availableSizes.includes(s));
+      if (validSizes.length !== sizeFilter.length) {
+        setSizeFilter(validSizes);
+      }
+    }
+  }, [availableSizes]);
+
   // Save size filter to localStorage
   useEffect(() => {
     localStorage.setItem('creativeLibrary_sizeFilter', JSON.stringify(sizeFilter));
@@ -1161,6 +1171,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     });
     return Array.from(statuses).sort();
   }, [creatives]);
+
+  // Clean up stale statusFilter entries when availableStatuses changes
+  useEffect(() => {
+    if (statusFilter.length > 0 && availableStatuses.length > 0) {
+      const validStatuses = statusFilter.filter(s => availableStatuses.includes(s));
+      if (validStatuses.length !== statusFilter.length) {
+        setStatusFilter(validStatuses);
+      }
+    }
+  }, [availableStatuses]);
 
   // Save status filter to localStorage
   useEffect(() => {
