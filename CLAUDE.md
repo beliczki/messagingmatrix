@@ -229,6 +229,46 @@ GROK_API_KEY=<Grok key>
 ### Safe Save Guard (useMatrix.js)
 Prevents saving when no matrix data is loaded (`audiences.length > 0 || topics.length > 0 || messages.length > 0`). This protects against accidentally wiping the spreadsheet with empty data.
 
+## Message Naming Convention (MC Labels)
+
+Messages are identified by their `number` + `variant` as **MC labels**: `MC282a`, `MC1b`, etc. This label is used:
+- In the UI to display messages across Matrix, Creative Library, Tasks
+- In task linking: `task.outputContent` is an array of MC labels (e.g., `["MC282a", "MC283b"]`)
+- In file exports: `MC{number}_{variant}_{width}x{height}.{ext}`
+- In PMMID generation: `patternEvaluator.js` → `generatePMMID()` uses configurable patterns from admin settings
+
+When a task's bucket changes, linked MC statuses sync to match the bucket name — see Tasks & MC Status Sync above.
+
+## AI Instructions
+
+The `AI/` directory contains 13 instruction files that drive AI assistant behavior across the app. Each page/feature has its own AI instruction file (e.g., `AIMatrixInstructions.txt`, `AITasksInstructions.txt`, `AICreativeLibraryInstructions.txt`). These are loaded as system context when the AI assistant is used on that page. `AiClientContext.txt` provides the data structure context shared across all AI features.
+
+Editable AI prompts live in `src/prompts/` and are served/saved via `/api/ai-prompts/*`.
+
+## Database Schema Overview
+
+**Cache tables** (read-only mirror of Google Sheets — synced via `syncService.js`):
+- `audiences`, `topics`, `messages`, `assets`, `creatives`, `text_formatting`
+- `cache_metadata` — tracks sync status per entity type
+
+**App data tables** (written directly via API):
+- `users` — email/password (SHA-256), roles: admin/user/demo
+- `tasks` — task management with buckets (backlog/review/done), MC linking via `outputContent`
+- `config` — key-value store with JSON values, categorized (pattern, lookAndFeel, googleDrive, etc.)
+- `share_galleries` — share gallery metadata, creative/asset ID lists
+- `processed_emails` — tracks which emails have been converted to tasks
+- `uploaded_assets` — locally uploaded asset registry with metadata JSON
+
+Performance indexes exist on `messages(topic, audience)`, `messages(status)`, `assets(brand, product, type, file_drive_id)`, `creatives(brand, product, file_drive_id)`.
+
+## Instance Management
+
+The `instances/` directory stores named snapshots of project configuration (database, config, env). Use `npm run instance:save/load/list` to switch between different project contexts (e.g., different clients). Managed by `scripts/instance-switch.js`.
+
+## Build Configuration
+
+Vite uses manual chunk splitting (`vite.config.js`) — large components (Matrix, MessageEditorDialog, CreativeLibrary, AIAssistant, Assets, Templates) each get their own chunk. Vendor code splits into react-vendor, ui-vendor (lucide), editor-vendor (CodeMirror), and general vendor. Chunk size warning limit is 1000KB.
+
 ## Documentation
 
 Read these before making architectural changes:
@@ -238,3 +278,8 @@ Read these before making architectural changes:
 - `docs/REACT_PERFORMANCE_REMOUNT_FIX.md` — Why Matrix.jsx uses module-level persistent refs
 - `docs/ASSET_NAMING_SYSTEM.md` — Asset metadata parsing from filenames
 - `docs/PERFORMANCE_IMPROVEMENTS.md` — SQLite caching & Drive proxy caching strategies
+- `docs/PRODUCTION_SETUP.md` — Production deployment guide
+- `docs/DEPLOYMENT_HETZNER.md` — Hetzner-specific deployment
+- `docs/SERVER_MANAGEMENT.md` — PM2 and server operations
+- `docs/GOOGLE_DRIVE_SETUP.md` — Google Drive service account setup
+- `docs/SQLITE_MIGRATION_COMPLETE.md` — Migration from JSON to SQLite
