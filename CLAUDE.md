@@ -17,13 +17,19 @@ npm run build        # Production build to dist/
 npm run preview      # Preview production build
 
 # Lint
-npm run lint         # ESLint (--max-warnings 0)
+npm run lint              # ESLint (--max-warnings 0)
+npx eslint . --fix        # Auto-fix where possible (no script alias)
 
 # PM2 (production)
 npm run pm2:start    # Start all processes
 npm run pm2:stop     # Stop all
 npm run pm2:restart  # Restart all
 npm run pm2:logs     # View logs
+npm run pm2:status   # List processes
+npm run pm2:delete   # Delete all processes
+
+# Deploy update (runs update.sh)
+npm run update
 
 # Instance management (save/load different project configs)
 npm run instance:save
@@ -43,6 +49,11 @@ There are no tests in this project.
 - **Frontend**: React 18 + Vite (port 5173), TailwindCSS, React Router with lazy-loaded routes
 - **Backend**: Express server (port 3003) — `server.js` (~4,300 lines, monolithic)
 - **Proxy**: Vite dev server proxies `/api/*` requests to the Express backend
+
+### Services Directory Split
+- `src/services/` — **frontend** services (browser-side: `sheets.js`, `settings.js`, `driveStorage.js`, etc.). Imported by React components.
+- `services/` (repo root) — **backend** services (Node-side: `syncService.js`, `emailService.js`). Imported by `server.js` only.
+Do not mix them: backend modules use Node APIs (IMAP, fs, better-sqlite3) that won't bundle for the browser.
 
 ### Data Flow — The Critical Rule
 

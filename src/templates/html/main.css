@@ -130,14 +130,14 @@ main {
   line-height: 1.3;
 }
 
-#buttonWrapper span {
+#buttonWrapper > span {
   display: inline-block;
   padding: 0.25rem 1.25rem;
   border-radius: 3rem;
   cursor: pointer;
   transition: all 0.5s;
 }
-#buttonWrapper span:hover {
+#buttonWrapper > span:hover {
   box-shadow: 0 .25rem .75rem -.25rem rgba(0, 0, 0, 0.6);
 }
 #buttonWrapper:has(> span[data=" "]),
@@ -480,7 +480,7 @@ p:empty,
 .preCompBg #textContainer { padding-top: 3.4rem; width: 100%;}
 .preCompBg #headlineWrapper,
 .preCompBg #copyWrapper1,
-.preCompBg #copyWrapper2 { width: 55%;}
+.preCompBg #copyWrapper2 { width: 55%;  }
 .preCompBg #headlineWrapper {  margin-top: 1rem;}
 .preCompBg #stickerContainer  { display:none; }
 .preCompBg #objectContainer  { display:none; }
@@ -556,19 +556,19 @@ main,
 .orange #stickerContainer > div  { background-color: rgb(var(--teal)); }
 
 
-#buttonWrapper span { background-color: rgb(var(--orange)); border: 2px solid rgb(var(--orange)); }
-#buttonWrapper span:hover { background-color: rgb(var(--darkOrange)); border: 2px solid rgb(var(--darkOrange));}
-.orange #buttonWrapper span,
-.peach #buttonWrapper span,
-.pink #buttonWrapper span { background-color: rgb(var(--blue)); border: 2px solid rgb(var(--blue)); }
-.orange #buttonWrapper span:hover,
-.peach #buttonWrapper span:hover,
-.pink #buttonWrapper span:hover { background-color: rgb(var(--darkBlue)); border: 2px solid rgb(var(--darkBlue)); }
+#buttonWrapper > span { background-color: rgb(var(--orange)); border: 2px solid rgb(var(--orange)); }
+#buttonWrapper > span:hover { background-color: rgb(var(--darkOrange)); border: 2px solid rgb(var(--darkOrange));}
+.orange #buttonWrapper > span,
+.peach #buttonWrapper > span,
+.pink #buttonWrapper > span { background-color: rgb(var(--blue)); border: 2px solid rgb(var(--blue)); }
+.orange #buttonWrapper > span:hover,
+.peach #buttonWrapper > span:hover,
+.pink #buttonWrapper > span:hover { background-color: rgb(var(--darkBlue)); border: 2px solid rgb(var(--darkBlue)); }
 
-.outlineCta #buttonWrapper span { border: 2px solid rgba(255,255,255,0.8); background-color: transparent;}
-.orange.outlineCta #buttonWrapper span,
-.peach.outlineCta #buttonWrapper span,
-.pink.outlineCta #buttonWrapper span { background-color: rgb(var(--blue)); border: 2px solid rgb(var(--blue)); }
+.outlineCta #buttonWrapper > span { border: 2px solid rgba(255,255,255,0.8); background-color: transparent;}
+.orange.outlineCta #buttonWrapper > span,
+.peach.outlineCta #buttonWrapper > span,
+.pink.outlineCta #buttonWrapper > span { background-color: rgb(var(--blue)); border: 2px solid rgb(var(--blue)); }
 
 
 
@@ -776,11 +776,5 @@ main,
 
 span[class^="text-"] {display: none;}
 body #adContainer .text-allSizes {display: inline;}
-
-
-
-
-
-
 
 
