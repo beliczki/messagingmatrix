@@ -36,9 +36,10 @@ npm run instance:save
 npm run instance:load
 npm run instance:list
 
-# Kill/restart dev servers (Windows)
+# Kill/restart dev servers (Windows — PowerShell scripts)
 npm run kill
 npm run restart
+# macOS/Linux: stop with Ctrl-C, or `pkill -f "vite|node server.js"`
 ```
 
 There are no tests in this project.
@@ -52,7 +53,7 @@ There are no tests in this project.
 
 ### Services Directory Split
 - `src/services/` — **frontend** services (browser-side: `sheets.js`, `settings.js`, `driveStorage.js`, etc.). Imported by React components.
-- `services/` (repo root) — **backend** services (Node-side: `syncService.js`, `emailService.js`). Imported by `server.js` only.
+- `services/` (repo root) — **backend** services (Node-side: `syncService.js`, `adformService.js`, `adformSyncService.js`). Imported by `server.js` only.
 Do not mix them: backend modules use Node APIs (IMAP, fs, better-sqlite3) that won't bundle for the browser.
 
 ### Data Flow — The Critical Rule
@@ -65,7 +66,7 @@ Google Sheets (source of truth) → Load → React Memory (useMatrix) → User e
 
 Matrix data (audiences, topics, messages, assets, creatives, textFormatting) lives **only** in React state via `src/hooks/useMatrix.js`. It is **never** persisted to SQLite on edit. Save writes to Google Sheets.
 
-SQLite (`db/messaging-matrix.db`) stores **app data** (config, users, tasks, shares, processed emails) immediately via API, and caches Sheets data for fast reads.
+SQLite (`db/messaging-matrix.db`) stores **app data** (config, users, shares) immediately via API, and caches Sheets data for fast reads.
 
 ### Key Layers
 
@@ -79,7 +80,6 @@ SQLite (`db/messaging-matrix.db`) stores **app data** (config, users, tasks, sha
 | API server | `server.js` | Express REST API, Google APIs, file serving |
 | Database | `db/index.js` + `db/schema.js` | Drizzle ORM + better-sqlite3, WAL mode |
 | Sync service | `services/syncService.js` | Sheets ↔ SQLite cache sync |
-| Email service | `services/emailService.js` | IMAP email fetch, parse, convert to tasks |
 
 ### Server API Endpoint Groups (server.js)
 - `/api/sheets/*` — Google Sheets read/write
@@ -90,15 +90,14 @@ SQLite (`db/messaging-matrix.db`) stores **app data** (config, users, tasks, sha
 - `/api/drive/*` — Google Drive (upload, list, proxy, search, quota)
 - `/api/templates*` — Template management and file serving
 - `/api/shares/*`, `/api/share-html/*` — Share gallery system
-- `/api/tasks*`, `/api/task-labels` — Task CRUD
 - `/api/users*` — User management + auth
-- `/api/emails*` — Email integration
 - `/api/assets/*` — Asset registry
+- `/mcp` — MCP server (Model Context Protocol) for Claude Desktop / Cowork, per-instance bearer auth
 - `/api/messages/search` — Full-text message search
 - `/api/textformatting*` — Text formatting rules
 
 ### Frontend Routing (App.jsx)
-Lazy-loaded modules: Matrix, CreativeLibrary, Assets, Monitoring, Templates, Tasks, Users (admin), Settings (admin), Login, PreviewView (public share galleries). Role-based access controls admin routes.
+Lazy-loaded modules: Matrix, CreativeLibrary, Assets, Monitoring, Templates, Users (admin), Settings (admin), Login, PreviewView (public share galleries). Role-based access controls admin routes.
 
 ## Architecture Rules — DO NOT VIOLATE
 
@@ -131,8 +130,8 @@ const newId = `new-${Date.now()}-${Math.random().toString(36)}`;
 | Data | Storage | When Persisted |
 |------|---------|----------------|
 | Audiences, Topics, Messages, Assets, Creatives, TextFormatting | Memory (useMatrix.js) | Matrix "Save" button → Google Sheets |
-| Config, Users, Tasks, Shares | SQLite | Immediately via API |
-| AI Prompts | Text files (`src/prompts/`) | Immediately via API |
+| Config, Users, Shares | SQLite | Immediately via API |
+| AI Prompts | Text files in `AI/` | Immediately via API |
 | UI Preferences | localStorage | Auto on change |
 
 ### 4. When Adding New Features
@@ -142,7 +141,7 @@ const newId = `new-${Date.now()}-${Math.random().toString(36)}`;
 
 2. Does it need to persist immediately?
    - Matrix data: NO, only on explicit Save
-   - App data (users, tasks, config): YES, via API
+   - App data (users, config): YES, via API
 
 ## Anti-Patterns — NEVER DO THESE
 
@@ -207,9 +206,6 @@ Message value empty    → /api/templates/{templateName}/empty.png
 
 Key rendering files: `CreativeLibraryItem.jsx`, `CreativePreview.jsx`, `MessageEditorDialog.jsx`
 
-### Tasks & MC Status Sync
-When a task's bucket changes, all linked MCs (in `outputContent`, format "MC282a") get their status updated to match the bucket name. This happens in `Tasks.jsx` → `updateTask()` via `matrixData.updateMessage()` — requires Matrix Save to persist.
-
 ### Module-Level Persistent Refs (Matrix.jsx)
 `persistentMatrixRefs` is a **module-level** object (line ~31) that survives component remounts during navigation. It caches filtered audiences/topics and their dependency signatures to avoid recalculating on every re-render. This exists because React Router lazy-loading unmounts/remounts Matrix — normal `useRef` would lose state. See `docs/REACT_PERFORMANCE_REMOUNT_FIX.md` for rationale.
 
@@ -218,6 +214,26 @@ Throughout Matrix.jsx, `useRef` is used for values read during drag/click/undo h
 
 ### Action History & Undo (Matrix.jsx)
 Uses `useRef` (not `useState`) for `actionHistoryRef` to avoid stale closures. Supports undo for add/copy/move operations. Change tracking excludes "undone" items (new items with status='deleted').
+
+### MCP Server (per-instance, Claude Desktop / Cowork)
+Each deployment exposes an MCP endpoint at `<subdomain>/mcp` (e.g. `erste.messagingmatrix.ai/mcp`). Lives inside the existing Express process — no separate deploy. **Transport:** Streamable HTTP (stateless). **Auth:** static bearer token per instance (`MCP_BEARER_TOKEN` env var). Flow:
+
+1. `mcp/server.js` wires a `McpServer` with 17 tools at module load. Tool handlers live in `mcp/tools/{audiences,topics,messages,meta}.js`.
+2. `mcp/sheets.js` exposes single-row Google Sheets helpers (`appendRow`/`updateRow`/`deleteRow`/`findRow`) — the MCP writes per-row, **not** full-table like `src/services/sheets.js`. Reuses server.js `getAccessToken()` for Google auth.
+3. `mcp/auth.js` rejects any request without `Authorization: Bearer $MCP_BEARER_TOKEN`.
+4. Tools: write — `audience_create/remove/update`, `topic_create/remove/update`, `mc_create/remove/update`; read — `list_audiences/list_topics/list_mc/mc_get`; reporting — `get_mc_reporting`; meta — `list_templates/list_products/matrix_status`.
+5. **Caveat:** MCP writes go directly to Sheets. If the matrix UI is open with unsaved edits, clicking Save will clobber MCP changes (`saveAll()` is a full-table rewrite). Save or reload UI before/after MCP batches.
+6. `mc_preview_image` is deferred — see `memory/mcp_preview_deferred.md`.
+
+### AdForm Reporting Sync
+The Monitoring page (`src/components/Monitoring.jsx`) drives a manual pull of banner-level impressions/clicks into a dedicated `Reporting` tab on the matrix spreadsheet. Flow:
+
+1. Client → `POST /api/adform/sync` with `{ dateFrom, dateTo, campaignPrefix }`.
+2. `services/adformService.js` returns banner-level stats. **Currently backed by a local xlsx export** (`data/adform-report.xlsx`, or override `ADFORM_REPORT_PATH`) — the live OAuth2 API path is kept commented out at the bottom of the file until the credentials are verified end-to-end.
+3. `services/adformSyncService.js` extracts the MC label from each banner name. Two formats are supported: direct `MC<num><letter>` (e.g. `MC282a_300x250`) and the AdForm PMMID form `...m_<num>-...-v_<letter>...` (e.g. `pmmid=p_adform-...-m_290-t_...-v_a`). `m_00` is treated as "no specific MC" and dropped. Size is extracted via regex `(\d+)x(\d+)` — the richmedia `1x1` placeholder is ignored.
+4. Sync writes banner-level + label-level rollup rows to the `Reporting` sheet (creates the tab if missing, clears + writes). Last sync summary is persisted in `config` under key `adformLastSync`.
+5. `useMatrix` exposes `reporting` (loaded alongside other tabs) and `reloadReporting()` (bypasses the localStorage cache). `sheets.saveAll()` **does not touch the `Reporting` tab** — it's external data, read-only from the client.
+6. `CreativeLibrary` joins reporting onto each creative by `MC_Label + Size` (banner-level) or falls back to label-level, and exposes a "Live in AdForm" filter + a "CTR" sort in the list view.
 
 ### Database (SQLite + Drizzle ORM)
 - Schema: `db/schema.js` — Drizzle table definitions
@@ -235,7 +251,30 @@ VITE_API_URL=https://messagingmatrix.ai
 VITE_ANTHROPIC_API_KEY=<Claude API key>
 GEMINI_API_KEY=<Gemini key>
 GROK_API_KEY=<Grok key>
+MCP_BEARER_TOKEN=<long random string per instance; enables the /mcp endpoint>
+# AdForm reporting (currently reads an xlsx export, not the live API):
+# ADFORM_REPORT_PATH=./data/adform-report.xlsx   # default shown
+# Live-API credentials — unused while xlsx fallback is active, kept for later:
+# ADFORM_CLIENT_ID, ADFORM_CLIENT_SECRET, ADFORM_TOKEN_URL, ADFORM_API_BASE, ADFORM_SCOPE
 ```
+
+## Versioning
+
+Semantic versioning. **Single source of truth: `package.json`** (currently `4.5.0`). The frontend reads the version via the `__APP_VERSION__` global defined in `vite.config.js`; it renders in the sidebar footer (`src/App.jsx`) and the Settings → About tab.
+
+### Bump rules — in the same commit as the triggering change
+
+- **MAJOR** (`X.0.0`) — breaking change to Google Sheets schema, SQLite schema, the public API surface, or a data-flow invariant (e.g. moving matrix data out of memory).
+- **MINOR** (`4.X.0`) — new module, new API endpoint group, or a new user-visible feature.
+- **PATCH** (`4.5.X`) — bugfix, refactor, doc update, style tweak.
+
+### Every bump commit must
+
+1. Update `"version"` in `package.json`.
+2. Add an entry under the right section in `CHANGELOG.md` (`## [X.Y.Z] — YYYY-MM-DD` with `Added / Changed / Fixed / Removed` sub-sections as applicable).
+3. Move any matching `## [Unreleased]` items into the new version block.
+
+**Don't** bump for uncommitted work-in-progress. **Don't** skip patch versions to "get to" a nicer minor — the build output has to match the CHANGELOG.
 
 ### Safe Save Guard (useMatrix.js)
 Prevents saving when no matrix data is loaded (`audiences.length > 0 || topics.length > 0 || messages.length > 0`). This protects against accidentally wiping the spreadsheet with empty data.
@@ -243,18 +282,16 @@ Prevents saving when no matrix data is loaded (`audiences.length > 0 || topics.l
 ## Message Naming Convention (MC Labels)
 
 Messages are identified by their `number` + `variant` as **MC labels**: `MC282a`, `MC1b`, etc. This label is used:
-- In the UI to display messages across Matrix, Creative Library, Tasks
+- In the UI to display messages across Matrix and Creative Library
 - In task linking: `task.outputContent` is an array of MC labels (e.g., `["MC282a", "MC283b"]`)
 - In file exports: `MC{number}_{variant}_{width}x{height}.{ext}`
 - In PMMID generation: `patternEvaluator.js` → `generatePMMID()` uses configurable patterns from admin settings
 
-When a task's bucket changes, linked MC statuses sync to match the bucket name — see Tasks & MC Status Sync above.
-
 ## AI Instructions
 
-The `AI/` directory contains 13 instruction files that drive AI assistant behavior across the app. Each page/feature has its own AI instruction file (e.g., `AIMatrixInstructions.txt`, `AITasksInstructions.txt`, `AICreativeLibraryInstructions.txt`). These are loaded as system context when the AI assistant is used on that page. `AiClientContext.txt` provides the data structure context shared across all AI features.
+The `AI/` directory is the **single source of truth** for AI assistant instructions (`server.js` reads from it via `promptsDir = path.join(__dirname, 'AI')`). Each page/feature has its own instruction file (e.g. `AIMatrixInstructions.txt`, `AICreativeLibraryInstructions.txt`, `AIMonitoringInstructions.txt`) loaded as system context when the AI assistant is used on that page. `AiClientContext.txt` provides the shared data-structure context.
 
-Editable AI prompts live in `src/prompts/` and are served/saved via `/api/ai-prompts/*`.
+These files are editable from the Settings → Prompts tab and served/saved via `/api/ai-prompts/*`.
 
 ## Database Schema Overview
 
@@ -264,10 +301,8 @@ Editable AI prompts live in `src/prompts/` and are served/saved via `/api/ai-pro
 
 **App data tables** (written directly via API):
 - `users` — email/password (SHA-256), roles: admin/user/demo
-- `tasks` — task management with buckets (backlog/review/done), MC linking via `outputContent`
 - `config` — key-value store with JSON values, categorized (pattern, lookAndFeel, googleDrive, etc.)
 - `share_galleries` — share gallery metadata, creative/asset ID lists
-- `processed_emails` — tracks which emails have been converted to tasks
 - `uploaded_assets` — locally uploaded asset registry with metadata JSON
 
 Performance indexes exist on `messages(topic, audience)`, `messages(status)`, `assets(brand, product, type, file_drive_id)`, `creatives(brand, product, file_drive_id)`.
@@ -282,15 +317,24 @@ Vite uses manual chunk splitting (`vite.config.js`) — large components (Matrix
 
 ## Documentation
 
-Read these before making architectural changes:
+### Progress & planning
+- `ROADMAP.md` — active milestone, backlog, parking lot
+- `CHANGELOG.md` — shipped work, by version (Keep a Changelog format)
+- `TODO-DEMO-INFRA.md` — active handoff doc for the demo instance infra
+
+### Architecture & subsystems (read before architectural changes)
 - `docs/DATA_STORAGE_ARCHITECTURE.md` — Where data lives (Sheets vs SQLite vs memory)
 - `docs/SPECIFICATION.md` — Comprehensive technical specification
 - `docs/FEATURES.md` — Feature documentation and patterns
 - `docs/REACT_PERFORMANCE_REMOUNT_FIX.md` — Why Matrix.jsx uses module-level persistent refs
 - `docs/ASSET_NAMING_SYSTEM.md` — Asset metadata parsing from filenames
 - `docs/PERFORMANCE_IMPROVEMENTS.md` — SQLite caching & Drive proxy caching strategies
+
+### Operations
 - `docs/PRODUCTION_SETUP.md` — Production deployment guide
 - `docs/DEPLOYMENT_HETZNER.md` — Hetzner-specific deployment
 - `docs/SERVER_MANAGEMENT.md` — PM2 and server operations
 - `docs/GOOGLE_DRIVE_SETUP.md` — Google Drive service account setup
-- `docs/SQLITE_MIGRATION_COMPLETE.md` — Migration from JSON to SQLite
+
+### Historical
+- `docs/archive/` — completed migrations and superseded docs, kept for reference (see `docs/archive/README.md` for why each file is archived)

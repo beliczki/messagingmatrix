@@ -258,14 +258,15 @@ class SheetsService {
 
   // Load all data
   async loadAll() {
-    const [audiences, topics, messages, keywords, assets, creatives, textFormatting] = await Promise.all([
+    const [audiences, topics, messages, keywords, assets, creatives, textFormatting, reporting] = await Promise.all([
       this.read('Audiences'),
       this.read('Topics'),
       this.read('Messages'),
       this.read('Keywords'),
       this.read('Assets'),
       this.read('Creatives'),
-      this.read('textformats')
+      this.read('textformats'),
+      this.read('Reporting').catch(() => [])
     ]);
 
     return {
@@ -275,7 +276,8 @@ class SheetsService {
       keywords: this.parseKeywords(keywords),
       assets: this.parseAssets(assets),
       creatives: this.parseCreatives(creatives),
-      textFormatting: this.parseTextFormatting(textFormatting)
+      textFormatting: this.parseTextFormatting(textFormatting),
+      reporting: this.parseReporting(reporting)
     };
   }
 
@@ -819,6 +821,36 @@ class SheetsService {
         };
       })
       .filter(rule => rule.text_original); // Only include rules with original text
+  }
+
+  // Parse reporting rows from spreadsheet (externally written by AdForm sync — read-only here)
+  parseReporting(rows) {
+    if (!rows || rows.length < 2) return [];
+
+    const headerRow = rows[0];
+    const columnMap = this.createColumnMap(headerRow);
+
+    return rows.slice(1)
+      .filter(row => row.length > 0 && row.some(cell => cell !== '' && cell !== null && cell !== undefined))
+      .map(row => {
+        const impressions = parseInt(this.getValue(row, columnMap, 'Impressions'), 10) || 0;
+        const clicks = parseInt(this.getValue(row, columnMap, 'Clicks'), 10) || 0;
+        const ctrRaw = this.getValue(row, columnMap, 'CTR');
+        return {
+          level: this.getValue(row, columnMap, 'Level'),
+          mcLabel: this.getValue(row, columnMap, 'MC_Label'),
+          size: this.getValue(row, columnMap, 'Size'),
+          bannerId: this.getValue(row, columnMap, 'AdForm_Banner_ID'),
+          bannerName: this.getValue(row, columnMap, 'AdForm_Banner_Name'),
+          adformStatus: this.getValue(row, columnMap, 'AdForm_Status'),
+          impressions,
+          clicks,
+          ctr: ctrRaw === '' ? 0 : Number(ctrRaw) || 0,
+          campaignId: this.getValue(row, columnMap, 'Campaign_ID'),
+          campaignName: this.getValue(row, columnMap, 'Campaign_Name'),
+          lastSyncedAt: this.getValue(row, columnMap, 'Last_Synced_At')
+        };
+      });
   }
 
   // Save keywords

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, ClipboardList, Calendar, ExternalLink, Search, Plus, Link2, RefreshCw, Image, Copy } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Loader, Trash2, Tag, CookingPot, Sparkles, PencilRuler, Rocket, Check, Type, Calendar, ExternalLink, Search, Plus, RefreshCw, Image, Copy } from 'lucide-react';
 import AssetAutocomplete from './AssetAutocomplete';
 import settings from '../services/settings';
 import { generateTraffickingFields, generatePMMID } from '../utils/patternEvaluator';
@@ -96,11 +96,6 @@ const MessageEditorDialog = ({
     }
   }, [editingMessage?.id]);
 
-  // Related tasks state
-  const [relatedTasks, setRelatedTasks] = useState([]);
-  const [allTasks, setAllTasks] = useState([]);
-  const [taskSearch, setTaskSearch] = useState('');
-
   // Track original field values before AI preview changes
   const [originalFieldValues, setOriginalFieldValues] = useState(null);
 
@@ -129,117 +124,6 @@ const MessageEditorDialog = ({
       setOriginalFieldValues(null);
     }
   }, [generatedPackages, editingMessage, originalFieldValues]);
-
-  // Fetch tasks and find those related to this message
-  useEffect(() => {
-    if (!editingMessage?.id) {
-      setRelatedTasks([]);
-      setAllTasks([]);
-      return;
-    }
-
-    const fetchRelatedTasks = async () => {
-      try {
-        const response = await apiGet('/api/tasks');
-        if (response.ok) {
-          const data = await response.json();
-          const tasks = data.tasks || [];
-          setAllTasks(tasks);
-
-          // Find tasks that reference this message in relatedContent or outputContent
-          // v2 schema: relatedContent/outputContent are arrays of MC labels like ["MC282a", "MC283b"]
-          const mcLabel = `MC${editingMessage.number || ''}${editingMessage.variant || ''}`;
-          console.log('[MC Editor] Looking for tasks linked to MC:', mcLabel);
-
-          const related = tasks.filter(task => {
-            const relatedArr = task.relatedContent || [];
-            const outputArr = task.outputContent || [];
-            const inRelated = relatedArr.includes(mcLabel);
-            const inOutput = outputArr.includes(mcLabel);
-            if (inRelated || inOutput) {
-              console.log('[MC Editor] Found related task:', task.id, {
-                relatedContent: relatedArr,
-                outputContent: outputArr
-              });
-            }
-            return inRelated || inOutput;
-          });
-
-          console.log('[MC Editor] Total related tasks found:', related.length);
-          setRelatedTasks(related);
-        }
-      } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setRelatedTasks([]);
-        setAllTasks([]);
-      }
-    };
-
-    fetchRelatedTasks();
-  }, [editingMessage?.id]);
-
-  // Filter tasks for search (exclude already linked)
-  const taskSearchResults = useMemo(() => {
-    if (!taskSearch.trim() || taskSearch.length < 2) return [];
-
-    const searchLower = taskSearch.toLowerCase();
-    const relatedIds = new Set(relatedTasks.map(t => t.id));
-
-    return allTasks
-      .filter(task => !relatedIds.has(task.id))
-      .filter(task => {
-        const title = (task.title || '').toLowerCase();
-        const description = (task.description || '').toLowerCase();
-        // v2 schema: id is the task number now
-        const tcNumber = task.id ? `tc${task.id}` : '';
-        return title.includes(searchLower) ||
-               description.includes(searchLower) ||
-               tcNumber.includes(searchLower);
-      })
-      .slice(0, 5);
-  }, [taskSearch, allTasks, relatedTasks]);
-
-  // Link task to this MC (add to task's outputContent)
-  // v2 schema: outputContent is array of MC labels like ["MC282a", "MC283b"]
-  const linkTaskToMC = async (task) => {
-    if (!editingMessage) return;
-
-    const mcLabel = `MC${editingMessage.number || editingMessage.id}${editingMessage.variant || ''}`;
-
-    // Check if already linked
-    if ((task.outputContent || []).includes(mcLabel)) {
-      console.log('Task already linked to this MC');
-      return;
-    }
-
-    const updatedTask = {
-      ...task,
-      outputContent: [...(task.outputContent || []), mcLabel]
-    };
-
-    try {
-      // Save to server
-      const response = await apiGet('/api/tasks');
-      if (response.ok) {
-        const data = await response.json();
-        const tasks = data.tasks || [];
-        const updatedTasks = tasks.map(t => t.id === task.id ? updatedTask : t);
-
-        await fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks: updatedTasks })
-        });
-
-        // Update local state
-        setRelatedTasks(prev => [...prev, updatedTask]);
-        setAllTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
-        setTaskSearch('');
-      }
-    } catch (error) {
-      console.error('Error linking task:', error);
-    }
-  };
 
   // Auto-save refs (declared early so handleClose can flush)
   const autoSaveTimerRef = useRef(null);
@@ -1412,8 +1296,7 @@ const MessageEditorDialog = ({
     { id: 'content', label: 'Content', icon: CookingPot, color: 'blue' },
     { id: 'generate', label: 'Generate', icon: Sparkles, color: 'purple' },
     { id: 'styles', label: 'Styles', icon: PencilRuler, color: 'orange' },
-    { id: 'trafficking', label: 'Trafficking', icon: Rocket, color: 'green' },
-    { id: 'task', label: 'Task', icon: ClipboardList, color: 'cyan' }
+    { id: 'trafficking', label: 'Trafficking', icon: Rocket, color: 'green' }
   ];
 
   // Render text input field with formatting info
@@ -3454,194 +3337,6 @@ const MessageEditorDialog = ({
                 </>
               )}
 
-              {/* Task Tab */}
-              {activeTab === 'task' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Link Task Search Section */}
-                  <div style={{
-                    background: 'var(--white-10)',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    border: '1px solid var(--white-10)'
-                  }}>
-                    <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-white)', marginBottom: '12px' }}>
-                      Link Task
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{
-                        position: 'absolute',
-                        left: '12px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        color: 'var(--white-40)'
-                      }} />
-                      <input
-                        type="text"
-                        value={taskSearch}
-                        onChange={(e) => setTaskSearch(e.target.value)}
-                        placeholder="Search tasks by title, TC#, or description..."
-                        className="form-input"
-                        style={{ paddingLeft: '36px' }}
-                      />
-                    </div>
-
-                    {/* Search Results */}
-                    {taskSearchResults.length > 0 && (
-                      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {taskSearchResults.map(task => (
-                          <div
-                            key={task.id}
-                            style={{
-                              background: 'var(--white-10)',
-                              borderRadius: '8px',
-                              padding: '12px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '12px', color: 'var(--white-40)', marginBottom: '2px' }}>
-                                {task.id ? `TC${task.id}` : `#${task.id}`}
-                              </div>
-                              <div style={{
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                color: 'var(--color-white)',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {task.title || 'Untitled Task'}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => linkTaskToMC(task)}
-                              className="btn btn-primary"
-                              style={{ fontSize: '12px', padding: '6px 12px', marginLeft: '12px' }}
-                            >
-                              <Link2 size={14} />
-                              Link
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Related Tasks Section */}
-                  <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--color-white)' }}>
-                    Related Tasks ({relatedTasks.length})
-                  </div>
-
-                  {relatedTasks.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '40px 20px',
-                      color: 'var(--white-60)'
-                    }}>
-                      <ClipboardList size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                      <p style={{ fontSize: '14px' }}>No tasks linked to this message</p>
-                    </div>
-                  ) : (
-                    relatedTasks.map(task => (
-                      <div
-                        key={task.id}
-                        style={{
-                          background: 'var(--white-10)',
-                          borderRadius: '12px',
-                          padding: '16px',
-                          border: '1px solid var(--white-10)'
-                        }}
-                      >
-                        {/* Task Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                          <div>
-                            <div style={{ fontSize: '12px', color: 'var(--white-40)', marginBottom: '4px' }}>
-                              {task.id ? `TC${task.id}` : 'Task'}
-                            </div>
-                            <h4 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-white)', margin: 0 }}>
-                              {task.title || 'Untitled Task'}
-                            </h4>
-                          </div>
-                          <a
-                            href={`/tasks?task=${task.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '12px',
-                              color: 'var(--white-60)',
-                              textDecoration: 'none'
-                            }}
-                          >
-                            <ExternalLink size={14} />
-                            Open
-                          </a>
-                        </div>
-
-                        {/* Task Description */}
-                        {task.description && (
-                          <p style={{
-                            fontSize: '13px',
-                            color: 'var(--white-80)',
-                            marginBottom: '12px',
-                            lineHeight: 1.5,
-                            whiteSpace: 'pre-wrap'
-                          }}>
-                            {task.description.length > 200
-                              ? task.description.substring(0, 200) + '...'
-                              : task.description}
-                          </p>
-                        )}
-
-                        {/* Task Meta */}
-                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                          {/* Status */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: task.bucket === 'done' ? '#22c55e' :
-                                         task.bucket === 'in_progress' ? '#3b82f6' :
-                                         task.bucket === 'blocked' ? '#ef4444' : '#9ca3af'
-                            }} />
-                            <span style={{ fontSize: '12px', color: 'var(--white-60)', textTransform: 'capitalize' }}>
-                              {(task.bucket || 'unknown').replace('_', ' ')}
-                            </span>
-                          </div>
-
-                          {/* Due Date */}
-                          {task.dueDate && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Calendar size={14} style={{ color: 'var(--white-40)' }} />
-                              <span style={{ fontSize: '12px', color: 'var(--white-60)' }}>
-                                {new Date(task.dueDate).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Link Type */}
-                          <span style={{
-                            fontSize: '11px',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: 'var(--white-10)',
-                            color: 'var(--white-60)'
-                          }}>
-                            {(task.relatedContent || []).some(item => item.messageId === editingMessage?.id)
-                              ? 'Source MC'
-                              : 'Output MC'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
             </div>
 
             {/* PREVIEW PANEL */}

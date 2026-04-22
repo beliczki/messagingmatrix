@@ -72,6 +72,10 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     const saved = localStorage.getItem('creativeLibrary_statusFilter');
     return saved ? JSON.parse(saved) : [];
   });
+  const [liveInAdFormFilter, setLiveInAdFormFilter] = useState(() => {
+    const saved = localStorage.getItem('creativeLibrary_liveInAdFormFilter');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Sorting state (persisted to localStorage)
   const [sortColumn, setSortColumn] = useState(() => {
@@ -1187,6 +1191,74 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
     localStorage.setItem('creativeLibrary_statusFilter', JSON.stringify(statusFilter));
   }, [statusFilter]);
 
+  // Build lookup maps from matrixData.reporting (banner-level by MC+size, rollup by MC)
+  const reportingIndex = React.useMemo(() => {
+    const byBanner = new Map();
+    const byLabel = new Map();
+    (matrixData?.reporting || []).forEach(r => {
+      if (r.level === 'banner') {
+        byBanner.set(`${r.mcLabel}|${r.size}`, r);
+      } else if (r.level === 'label') {
+        byLabel.set(r.mcLabel, r);
+      }
+    });
+    return { byBanner, byLabel };
+  }, [matrixData?.reporting]);
+
+  // Extract MC label from a creative (dynamic: messageData; static: filename regex)
+  const getMcLabel = useCallback((creative) => {
+    if (creative.isDynamic && creative.messageData?.number) {
+      const num = creative.messageData.number;
+      const variant = (creative.messageData.variant || 'a').toLowerCase();
+      return `MC${num}${variant}`;
+    }
+    if (creative.filename) {
+      const m = creative.filename.match(/MC(\d+)([a-z])/i);
+      if (m) return `MC${m[1]}${m[2].toLowerCase()}`;
+    }
+    return null;
+  }, []);
+
+  // Join reporting data onto each creative. Banner-level wins; label-level is the fallback.
+  const creativesWithReporting = React.useMemo(() => {
+    return creatives.map(c => {
+      const mcLabel = getMcLabel(c);
+      const size = c.size;
+      const banner = mcLabel && size ? reportingIndex.byBanner.get(`${mcLabel}|${size}`) : null;
+      const label  = mcLabel ? reportingIndex.byLabel.get(mcLabel) : null;
+      const source = banner || label || null;
+      return {
+        ...c,
+        ctr: source?.ctr ?? null,
+        impressions: source?.impressions ?? null,
+        liveInAdForm: (banner?.adformStatus === 'live') || (!banner && label?.adformStatus === 'live') || false
+      };
+    });
+  }, [creatives, reportingIndex, getMcLabel]);
+
+  // Derive the live/not-live options from the joined data
+  const availableLiveStates = React.useMemo(() => {
+    const hasLive = creativesWithReporting.some(c => c.liveInAdForm);
+    const hasInactive = creativesWithReporting.some(c => !c.liveInAdForm);
+    const states = [];
+    if (hasLive) states.push('live');
+    if (hasInactive) states.push('not live');
+    return states;
+  }, [creativesWithReporting]);
+
+  // Clean up stale liveInAdForm filter entries
+  useEffect(() => {
+    if (liveInAdFormFilter.length > 0 && availableLiveStates.length > 0) {
+      const valid = liveInAdFormFilter.filter(s => availableLiveStates.includes(s));
+      if (valid.length !== liveInAdFormFilter.length) setLiveInAdFormFilter(valid);
+    }
+  }, [availableLiveStates]);
+
+  // Persist liveInAdForm filter
+  useEffect(() => {
+    localStorage.setItem('creativeLibrary_liveInAdFormFilter', JSON.stringify(liveInAdFormFilter));
+  }, [liveInAdFormFilter]);
+
   // Save sort preferences to localStorage
   useEffect(() => {
     localStorage.setItem('creativeLibrary_sortColumn', sortColumn);
@@ -1227,7 +1299,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
 
   // Filter and sort creatives based on product and type
   const filteredByFilters = React.useMemo(() => {
-    const filtered = creatives.filter(creative => {
+    const filtered = creativesWithReporting.filter(creative => {
       // Product filter
       let matchesProduct = productFilter.length === 0;
       if (!matchesProduct) {
@@ -1268,7 +1340,14 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
         matchesStatus = statusFilter.includes(creativeStatus);
       }
 
-      return matchesProduct && matchesType && matchesSize && matchesStatus;
+      // Live-in-AdForm filter
+      let matchesLive = liveInAdFormFilter.length === 0; // No filter = show all
+      if (!matchesLive) {
+        const state = creative.liveInAdForm ? 'live' : 'not live';
+        matchesLive = liveInAdFormFilter.includes(state);
+      }
+
+      return matchesProduct && matchesType && matchesSize && matchesStatus && matchesLive;
     });
 
     // Sort based on sortColumn and sortDirection
@@ -1349,6 +1428,16 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           comparison = productA.localeCompare(productB);
           break;
         }
+        case 'ctr': {
+          // Nulls always sort to the end regardless of direction
+          const aHas = a.ctr !== null && a.ctr !== undefined;
+          const bHas = b.ctr !== null && b.ctr !== undefined;
+          if (!aHas && !bHas) { comparison = 0; break; }
+          if (!aHas) return 1;
+          if (!bHas) return -1;
+          comparison = a.ctr - b.ctr;
+          break;
+        }
         default:
           comparison = 0;
       }
@@ -1356,7 +1445,7 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
       // Apply direction
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [creatives, productFilter, typeFilter, sizeFilter, statusFilter, sortColumn, sortDirection, matrixData?.audiences]);
+  }, [creativesWithReporting, productFilter, typeFilter, sizeFilter, statusFilter, liveInAdFormFilter, sortColumn, sortDirection, matrixData?.audiences]);
 
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -1382,7 +1471,8 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
           { key: 'size', label: 'Size' },
           { key: 'template', label: 'Template' },
           { key: 'date', label: 'Date' },
-          { key: 'product', label: 'Product' }
+          { key: 'product', label: 'Product' },
+          { key: 'ctr', label: 'CTR' }
         ]}
 
         // No header - just toolbar
@@ -1398,6 +1488,9 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
             setSizeFilter={setSizeFilter}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
+            liveInAdFormFilter={liveInAdFormFilter}
+            setLiveInAdFormFilter={setLiveInAdFormFilter}
+            availableLiveStates={availableLiveStates}
             availableProducts={availableProducts}
             typeOptions={typeOptions}
             availableSizes={availableSizes}
@@ -1586,6 +1679,22 @@ const CreativeLibrary = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixD
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
                     {product}
                   </span>
+                )}
+              </td>
+              <td className="py-3 px-4 text-sm">
+                {creative.ctr !== null && creative.ctr !== undefined ? (
+                  <div>
+                    <div className={`font-medium ${creative.liveInAdForm ? 'text-green-700' : 'text-gray-700'}`}>
+                      {(creative.ctr * 100).toFixed(2)}%
+                    </div>
+                    {creative.impressions !== null && creative.impressions !== undefined && (
+                      <div className="text-xs text-gray-500">
+                        {creative.impressions.toLocaleString()} impr.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">—</span>
                 )}
               </td>
             </>

@@ -2,7 +2,7 @@
 
 > A comprehensive messaging campaign management platform with Google Sheets integration, Google Drive asset management, AI-powered content generation, and visual decision tree analysis.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-4.5.0-blue.svg)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react)
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC?logo=tailwind-css)
@@ -120,7 +120,6 @@
 - **Creative Library**: Creative asset management with template support
 - **Assets**: Google Drive asset management with virtual scrolling
 - **Templates**: Template management and configuration
-- **Tasks**: Task and workflow management
 - **Monitoring**: Analytics and reporting
 - **Users**: User management interface
 - **Settings**: Application configuration
@@ -178,7 +177,6 @@ messagingmatrix/
 │   │   ├── AIAssistant.jsx               # AI assistant with Chat/Context tabs (1,400+ lines)
 │   │   ├── StateManagementDialog.jsx     # Application state viewer
 │   │   ├── Login.jsx                     # Authentication
-│   │   ├── Tasks.jsx                     # Task management
 │   │   ├── Monitoring.jsx                # Analytics
 │   │   ├── Users.jsx                     # User management
 │   │   └── Settings.jsx                  # Application settings
@@ -539,36 +537,14 @@ npm run lint         # Run ESLint
 
 ## 🎯 Roadmap
 
-### Completed Features ✅
-
-- ✅ Assets Library with Google Drive integration
-- ✅ Creative Library with static and dynamic creatives
-- ✅ Virtual scrolling with masonry layout
-- ✅ Share gallery system with ZIP downloads
-- ✅ Template management with HTML5 support
-- ✅ Advanced filtering with AND/OR logic
-- ✅ Pattern evaluation for PMMID and trafficking
-- ✅ State management dialog
-
-### Upcoming Features 🚧
-
-- [ ] Monitoring and analytics dashboard
-- [ ] User management interface
-- [ ] Bulk import/export functionality
-- [ ] Version history and rollback
-- [ ] Collaborative editing
-- [ ] Real-time sync across multiple users
-- [ ] Advanced reporting and insights
-- [ ] API for external integrations
-- [ ] Webhook support for automation
-- [ ] Performance analytics
+See [ROADMAP.md](./ROADMAP.md) for the active milestone, backlog, and parking lot. See [CHANGELOG.md](./CHANGELOG.md) for shipped features by version.
 
 ---
 
 ## 📞 Contact
 
 **Project**: Messaging Matrix
-**Version**: 2.0.0
+**Version**: 4.5.0
 **Website**: https://messagingmatrix.ai
 
 ---

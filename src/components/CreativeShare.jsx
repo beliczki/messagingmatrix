@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Share2, Copy, Check, Loader2, Search, ClipboardList } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Share2, Copy, Check, Loader2 } from 'lucide-react';
 import { createPreview } from '../services/previewService';
-import { apiGet } from '../utils/api';
 
 const CreativeShare = ({
   isOpen,
@@ -27,12 +26,6 @@ const CreativeShare = ({
   const [isCreating, setIsCreating] = useState(false);
   const [creationStatus, setCreationStatus] = useState('');
 
-  // Task linking state
-  const [allTasks, setAllTasks] = useState([]);
-  const [taskSearch, setTaskSearch] = useState('');
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [taskDropdownOpen, setTaskDropdownOpen] = useState(false);
-
   // ESC key to close dialog
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -43,61 +36,6 @@ const CreativeShare = ({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
-
-  // Fetch tasks when dialog opens
-  useEffect(() => {
-    if (!isOpen) {
-      // Reset task state when dialog closes
-      setTaskSearch('');
-      setSelectedTask(null);
-      setTaskDropdownOpen(false);
-      return;
-    }
-
-    const fetchTasks = async () => {
-      try {
-        const response = await apiGet('/api/tasks');
-        if (response.ok) {
-          const data = await response.json();
-          setAllTasks(data.tasks || []);
-        }
-      } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setAllTasks([]);
-      }
-    };
-
-    fetchTasks();
-  }, [isOpen]);
-
-  // Filter tasks based on search
-  const filteredTasks = useMemo(() => {
-    if (!taskSearch.trim()) return allTasks.slice(0, 10);
-
-    const searchLower = taskSearch.toLowerCase();
-    return allTasks
-      .filter(task => {
-        const title = (task.title || '').toLowerCase();
-        const tcNumber = `tc${task.id}`.toLowerCase();
-        return title.includes(searchLower) || tcNumber.includes(searchLower);
-      })
-      .slice(0, 10);
-  }, [taskSearch, allTasks]);
-
-  // Click outside to close task dropdown
-  useEffect(() => {
-    if (!taskDropdownOpen) return;
-
-    const handleClickOutside = (e) => {
-      const dropdown = e.target.closest('[data-task-dropdown]');
-      if (!dropdown) {
-        setTaskDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [taskDropdownOpen]);
 
   if (!isOpen) return null;
 
@@ -168,33 +106,6 @@ const CreativeShare = ({
           textFormatting,
           sortColumn ? { column: sortColumn, direction: sortDirection } : null
         );
-
-        // Link share to task if one is selected
-        if (selectedTask && result.url) {
-          setCreationStatus('Linking to task...');
-          try {
-            // Append share URL to task's shareLinks array
-            const currentLinks = selectedTask.shareLinks || [];
-
-            // Only add if not already present
-            if (!currentLinks.includes(result.url)) {
-              const response = await fetch(`/api/tasks/${selectedTask.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  shareLinks: [...currentLinks, result.url]
-                })
-              });
-
-              if (!response.ok) {
-                console.warn('Failed to link share to task:', await response.text());
-              }
-            }
-          } catch (linkError) {
-            console.warn('Failed to link share to task:', linkError);
-            // Don't fail the whole operation if linking fails
-          }
-        }
 
         setCreationStatus('Share created successfully!');
         setGeneratedShareUrl(result.url);
@@ -282,62 +193,6 @@ const CreativeShare = ({
                 style={{ backgroundColor: lookAndFeel?.secondaryColor3 || '#711c7a' }}
                 title="Secondary Color 3"
               />
-            </div>
-          </div>
-
-          {/* Add to Task Dropdown */}
-          <div data-task-dropdown>
-            <label className="block text-sm font-medium text-white mb-2">Add to Task (optional)</label>
-            <div className="relative">
-              {selectedTask ? (
-                <div className="flex items-center gap-2 px-3 py-2 bg-white/20 border border-white/40 rounded text-white">
-                  <ClipboardList size={16} className="text-white/60" />
-                  <span className="flex-1 truncate">TC{selectedTask.id}: {selectedTask.title || 'Untitled Task'}</span>
-                  <button
-                    onClick={() => setSelectedTask(null)}
-                    className="p-1 hover:bg-white/20 rounded"
-                    disabled={isCreating}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-                    <input
-                      type="text"
-                      value={taskSearch}
-                      onChange={(e) => {
-                        setTaskSearch(e.target.value);
-                        setTaskDropdownOpen(true);
-                      }}
-                      onFocus={() => setTaskDropdownOpen(true)}
-                      placeholder="Search tasks by title or TC#..."
-                      disabled={isCreating}
-                      className="w-full pl-10 pr-3 py-2 bg-white/20 border border-white/40 rounded text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
-                    />
-                  </div>
-                  {taskDropdownOpen && filteredTasks.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-white/20 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {filteredTasks.map(task => (
-                        <button
-                          key={task.id}
-                          onClick={() => {
-                            setSelectedTask(task);
-                            setTaskSearch('');
-                            setTaskDropdownOpen(false);
-                          }}
-                          className="w-full px-3 py-2 text-left hover:bg-white/10 transition-colors flex items-center gap-2"
-                        >
-                          <span className="text-xs text-white/40 shrink-0">TC{task.id}</span>
-                          <span className="text-white text-sm truncate">{task.title || 'Untitled Task'}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           </div>
 

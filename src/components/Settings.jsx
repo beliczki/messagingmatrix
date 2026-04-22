@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles, FileCode } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, Check, ExternalLink, Palette, MessageSquare, Sparkles, FileCode, Info } from 'lucide-react';
 import settings from '../services/settings';
 import AIAssistant from './AIAssistant';
 import { callClaudeAPI } from '../api/claude-proxy';
@@ -101,12 +101,6 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const [generatingModule, setGeneratingModule] = useState(null);
   const [dataStructureDoc, setDataStructureDoc] = useState('');
   const [readmeDoc, setReadmeDoc] = useState('');
-  const [emailAccount, setEmailAccount] = useState({
-    client_email: '',
-    pass: '',
-    host: '',
-    port: ''
-  });
   const [activeTab, setActiveTab] = useState('storage');
   const [audienceStructure, setAudienceStructure] = useState('');
   const [topicStructure, setTopicStructure] = useState('');
@@ -179,13 +173,10 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       const configData = settings.getAll();
       setConfig(configData);
 
-      // Load email account settings and structure fields from SQLite
+      // Load structure fields from SQLite
       const response = await apiGet('/api/config');
       if (response.ok) {
         const allConfig = await response.json();
-        if (allConfig.emailAccount) {
-          setEmailAccount(allConfig.emailAccount);
-        }
         // Set structure fields (no defaults - must be explicitly configured)
         setAudienceStructure(allConfig.audienceStructure || '');
         setTopicStructure(allConfig.topicStructure || '');
@@ -281,7 +272,7 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
 
       // Save AI prompts to text files
       console.log('💾 Saving AI Prompts - Current state:', aiPrompts);
-      const allModules = ['client-context', 'matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'tasks', 'settings', 'email-to-task', 'message-generation'];
+      const allModules = ['client-context', 'matrix', 'creative-library', 'assets', 'monitoring', 'templates', 'users', 'settings', 'message-generation'];
       const savePromises = allModules.map(module => {
         const promptValue = aiPrompts[module] || '';
         console.log(`📝 Saving ${module}:`, promptValue.substring(0, 100) + (promptValue.length > 100 ? '...' : ''));
@@ -293,9 +284,8 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
       await Promise.all(savePromises);
       console.log('✅ All AI prompts saved');
 
-      // Save email account settings, structure fields, and AI models to SQLite
+      // Save structure fields and AI models to SQLite
       const sqliteConfigResponse = await apiPost('/api/config', {
-        emailAccount,
         audienceStructure,
         topicStructure,
         messagesStructure,
@@ -350,10 +340,6 @@ const Settings = ({ onMenuToggle, currentModuleName, matrixData }) => {
   const handleAiPromptChange = (module, value) => {
     // Update local state only (don't save to backend yet)
     setAiPrompts(prev => ({ ...prev, [module]: value }));
-  };
-
-  const handleEmailAccountChange = (field, value) => {
-    setEmailAccount(prev => ({ ...prev, [field]: value }));
   };
 
   const resetAiPrompt = async (module) => {
@@ -555,6 +541,16 @@ Guidelines for creating instructions:
               >
                 Models
               </button>
+              <button
+                onClick={() => setActiveTab('about')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  activeTab === 'about'
+                    ? 'bg-white border-b-2 border-blue-500 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                About
+              </button>
             </div>
           </div>
 
@@ -681,85 +677,6 @@ Guidelines for creating instructions:
                     </label>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Email Account Settings */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <SettingsIcon size={20} className="text-blue-600" />
-              Email Account Settings
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Configure the IMAP email account for the Tasks module to fetch and convert emails to tasks
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={emailAccount.client_email || ''}
-                  onChange={(e) => handleEmailAccountChange('client_email', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="your-email@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={emailAccount.pass || ''}
-                  onChange={(e) => handleEmailAccountChange('pass', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Email password or app-specific password"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    IMAP Host
-                  </label>
-                  <input
-                    type="text"
-                    value={emailAccount.host || ''}
-                    onChange={(e) => handleEmailAccountChange('host', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                    placeholder="imap.gmail.com"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    IMAP server address (e.g., imap.gmail.com, outlook.office365.com)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    IMAP Port
-                  </label>
-                  <input
-                    type="text"
-                    value={emailAccount.port || ''}
-                    onChange={(e) => handleEmailAccountChange('port', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                    placeholder="993"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Usually 993 for SSL/TLS
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <p className="text-xs text-gray-600">
-                  <strong>Note:</strong> These settings are used by the Tasks module to fetch emails via IMAP.
-                  For Gmail, you'll need to enable "Less secure app access" or use an "App password" if 2FA is enabled.
-                </p>
               </div>
             </div>
           </div>
@@ -1980,73 +1897,6 @@ Guidelines for creating instructions:
                 </p>
               </div>
 
-              {/* Tasks Module */}
-              <div className="border-b border-gray-200 pb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-md font-semibold text-gray-800">Tasks Module</h3>
-                  <button
-                    onClick={() => generateNewInstructions('tasks')}
-                    disabled={generatingModule === 'tasks'}
-                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generatingModule === 'tasks' ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={14} />
-                        Generate New Instructions
-                      </>
-                    )}
-                  </button>
-                </div>
-                <textarea
-                  value={aiPrompts.tasks || ''}
-                  onChange={(e) => handleAiPromptChange('tasks', e.target.value)}
-                  placeholder="Leave empty to use default prompt..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
-                  rows="8"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Default: General task management assistant, workflow organization, task analysis
-                </p>
-              </div>
-
-              {/* Email-to-Task Conversion */}
-              <div className="pb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-md font-semibold text-gray-800">Email-to-Task Conversion</h3>
-                  <button
-                    onClick={() => generateNewInstructions('email-to-task')}
-                    disabled={generatingModule === 'email-to-task'}
-                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generatingModule === 'email-to-task' ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={14} />
-                        Generate New Instructions
-                      </>
-                    )}
-                  </button>
-                </div>
-                <textarea
-                  value={aiPrompts['email-to-task'] || ''}
-                  onChange={(e) => handleAiPromptChange('email-to-task', e.target.value)}
-                  placeholder="Leave empty to use default prompt..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs"
-                  rows="12"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Default: Email analysis and task extraction, conversation context structuring, multilingual support
-                </p>
-              </div>
 
             </div>
           </div>
@@ -2320,6 +2170,41 @@ Guidelines for creating instructions:
             </p>
           </div>
             </>
+          )}
+
+          {/* About Tab */}
+          {activeTab === 'about' && (
+            <div className="bg-white rounded-lg shadow-sm p-8 mt-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Info size={24} className="text-blue-600" />
+                  About
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Build information and release notes for this deployment.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Version</div>
+                  <div className="font-mono text-lg text-gray-800">v{__APP_VERSION__}</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Build date</div>
+                  <div className="font-mono text-sm text-gray-800">
+                    {new Date(__BUILD_DATE__).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-md font-semibold text-gray-800 mb-2">Release history</h3>
+                <p className="text-sm text-gray-600">
+                  See <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">CHANGELOG.md</code> in the repository root for the full release history. Bump rules and the roadmap live in <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">CLAUDE.md</code> and <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">ROADMAP.md</code>.
+                </p>
+              </div>
+            </div>
           )}
 
         </div>

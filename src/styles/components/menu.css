@@ -280,6 +280,17 @@
     transform var(--transition-slow);
 }
 
+/* --- App Version --- */
+.menu-version {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 12px 0 8px;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
 /* --- Menu Overlay --- */
 .menu-overlay {
   position: fixed;

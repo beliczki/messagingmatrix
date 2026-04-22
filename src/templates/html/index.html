@@ -543,16 +543,36 @@
     // ============================================================
     // PHASE 6: CLICK HANDLER
     // ============================================================
+    // Always try Adform's dhtml.getVar('clickTAG') first — independently of the
+    // isAdformContext flag. Adform's livepreview sometimes loads `dhtml` without
+    // exposing `Adform.DynAdsHelper`, which makes isAdformContext false even
+    // though the clickTAG macro is available. Falling back only when dhtml isn't
+    // usable keeps the click working in:
+    //   - Adform delivery (gets Adform's tracked URL)
+    //   - Adform livepreview (gets the preview URL)
+    //   - our local /share/ iframe preview (uses the meta tag)
     function setupClickHandler(variables) {
-      if (isAdformContext && typeof dhtml !== 'undefined') {
-        window.clickTAGvalue = dhtml.getVar('clickTAG', variables.click_url || '');
-        window.landingpagetarget = dhtml.getVar('landingPageTarget', '_blank');
-      } else {
-        // Local preview mode
-        var metaClickUrl = document.querySelector('meta[name="click_url"]');
-        window.clickTAGvalue = variables.click_url || (metaClickUrl ? metaClickUrl.content : '') || '#';
-        window.landingpagetarget = '_blank';
+      var clickUrl = '';
+      var landingTarget = '_blank';
+
+      try {
+        if (typeof dhtml !== 'undefined' && dhtml && typeof dhtml.getVar === 'function') {
+          clickUrl = dhtml.getVar('clickTAG', '') || '';
+          landingTarget = dhtml.getVar('landingPageTarget', '_blank') || '_blank';
+        }
+      } catch (e) {
+        console.log('dhtml.getVar not usable:', e && e.message);
       }
+
+      if (!clickUrl) {
+        var metaClickUrl = document.querySelector('meta[name="click_url"]');
+        clickUrl = (variables && variables.click_url) ||
+                   (metaClickUrl && metaClickUrl.content) ||
+                   '#';
+      }
+
+      window.clickTAGvalue = clickUrl;
+      window.landingpagetarget = landingTarget;
       console.log('Click URL set:', window.clickTAGvalue);
     }
 

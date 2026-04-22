@@ -57,7 +57,13 @@ const getValue = (item, source, field) => {
  * @param {string} treeStructure - Tree structure pattern string
  * @returns {Object} Hierarchical tree object
  */
+// Audiences excluded from chart drawing (tree / sankey):
+// - name "Incoming" is a workflow bucket, not a real targeting audience
+// - empty strategy would render as an "Unknown" branch that's just noise
+const isTreeAudience = (aud) => aud.name !== 'Incoming' && !!aud.strategy;
+
 export const buildTree = (audiences, topics, getMessages, treeStructure) => {
+  audiences = audiences.filter(isTreeAudience);
   const parsedLevels = parseTreeStructure(treeStructure);
 
   /**

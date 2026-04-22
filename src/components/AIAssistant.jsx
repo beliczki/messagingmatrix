@@ -68,7 +68,7 @@ const getAIProviders = () => {
   return DEFAULT_AI_PROVIDERS;
 };
 
-const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, taskContext, onTaskAction, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, onAddPackage, setActiveEditorTab, setIsGeneratingContent, mcContext, onAddSelection, onOpen }, ref) => {
+const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddMessage, onDeleteAudience, onDeleteTopic, moduleContext, matrixData, filteredItems, getItemUrl, editingMessage, onApplyField, onAddPackage, setActiveEditorTab, setIsGeneratingContent, mcContext, onAddSelection, onOpen }, ref) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -406,214 +406,6 @@ const AIAssistant = forwardRef(({ matrixState, onAddAudience, onAddTopic, onAddM
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
-    processEmailsToTasks: async (emails, onTasksCreated) => {
-      if (!isConfigured || isLoading) {
-        alert('AI Assistant API is not configured or busy');
-        return;
-      }
-
-      // Expand the assistant panel to show the process
-      setIsCollapsed(false);
-      setActiveTab('chat');
-
-      // Build email summaries context
-      const emailSummaries = emails.map((email, idx) =>
-        `Email ${idx + 1}:\nFrom: ${email.fromName} <${email.from}>\nSubject: ${email.subject}\nDate: ${email.date}\nBody:\n${email.body}\n`
-      ).join('\n---\n\n');
-
-      // Get client context and email-to-task prompt from loaded prompts or use fallback
-      const clientContext = customPrompts['client-context'] || '';
-      const clientContextSection = clientContext ? `${clientContext}\n\n---\n\n` : '';
-      const basePrompt = customPrompts['email-to-task'] || `You are an intelligent task manager. Analyze the following emails and extract actionable tasks from them. For each email, identify:
-1. What action needs to be taken
-2. The priority level (High, Medium, Low)
-3. A clear, concise task summary (2-3 sentences max - DO NOT copy the entire email)
-4. Any relevant deadline or due date mentioned
-5. The email source (subject and sender)
-6. Extract and structure the COMPLETE conversation context from the ENTIRE email thread
-
-CRITICAL INSTRUCTION - PRESERVE ORIGINAL LANGUAGE:
-- **IMPORTANT**: The "title", "description", and "context" fields MUST be in the ORIGINAL LANGUAGE of the email
-- DO NOT translate to English or any other language
-- If the email is in Hungarian, write the task in Hungarian
-- If the email is in German, write the task in German
-- If the email is in English, write the task in English
-- Keep the exact same language as the email for all fields
-
-INSTRUCTIONS FOR THE "title" FIELD:
-- Brief task title (one line)
-- In the ORIGINAL LANGUAGE of the email
-- Actionable and clear
-
-INSTRUCTIONS FOR THE "description" FIELD:
-- Concise 2-3 sentence summary of what needs to be done and why
-- In the ORIGINAL LANGUAGE of the email
-- NOT the full email content - just a brief summary
-
-INSTRUCTIONS FOR THE "context" FIELD:
-- Extract key points from the email thread - focus on the most recent and relevant messages
-- Organize the conversation chronologically showing who said what
-- Use Markdown formatting for structure (headings, bold, lists, etc.)
-- Preserve the ORIGINAL LANGUAGE - DO NOT translate
-- Summarize older messages briefly, but keep recent messages more detailed
-- Format it clearly with headings like "## John Doe wrote:" or "### Maria Smith replied:"
-- Include timestamps for key messages
-- Keep the context field concise but informative (aim for 200-400 words)
-- Make it easy to read by using markdown formatting (bold for names, ## for message headers, etc.)
-
-Return your response as a JSON array of tasks with this structure:
-[
-  {
-    "title": "Brief task title in ORIGINAL LANGUAGE",
-    "description": "Concise 2-3 sentence summary in ORIGINAL LANGUAGE",
-    "context": "Markdown-formatted complete conversation thread in ORIGINAL LANGUAGE",
-    "priority": "High|Medium|Low",
-    "dueDate": "ISO date string or null",
-    "source": "Email subject",
-    "from": "Sender name/email",
-    "status": "pending",
-    "emailUid": email UID number
-  }
-]
-
-CRITICAL JSON FORMATTING RULES:
-- Return ONLY the JSON array - no markdown code fences, no explanations
-- Do NOT wrap the JSON in \`\`\`json code blocks
-- Ensure all strings are properly escaped (escape quotes with \\", newlines with \\n)
-- Make sure the JSON is valid and parseable
-- If an email doesn't contain actionable tasks, skip it (return empty array [] if no tasks)
-
-RESPONSE MUST START WITH [ AND END WITH ]`;
-
-      const emailPrompt = `${clientContextSection}${basePrompt}
-
-Here are the emails:
-
-${emailSummaries}`;
-
-      // Add context message showing the emails
-      const contextMessage = {
-        role: 'system',
-        content: `📧 Processing ${emails.length} email(s):\n\n${emails.map((e, i) => `${i + 1}. ${e.subject} (from ${e.fromName})`).join('\n')}`
-      };
-      setMessages(prev => [...prev, contextMessage]);
-
-      // Add user message with the prompt
-      const userMessage = {
-        role: 'user',
-        content: emailPrompt
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setIsLoading(true);
-      setIsStreaming(true);
-      setStreamingContent('');
-
-      let fullResponse = '';
-
-      // Use streaming API for email-to-task
-      await callAIAPIStream(
-        apiKey,
-        [userMessage],
-        selectedModel,
-        16384,
-        temperature,
-        // onChunk
-        (chunk) => {
-          fullResponse += chunk;
-          setStreamingContent(fullResponse);
-          scrollToBottom();
-        },
-        // onDone
-        () => {
-          setIsStreaming(false);
-          setStreamingContent('');
-
-          const responseText = fullResponse;
-
-          // Add assistant response to chat
-          const assistantMessage = {
-            role: 'assistant',
-            content: responseText
-          };
-          setMessages(prev => [...prev, assistantMessage]);
-
-          // Extract JSON from the response - try multiple patterns
-          let jsonMatch = responseText.match(/```json\s*\n([\s\S]*?)\n```/);
-          if (!jsonMatch) {
-            jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/);
-          }
-          if (!jsonMatch) {
-            jsonMatch = responseText.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-              jsonMatch = [null, jsonMatch[0]];
-            }
-          }
-          if (!jsonMatch) {
-            const firstBracket = responseText.indexOf('[');
-            const lastBracket = responseText.lastIndexOf(']');
-            if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-              jsonMatch = [null, responseText.substring(firstBracket, lastBracket + 1)];
-            }
-          }
-
-          if (jsonMatch) {
-            const jsonText = jsonMatch[1] || jsonMatch[0];
-            try {
-              const tasks = JSON.parse(jsonText.trim());
-
-              const enrichedTasks = tasks.map((task, idx) => {
-                const originalEmail = emails[idx];
-                return {
-                  ...task,
-                  id: `task-${Date.now()}-${idx}`,
-                  emailUid: originalEmail?.uid || null,
-                  emailBody: originalEmail?.body || '',
-                  emailSubject: originalEmail?.subject || '',
-                  emailDate: originalEmail?.date || null,
-                  createdAt: new Date().toISOString()
-                };
-              });
-
-              if (onTasksCreated) {
-                onTasksCreated(enrichedTasks);
-              }
-
-              const successMessage = {
-                role: 'system',
-                content: `✅ Extracted and created ${enrichedTasks.length} task(s) from ${emails.length} email(s)!`
-              };
-              setMessages(prev => [...prev, successMessage]);
-            } catch (parseError) {
-              console.error('Error parsing tasks JSON:', parseError);
-              const errorMessage = {
-                role: 'system',
-                content: `❌ Failed to parse tasks from response. Parse error: ${parseError.message}`
-              };
-              setMessages(prev => [...prev, errorMessage]);
-            }
-          } else {
-            const errorMessage = {
-              role: 'system',
-              content: '❌ No task data found in response. Please try again.'
-            };
-            setMessages(prev => [...prev, errorMessage]);
-          }
-          setIsLoading(false);
-        },
-        // onError
-        (error) => {
-          console.error('Error processing emails:', error);
-          setIsStreaming(false);
-          setStreamingContent('');
-          const errorMessage = {
-            role: 'assistant',
-            content: `Error: ${error.message}`
-          };
-          setMessages(prev => [...prev, errorMessage]);
-          setIsLoading(false);
-        }
-      );
-    },
     generateMessageContent: async (contextData, callback) => {
       if (!isConfigured || isLoading) {
         alert('AI Assistant API is not configured or busy');
@@ -878,7 +670,7 @@ Respond ONLY with a JSON object in this exact format:
   // Build initial context when component mounts or module changes
   useEffect(() => {
     buildContextPrompt();
-  }, [moduleContext?.module, taskContext]);
+  }, [moduleContext?.module]);
 
   
   useEffect(() => {
@@ -1224,42 +1016,6 @@ ${appStateContext}`;
       return `Error: AI Assistant prompt not configured for module "${module}". Please check that AI${module.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')}Instructions.txt exists in the root directory.`;
     }
 
-    // Task Management Context
-    if (taskContext) {
-      const { tasks, emails } = taskContext;
-
-      // Include ALL tasks and emails in full detail
-      const taskStateJSON = `## COMPLETE TASK MANAGEMENT DATA:
-
-### ALL TASKS (${tasks.length} total):
-${JSON.stringify(tasks, null, 2)}
-
-### ALL EMAILS (${emails.length} total):
-${JSON.stringify(emails, null, 2)}`;
-
-      // Use prompt from file - respect toggle
-      if (customPrompts.tasks && customPrompts.tasks.trim() !== '') {
-        const moduleInstructions = contextParts.moduleInstructions ? customPrompts.tasks : '';
-        const context = `${clientContextSection}${taskStateJSON}
-
-${moduleInstructions}`;
-        return context;
-      }
-
-      // If prompts haven't loaded yet, return loading message
-      if (!promptsLoaded) {
-        return `${taskStateJSON}
-
-Loading AI Assistant configuration...`;
-      }
-
-      // If no file-based prompt found after loading, return error message
-      console.error('❌ No prompt file found for tasks module');
-      return `${taskStateJSON}
-
-Error: AI Assistant prompt not configured for tasks. Please check that AITasksInstructions.txt exists in the root directory.`;
-    }
-
     // Matrix Context (default)
     const data = matrixData || matrixState;
     if (!data) {
@@ -1309,7 +1065,7 @@ ${appStateContext}`;
     }
 
     // Module Instructions
-    const module = moduleContext?.module || (editingMessage ? 'message-generation' : (taskContext ? 'tasks' : 'matrix'));
+    const module = moduleContext?.module || (editingMessage ? 'message-generation' : 'matrix');
     const moduleInstructions = customPrompts[module] || customPrompts['matrix'] || '';
     if (moduleInstructions) {
       sections.moduleInstructions = { label: 'Module Instructions', content: moduleInstructions };
@@ -1905,7 +1661,7 @@ ${appStateContext}`;
                      moduleContext?.module === 'templates' ? 'Templates' :
                      moduleContext?.module === 'users' ? 'Users' :
                      moduleContext?.module === 'settings' ? 'Settings' :
-                     taskContext ? 'Tasks' : 'Matrix'}
+                     'Matrix'}
                   </span>
                 </div>
               </div>
@@ -2186,17 +1942,6 @@ ${appStateContext}`;
                               ))}
                             </ul>
                           </div>
-                        </>
-                      );
-                    } else if (taskContext) {
-                      return (
-                        <>
-                          <p style={{ fontSize: '14px', fontWeight: 500, color: 'white' }}>
-                            Ask AI to help manage and organize your tasks.
-                          </p>
-                          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
-                            AI can see your current tasks and help with workflow management.
-                          </p>
                         </>
                       );
                     } else {
@@ -2802,7 +2547,7 @@ ${appStateContext}`;
                         sendMessage();
                       }
                     }}
-                    placeholder={taskContext ? "Ask AI for task management help..." : "Ask AI for suggestions..."}
+                    placeholder="Ask AI for suggestions..."
                     disabled={isLoading}
                     style={{
                       flex: 1,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { apiGet, apiPost, authenticatedFetch } from '../utils/api';
+import { apiGet, authenticatedFetch } from '../utils/api';
 import {
   Share2,
   MessageSquare,
@@ -649,35 +649,6 @@ const PublicPreviewView = ({ previewId }) => {
         comments: [...(prev.comments || []), newComment]
       }));
 
-      // Create a task for this comment
-      const asset = previewAssets.find(a => a.id === assetId);
-      if (asset) {
-        const assetName = asset.folderName || asset.filename || assetId;
-        const taskTitle = `Preview Comment: ${assetName.replace(/_/g, ' ')}`;
-        const previewUrl = `${window.location.origin}/share/${previewId}`;
-        const taskDescription = `${commentText}\n\nPreview: ${previewUrl}`;
-
-        // Create related content with the asset image
-        const relatedContent = [{
-          type: 'image',
-          url: getAssetUrl(asset),
-          filename: asset.filename || asset.folderName,
-          addedAt: new Date().toISOString()
-        }];
-
-        // Create the task
-        await apiPost('/api/tasks/create', {
-          title: taskTitle,
-          description: taskDescription,
-          priority: 'Medium',
-          status: 'pending',
-          bucket: 'incoming',
-          source: `Preview Comment by ${commentAuthor}`,
-          from: commentAuthor,
-          relatedContent
-        });
-      }
-
       // Clear everything after posting (keep author if user is logged in)
       if (!currentUser || !currentUser.email) {
         setCommentAuthor('');
@@ -811,8 +782,10 @@ const PublicPreviewView = ({ previewId }) => {
               adFolder.file('styles.css', cleanedCss);
             }
 
-            // Fetch and add support files (manifest, thm, dynamic content)
-            const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js'];
+            // Fetch and add support files (manifest, thm, dynamic content, empty placeholder)
+            // empty.png is referenced by the HTML whenever a message image slot is blank —
+            // the server copies it into the share folder at creation time (see server.js).
+            const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js', 'empty.png'];
             for (const fileName of supportFiles) {
               try {
                 const fileResponse = await fetch(`${folderPath}/${fileName}`);
@@ -970,8 +943,10 @@ const PublicPreviewView = ({ previewId }) => {
         zip.file('styles.css', cleanedCss);
       }
 
-      // Fetch and add support files (manifest, thm, dynamic content)
-      const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js'];
+      // Fetch and add support files (manifest, thm, dynamic content, empty placeholder)
+      // empty.png is referenced by the HTML whenever a message image slot is blank —
+      // the server copies it into the share folder at creation time (see server.js).
+      const supportFiles = ['manifest.json', 'thm.json', 'dynamic.content.js', 'empty.png'];
       for (const fileName of supportFiles) {
         try {
           const fileResponse = await fetch(`${folderPath}/${fileName}`);

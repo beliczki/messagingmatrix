@@ -225,43 +225,6 @@ class DatabaseService {
       )
     `);
 
-    // Create tasks table (v2 schema - id is auto-increment integer)
-    this.sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        priority TEXT,
-        due_date TEXT,
-        source TEXT,
-        "from" TEXT,
-        email_uid INTEGER,
-        bucket TEXT DEFAULT 'backlog',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        product TEXT,
-        audience TEXT,
-        topic TEXT,
-        task_type TEXT,
-        keywords TEXT,
-        email_body TEXT,
-        email_subject TEXT,
-        email_date TEXT,
-        context TEXT,
-        user_notes TEXT,
-        related_content TEXT,
-        output_content TEXT,
-        share_links TEXT
-      )
-    `);
-
-    // Migration: Add share_links column if it doesn't exist
-    try {
-      this.sqlite.exec(`ALTER TABLE tasks ADD COLUMN share_links TEXT`);
-    } catch (e) {
-      // Column already exists, ignore
-    }
-
     // Create config table
     this.sqlite.exec(`
       CREATE TABLE IF NOT EXISTS config (
@@ -294,17 +257,6 @@ class DatabaseService {
     } catch (e) {
       // Column already exists, ignore
     }
-
-    // Create processed_emails table
-    this.sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS processed_emails (
-        uid INTEGER PRIMARY KEY,
-        email_from TEXT,
-        subject TEXT,
-        processed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        tasks_created INTEGER DEFAULT 0
-      )
-    `);
 
     // Create uploaded_assets table
     this.sqlite.exec(`
@@ -343,12 +295,8 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_creatives_product ON creatives(product)',
       'CREATE INDEX IF NOT EXISTS idx_creatives_drive_id ON creatives(file_drive_id)',
       'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_bucket ON tasks(bucket)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_product ON tasks(product)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)',
       'CREATE INDEX IF NOT EXISTS idx_config_category ON config(category)',
       'CREATE INDEX IF NOT EXISTS idx_share_galleries_created_by ON share_galleries(created_by)',
-      'CREATE INDEX IF NOT EXISTS idx_processed_emails_uid ON processed_emails(uid)',
       'CREATE INDEX IF NOT EXISTS idx_uploaded_assets_filename ON uploaded_assets(filename)',
       'CREATE INDEX IF NOT EXISTS idx_uploaded_assets_status ON uploaded_assets(status)'
     ];

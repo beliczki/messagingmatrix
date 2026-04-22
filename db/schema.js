@@ -157,30 +157,6 @@ export const users = sqliteTable('users', {
   updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
-// Tasks table - migrated from tasks.json
-export const tasks = sqliteTable('tasks', {
-  id: text('id').primaryKey(),
-  task_number: integer('task_number'),
-  title: text('title').notNull(),
-  description: text('description'),
-  priority: text('priority'), // 'High', 'Medium', 'Low'
-  due_date: text('due_date'),
-  source: text('source'),
-  from: text('from'),
-  status: text('status').default('pending'), // 'pending', 'completed', 'in_progress'
-  workflow_type: text('workflow_type').default('general'), // 'general', 'creative'
-  email_uid: integer('email_uid'),
-  email_body: text('email_body'), // Full original email body
-  email_subject: text('email_subject'), // Original email subject
-  email_date: text('email_date'), // Original email date
-  context: text('context'), // AI-extracted conversation context (markdown)
-  user_notes: text('user_notes'), // User-editable additional context notes
-  related_content: text('related_content'), // JSON array of related creative IDs
-  bucket: text('bucket').default('backlog'), // 'backlog', 'review', 'done'
-  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
-});
-
 // Config table - migrated from config.json
 // Stores key-value configuration with JSON support
 export const config = sqliteTable('config', {
@@ -202,15 +178,6 @@ export const shareGalleries = sqliteTable('share_galleries', {
   metadata: text('metadata'), // JSON for additional data
   created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
-});
-
-// Processed emails table - migrated from processed-emails.json
-export const processedEmails = sqliteTable('processed_emails', {
-  uid: integer('uid').primaryKey(),
-  email_from: text('email_from'),
-  subject: text('subject'),
-  processed_at: text('processed_at').default(sql`CURRENT_TIMESTAMP`),
-  tasks_created: integer('tasks_created').default(0)
 });
 
 // Uploaded assets registry table - migrated from assets.json

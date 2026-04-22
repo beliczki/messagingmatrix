@@ -273,10 +273,9 @@ const Matrix = ({
     }
   }, [editingMessage, location.pathname, navigate]);
 
-  // Handle action=add_message URL parameter (from Tasks Create MC button)
+  // Handle action=add_message URL parameter (e.g. deep-linked add-message flows)
   const addMessageActionProcessedRef = useRef(false);
   const pendingOpenMessageIdRef = useRef(null);
-  const pendingLinkTaskIdRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -286,7 +285,6 @@ const Matrix = ({
       const audienceKey = params.get('audience');
       const topicKey = params.get('topic');
       const product = params.get('product');
-      const linkTaskId = params.get('linkTask');
 
       if (audienceKey && topicKey) {
         addMessageActionProcessedRef.current = true;
@@ -305,11 +303,6 @@ const Matrix = ({
         const maxId = Math.max(0, ...messages.map(m => parseInt(m.id) || 0));
         pendingOpenMessageIdRef.current = maxId + 1;
 
-        // Store task ID to link after message is created
-        if (linkTaskId) {
-          pendingLinkTaskIdRef.current = linkTaskId;
-        }
-
         // Add the message
         addMessage(topicKey, audienceKey);
 
@@ -324,51 +317,7 @@ const Matrix = ({
     if (pendingOpenMessageIdRef.current && matrixData?.messages) {
       const newMessage = matrixData.messages.find(m => parseInt(m.id) === pendingOpenMessageIdRef.current);
       if (newMessage) {
-        const messageIdToOpen = pendingOpenMessageIdRef.current;
-        const taskIdToLink = pendingLinkTaskIdRef.current;
         pendingOpenMessageIdRef.current = null;
-        pendingLinkTaskIdRef.current = null;
-
-        // Auto-link task to this MC if we have a task ID
-        if (taskIdToLink) {
-          (async () => {
-            try {
-              const response = await fetch('/api/tasks');
-              if (response.ok) {
-                const data = await response.json();
-                const tasks = data.tasks || [];
-                const taskToLink = tasks.find(t => String(t.id) === String(taskIdToLink));
-
-                if (taskToLink) {
-                  const mcLabel = `MC${newMessage.number || newMessage.id}${newMessage.variant || ''}`;
-                  const newOutputItem = {
-                    id: Date.now(),
-                    reference: mcLabel,
-                    type: 'message',
-                    messageId: newMessage.id
-                  };
-
-                  const updatedTask = {
-                    ...taskToLink,
-                    outputContent: [...(taskToLink.outputContent || []), newOutputItem]
-                  };
-
-                  const updatedTasks = tasks.map(t => t.id === taskToLink.id ? updatedTask : t);
-
-                  await fetch('/api/tasks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tasks: updatedTasks })
-                  });
-
-                  console.log(`✅ Auto-linked task ${taskIdToLink} to MC${newMessage.number}${newMessage.variant || ''}`);
-                }
-              }
-            } catch (error) {
-              console.error('Error auto-linking task:', error);
-            }
-          })();
-        }
 
         const messageId = `${newMessage.number}${newMessage.variant || 'a'}`;
         navigate(`/matrix/edit/${messageId}`);
@@ -2215,16 +2164,19 @@ const Matrix = ({
       longPressTimerRef.current = null;
     }
 
+    // Ctrl (Win/Linux) or Cmd (Mac) engages copy mode
+    const isCopy = e.ctrlKey || e.metaKey;
+
     console.log('🔍 onDragStart called:', {
       isSelectMode,
       selectedMessagesSize: selectedMessages.size,
       msgId: msg.id,
       hasMsg: selectedMessages.has(msg.id),
-      ctrlPressed: e.ctrlKey
+      copyModifier: isCopy
     });
 
     // Use REFS instead of setState to avoid re-renders that cancel the drag
-    isCopyModeRef.current = e.ctrlKey;
+    isCopyModeRef.current = isCopy;
     dragOriginCellRef.current = { topic: msg.topic, audience: msg.audience };
     draggedMsgRef.current = msg;
 
@@ -2265,7 +2217,7 @@ const Matrix = ({
     requestAnimationFrame(() => {
       setIsDraggingSelected(isBatchDrag);
       setDragOriginCellUI({ topic: msg.topic, audience: msg.audience });
-      setIsCopyModeUI(e.ctrlKey);
+      setIsCopyModeUI(isCopy);
       setDraggedMsg(msg); // For UI feedback (isValidDropZone check)
     });
   };
@@ -2281,14 +2233,15 @@ const Matrix = ({
       // Disallow dropping on origin cell
       e.dataTransfer.dropEffect = 'none';
     } else {
-      // Update copy mode ref and UI state based on current CTRL key state during drag
-      if (e.ctrlKey !== isCopyModeRef.current) {
-        isCopyModeRef.current = e.ctrlKey;
-        setIsCopyModeUI(e.ctrlKey); // Update UI state for visual feedback
-        console.log(`🔄 Mode changed during drag: ${e.ctrlKey ? 'COPY' : 'MOVE'}`);
+      // Ctrl (Win/Linux) or Cmd (Mac) toggles copy mode mid-drag
+      const isCopy = e.ctrlKey || e.metaKey;
+      if (isCopy !== isCopyModeRef.current) {
+        isCopyModeRef.current = isCopy;
+        setIsCopyModeUI(isCopy); // Update UI state for visual feedback
+        console.log(`🔄 Mode changed during drag: ${isCopy ? 'COPY' : 'MOVE'}`);
       }
 
-      e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
+      e.dataTransfer.dropEffect = isCopy ? 'copy' : 'move';
     }
 
     // Update hover cell for visual feedback (this state update is ok, happens during drag)

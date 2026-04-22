@@ -17,6 +17,9 @@ const MediaToolbar = ({
   setSizeFilter,
   statusFilter = [],
   setStatusFilter,
+  liveInAdFormFilter = [],
+  setLiveInAdFormFilter,
+  availableLiveStates = [],
   availableProducts = [],
   typeOptions = ['Dynamic HTML', 'Adobe generated'],
   availableSizes = [],
@@ -65,6 +68,7 @@ const MediaToolbar = ({
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [liveDropdownOpen, setLiveDropdownOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
 
   // Refs
@@ -73,6 +77,7 @@ const MediaToolbar = ({
   const typeDropdownRef = useRef(null);
   const sizeDropdownRef = useRef(null);
   const statusDropdownRef = useRef(null);
+  const liveDropdownRef = useRef(null);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, toolbarX: 0, toolbarY: 0 });
 
@@ -102,6 +107,9 @@ const MediaToolbar = ({
       }
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target)) {
         setStatusDropdownOpen(false);
+      }
+      if (liveDropdownRef.current && !liveDropdownRef.current.contains(e.target)) {
+        setLiveDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -182,6 +190,13 @@ const MediaToolbar = ({
     if (!setStatusFilter) return;
     setStatusFilter(prev =>
       prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const toggleLive = (state) => {
+    if (!setLiveInAdFormFilter) return;
+    setLiveInAdFormFilter(prev =>
+      prev.includes(state) ? prev.filter(s => s !== state) : [...prev, state]
     );
   };
 
@@ -347,6 +362,45 @@ const MediaToolbar = ({
                     {availableStatuses.length === 0 && (
                       <div className="filter-dropdown-empty">No statuses available</div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Live-in-AdForm Filter Dropdown */}
+            {setLiveInAdFormFilter && availableLiveStates.length > 0 && (
+              <div className="filter-dropdown" ref={liveDropdownRef}>
+                <button
+                  className="filter-pill"
+                  onClick={() => setLiveDropdownOpen(!liveDropdownOpen)}
+                >
+                  <Filter size={16} className="filter-pill-icon" />
+                  <span className="filter-pill-text">AdForm</span>
+                  <ChevronDown size={16} className={`filter-pill-chevron ${liveDropdownOpen ? 'open' : ''}`} />
+                  <span className={`filter-pill-badge ${liveInAdFormFilter.length === 0 ? 'zero' : ''}`}>
+                    {liveInAdFormFilter.length}
+                  </span>
+                </button>
+                {liveDropdownOpen && (
+                  <div className="filter-dropdown-menu">
+                    {availableLiveStates.map(state => (
+                      <button
+                        key={state}
+                        className="filter-dropdown-item"
+                        onClick={() => toggleLive(state)}
+                      >
+                        <Check size={16} className={liveInAdFormFilter.includes(state) ? 'visible' : 'hidden'} />
+                        <span
+                          className="status-chip"
+                          style={{
+                            backgroundColor: state === 'live' ? '#16a34a' : '#9ca3af',
+                            color: '#ffffff'
+                          }}
+                        >
+                          {state}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

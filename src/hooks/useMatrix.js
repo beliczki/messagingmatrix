@@ -119,6 +119,7 @@ export const useMatrix = (currentUser = null) => {
   const [assets, setAssets] = useState([]);
   const [creatives, setCreatives] = useState([]);
   const [textFormatting, setTextFormatting] = useState([]);
+  const [reporting, setReporting] = useState([]);
   const [messagesByCell, setMessagesByCell] = useState({}); // Fast lookup: "topicKey-audienceKey" -> [messages]
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -196,6 +197,7 @@ export const useMatrix = (currentUser = null) => {
       setAssets(data.assets || []);
       setCreatives(data.creatives || []);
       setTextFormatting(data.textFormatting || []);
+      setReporting(data.reporting || []);
       setLastSync(new Date());
 
       // Store deep copy as original state (baseline for change tracking)
@@ -575,6 +577,17 @@ export const useMatrix = (currentUser = null) => {
     }
   }, [load, currentUser]);
 
+  // Reload ONLY the Reporting tab, bypassing the localStorage cache.
+  // Call after running the AdForm sync so the UI reflects the new numbers
+  // without waiting for a full matrix reload.
+  const reloadReporting = useCallback(async () => {
+    try {
+      localStorage.removeItem('messagingmatrix_data_Reporting');
+    } catch { /* ignore */ }
+    const rows = await sheets.read('Reporting');
+    setReporting(sheets.parseReporting(rows));
+  }, []);
+
   // Save keywords
   const saveKeywords = useCallback(async (updatedKeywords) => {
     setIsSaving(true);
@@ -675,6 +688,7 @@ export const useMatrix = (currentUser = null) => {
     cachedMatrixResult.assets !== assets ||
     cachedMatrixResult.creatives !== creatives ||
     cachedMatrixResult.textFormatting !== textFormatting ||
+    cachedMatrixResult.reporting !== reporting ||
     cachedMatrixResult.messagesByCell !== messagesByCell ||
     cachedMatrixResult.isLoading !== isLoading ||
     cachedMatrixResult.isFullyLoaded !== isFullyLoaded ||
@@ -694,6 +708,8 @@ export const useMatrix = (currentUser = null) => {
       creatives,
       textFormatting,
       setTextFormatting,
+      reporting,
+      reloadReporting,
       messagesByCell,
       setAssets,
       setCreatives,

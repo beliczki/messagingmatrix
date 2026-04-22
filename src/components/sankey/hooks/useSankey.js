@@ -20,6 +20,11 @@ const buildSankeyData = (audiences, topics, getMessages, treeStructure, statusFi
     return { nodes: [], flows: [], levelCount: 0 };
   }
 
+  // Audiences excluded from chart drawing:
+  // - name "Incoming" is a workflow bucket, not a real targeting audience
+  // - empty strategy would render as an "Unknown" branch that's just noise
+  audiences = audiences.filter(a => a.name !== 'Incoming' && !!a.strategy);
+
   // Collect all messages that pass filters
   const allMessages = [];
   audiences.forEach(audience => {

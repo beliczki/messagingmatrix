@@ -89,6 +89,11 @@ export const buildTree2 = (audiences, topics, getMessages, treeStructure, status
   // Reset ID counter for each build
   nodeIdCounter = 0;
 
+  // Audiences excluded from chart drawing:
+  // - name "Incoming" is a workflow bucket, not a real targeting audience
+  // - empty strategy would render as an "Unknown" branch that's just noise
+  audiences = audiences.filter(a => a.name !== 'Incoming' && !!a.strategy);
+
   const parsedLevels = parseTreeStructure(treeStructure);
 
   if (parsedLevels.length === 0 || !audiences || audiences.length === 0) {

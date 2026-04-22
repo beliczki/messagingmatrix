@@ -13,13 +13,14 @@ if (!globalThis.crypto) {
 }
 
 import { SignJWT, importPKCS8 } from 'jose';
-import { fetchEmails, markEmailAsSeen } from './services/emailService.js';
 import multer from 'multer';
 import sizeOf from 'image-size';
 import driveStorage from './src/services/driveStorage.js';
 import { applyTextFormattingSpans } from './src/utils/textFormatter.js';
 import db from './db/index.js';
 import syncService from './services/syncService.js';
+import adformSync from './services/adformSyncService.js';
+import { createMcpRouter } from './mcp/server.js';
 
 dotenv.config();
 
@@ -1344,6 +1345,74 @@ app.post('/api/gemini/image', verifyToken, async (req, res) => {
   }
 });
 
+// ========================================
+// AdForm Reporting Sync
+// ========================================
+
+function getSpreadsheetIdFromConfig() {
+  const sqlite = db.getSqlite();
+  const row = sqlite.prepare('SELECT value FROM config WHERE key = ?').get('spreadsheetId');
+  if (!row?.value) return null;
+  try {
+    const parsed = JSON.parse(row.value);
+    return typeof parsed === 'string' ? parsed : row.value;
+  } catch {
+    return row.value;
+  }
+}
+
+function saveAdformLastSync(payload) {
+  const sqlite = db.getSqlite();
+  sqlite.prepare(`
+    INSERT OR REPLACE INTO config (key, value, category, description, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run('adformLastSync', JSON.stringify(payload), 'adform', null, new Date().toISOString());
+}
+
+function readAdformLastSync() {
+  const sqlite = db.getSqlite();
+  const row = sqlite.prepare('SELECT value FROM config WHERE key = ?').get('adformLastSync');
+  if (!row?.value) return null;
+  try { return JSON.parse(row.value); } catch { return null; }
+}
+
+app.post('/api/adform/sync', verifyToken, async (req, res) => {
+  try {
+    const spreadsheetId = getSpreadsheetIdFromConfig();
+    if (!spreadsheetId) {
+      return res.status(400).json({ error: 'spreadsheetId not configured in Settings' });
+    }
+
+    const { dateFrom, dateTo, campaignPrefix = '26!' } = req.body || {};
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'dateFrom and dateTo are required (YYYY-MM-DD)' });
+    }
+
+    const result = await adformSync.runSync({
+      getAccessToken,
+      spreadsheetId,
+      dateFrom,
+      dateTo,
+      campaignPrefix,
+    });
+
+    saveAdformLastSync({ ...result, dateFrom, dateTo, campaignPrefix });
+    res.json(result);
+  } catch (error) {
+    console.error('[AdForm sync] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/adform/status', verifyToken, (req, res) => {
+  try {
+    res.json({ lastSync: readAdformLastSync() });
+  } catch (error) {
+    console.error('[AdForm status] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // AI Assistant Prompts endpoints
 const promptsDir = path.join(__dirname, 'AI'); // AI directory
 
@@ -1361,9 +1430,7 @@ const promptFileMap = {
   'monitoring': 'AIMonitoringInstructions.txt',
   'templates': 'AITemplatesInstructions.txt',
   'users': 'AIUsersInstructions.txt',
-  'tasks': 'AITasksInstructions.txt',
   'settings': 'AISettingsInstructions.txt',
-  'email-to-task': 'AIEmailToTaskInstructions.txt',
   'message-generation': 'AIMessageGenerationInstructions.txt'
 };
 
@@ -1502,75 +1569,92 @@ app.get('/api/shares/:shareId', (req, res) => {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    // Parse metadata from database
     const metadata = share.metadata ? JSON.parse(share.metadata) : {};
-
-    // Build assets list from folder structure
-    const shareFolderPath = path.join(__dirname, 'public', 'share', shareId);
     let assets = [];
 
-    if (fs.existsSync(shareFolderPath)) {
-      const entries = fs.readdirSync(shareFolderPath, { withFileTypes: true });
-
-      // Build a map of folder data from filesystem
-      const folderMap = {};
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const folderName = entry.name;
-          // Parse folder name pattern: MC{number}_{variant}_{width}x{height}_{version}
-          const mcMatch = folderName.match(/^MC(\d+)_([a-z])_(\d+)x(\d+)_(\d+)$/i);
-
-          if (mcMatch) {
-            const [, number, variant, width, height, version] = mcMatch;
-            folderMap[folderName] = {
-              id: `${shareId}-${folderName}`,
-              folderName,
-              staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
-              isLocalFolderReview: true,
-              reviewType: 'static-local',
-              size: `${width}x${height}`,
-              bannerSize: { width: parseInt(width), height: parseInt(height) },
-              mcNumber: parseInt(number),
-              variant,
-              version: parseInt(version)
-            };
-          }
+    // NEW FORMAT: metadata.creatives is the source of truth. No filesystem lookup.
+    // Dynamic creatives get a staticPath into the on-demand /api/share-html/… routes.
+    if (Array.isArray(metadata.creatives) && metadata.creatives.length > 0) {
+      for (const c of metadata.creatives) {
+        if (c.isDynamic === false && c.passthrough) {
+          assets.push({ ...c.passthrough, order: c.order });
+          continue;
         }
+        const { width, height } = c.bannerSize || {};
+        assets.push({
+          id: `${shareId}-${c.folderName}`,
+          folderName: c.folderName,
+          staticPath: `/api/share-html/${shareId}/${c.folderName}/index.html`,
+          isLocalFolderReview: true,
+          reviewType: 'static-local',
+          size: width && height ? `${width}x${height}` : '',
+          bannerSize: c.bannerSize,
+          mcNumber: parseInt(c.messageData?.number, 10) || 0,
+          variant: c.messageData?.variant || '',
+          version: c.messageData?.version || '',
+          product: c.product || null,
+          messageData: c.messageData || null,
+          order: c.order
+        });
       }
+      assets.sort((a, b) => (a.order || 0) - (b.order || 0));
+    } else {
+      // LEGACY FORMAT: read from /public/share/{shareId}/ filesystem for shares created
+      // before the JSON-only refactor. Kept so pre-existing share URLs still resolve.
+      const shareFolderPath = path.join(__dirname, 'public', 'share', shareId);
 
-      // If we have stored asset display data, use it for ordering and display metadata
-      if (metadata.assets && Array.isArray(metadata.assets) && metadata.assets.length > 0) {
-        // Check if it's the new format (has folderName) or old format (has staticPath)
-        const isNewFormat = metadata.assets[0].folderName && !metadata.assets[0].staticPath;
+      if (fs.existsSync(shareFolderPath)) {
+        const entries = fs.readdirSync(shareFolderPath, { withFileTypes: true });
 
-        if (isNewFormat) {
-          // New format: merge stored display data with folder data
-          for (const storedAsset of metadata.assets) {
-            const folderData = folderMap[storedAsset.folderName];
-            if (folderData) {
-              assets.push({
-                ...folderData,
-                // Add stored display data
-                product: storedAsset.product,
-                messageData: storedAsset.messageData,
-                order: storedAsset.order
-              });
+        const folderMap = {};
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const folderName = entry.name;
+            const mcMatch = folderName.match(/^MC(\d+)_([a-z])_(\d+)x(\d+)_(\d+)$/i);
+            if (mcMatch) {
+              const [, number, variant, width, height, version] = mcMatch;
+              folderMap[folderName] = {
+                id: `${shareId}-${folderName}`,
+                folderName,
+                staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
+                isLocalFolderReview: true,
+                reviewType: 'static-local',
+                size: `${width}x${height}`,
+                bannerSize: { width: parseInt(width), height: parseInt(height) },
+                mcNumber: parseInt(number),
+                variant,
+                version: parseInt(version)
+              };
             }
           }
-          // Sort by stored order
-          assets.sort((a, b) => (a.order || 0) - (b.order || 0));
-        } else {
-          // Old format: use as-is for backward compatibility
-          assets = metadata.assets;
         }
-      } else {
-        // No stored asset data - use folder data with default sorting
-        assets = Object.values(folderMap);
-        assets.sort((a, b) => {
-          if (a.mcNumber !== b.mcNumber) return a.mcNumber - b.mcNumber;
-          if (a.variant !== b.variant) return a.variant.localeCompare(b.variant);
-          return a.size.localeCompare(b.size);
-        });
+
+        if (metadata.assets && Array.isArray(metadata.assets) && metadata.assets.length > 0) {
+          const isLegacyDisplayFormat = metadata.assets[0].folderName && !metadata.assets[0].staticPath;
+          if (isLegacyDisplayFormat) {
+            for (const storedAsset of metadata.assets) {
+              const folderData = folderMap[storedAsset.folderName];
+              if (folderData) {
+                assets.push({
+                  ...folderData,
+                  product: storedAsset.product,
+                  messageData: storedAsset.messageData,
+                  order: storedAsset.order
+                });
+              }
+            }
+            assets.sort((a, b) => (a.order || 0) - (b.order || 0));
+          } else {
+            assets = metadata.assets;
+          }
+        } else {
+          assets = Object.values(folderMap);
+          assets.sort((a, b) => {
+            if (a.mcNumber !== b.mcNumber) return a.mcNumber - b.mcNumber;
+            if (a.variant !== b.variant) return a.variant.localeCompare(b.variant);
+            return a.size.localeCompare(b.size);
+          });
+        }
       }
     }
 
@@ -1583,7 +1667,6 @@ app.get('/api/shares/:shareId', (req, res) => {
       baseColor: metadata.baseColor || null,
       comments: metadata.comments || [],
       assets,
-      // Keep for backward compatibility but not needed for new shares
       assetIds: [],
       driveAssets: {}
     };
@@ -1654,239 +1737,61 @@ function populateTemplate(html, messageData, templateConfig, imageBaseUrls, size
 }
 
 // Create new share
+//
+// DESIGN: the share is a JSON manifest only. We do NOT materialize HTML/CSS/support
+// files to disk anywhere. `GET /api/share-html/:shareId/:folderName/*` generates them
+// on demand from the stored manifest at request time. The download button assembles
+// the ZIP on the fly in the browser (PreviewView.jsx) by fetching those dynamic
+// routes. Nothing persists beyond the row in `share_galleries`.
 app.post('/api/shares', async (req, res) => {
   try {
-    const { assetIds, creatives = [], title, baseColor, templateData = {}, textFormatting = [], driveAssets = {}, sortSettings = null } = req.body;
+    const { creatives = [], title, baseColor, textFormatting = [] } = req.body;
 
-    // Load config from SQLite to get image base URLs
     const sqlite = db.getSqlite();
-    const configStmt = sqlite.prepare('SELECT * FROM config');
-    const configRows = configStmt.all();
-
-    // Rebuild config object from key-value pairs
-    const config = {};
-    configRows.forEach(row => {
-      try {
-        config[row.key] = JSON.parse(row.value);
-      } catch {
-        config[row.key] = row.value;
-      }
-    });
-
-    const imageBaseUrls = config.imageBaseUrls || {};
 
     // Generate unique share ID
     const shareId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    const shareDir = path.join(sharesDir, shareId);
 
-    // Create share directory
-    fs.mkdirSync(shareDir, { recursive: true });
-
-    // Process dynamic ads - create static HTML versions
-    const processedAssets = [];
+    // Build the persisted creative list — just enough to re-populate templates later.
+    // We do NOT store templateHtml/templateCss/templateConfig: those are read from
+    // `src/templates/{templateName}/` on disk at serve time.
+    const persistedCreatives = [];
 
     for (const creative of creatives) {
-      // Use template data from the creative itself (attached by CreativeShare.jsx)
-      const creativeTemplateHtml = creative.templateHtml || templateData.templateHtml;
-      const creativeTemplateCss = creative.templateCss || templateData.templateCss;
-      const creativeTemplateConfig = creative.templateConfig || templateData.templateConfig;
-      const creativeTemplateName = creative.templateName || templateData.templateName || 'html';
+      if (creative.isDynamic && creative.messageData && creative.bannerSize) {
+        const mcNumber = creative.messageData.number || '0';
+        const mcVariant = creative.messageData.variant || 'A';
+        const dimensions = `${creative.bannerSize.width}x${creative.bannerSize.height}`;
+        const version = creative.messageData.version || 'v1';
+        const folderName = `MC${mcNumber}_${mcVariant}_${dimensions}_${version}`;
 
-      if (creative.isDynamic && creative.messageData && creativeTemplateHtml && creativeTemplateCss) {
-        try {
-          // Generate folder name: MC{{Number}}_{{Variant}}_{{Dimensions}}_{{Version}}
-          const mcNumber = creative.messageData.number || '0';
-          const mcVariant = creative.messageData.variant || 'A';
-          const dimensions = `${creative.bannerSize.width}x${creative.bannerSize.height}`;
-          const version = creative.messageData.version || 'v1';
-          const folderName = `MC${mcNumber}_${mcVariant}_${dimensions}_${version}`;
-          const adDir = path.join(shareDir, folderName);
-
-          // Create ad directory
-          fs.mkdirSync(adDir, { recursive: true });
-
-          // Get CSS for this size
-          const sizeKey = dimensions;
-          let combinedCss = '';
-          if (creativeTemplateCss.main) {
-            combinedCss += creativeTemplateCss.main + '\n';
-          }
-          if (creativeTemplateCss[sizeKey]) {
-            combinedCss += creativeTemplateCss[sizeKey];
-          }
-
-          // Save CSS file
-          fs.writeFileSync(path.join(adDir, 'styles.css'), combinedCss, 'utf8');
-
-          // Build imageBaseUrls from template config
-          const templateImageBaseUrls = {};
-          if (creativeTemplateConfig && creativeTemplateConfig.placeholders) {
-            Object.keys(creativeTemplateConfig.placeholders).forEach(placeholderName => {
-              const config = creativeTemplateConfig.placeholders[placeholderName];
-              if (config.type === 'image' || config.type === 'video') {
-                const binding = config['binding-messagingmatrix'];
-                if (binding) {
-                  const fieldName = binding.replace(/^message\./i, '').toLowerCase();
-                  templateImageBaseUrls[fieldName] = config['path-messagingmatrix'] || '';
-                }
-              }
-            });
-          }
-
-          // Populate template with message data (with text formatting)
-          let populatedHtml = populateTemplate(
-            creativeTemplateHtml,
-            creative.messageData,
-            creativeTemplateConfig,
-            templateImageBaseUrls, // Use template-based URLs instead of config
-            dimensions,
-            textFormatting
-          );
-
-          // Cache Drive images to public folder for fast static serving
-          const publicCacheDir = path.join(__dirname, 'public', 'cache', 'drive');
-          if (!fs.existsSync(publicCacheDir)) {
-            fs.mkdirSync(publicCacheDir, { recursive: true });
-          }
-
-          // Extract all /api/drive/proxy/ URLs from HTML
-          const driveProxyRegex = /\/api\/drive\/proxy\/([^"'\s)]+)/g;
-          const driveUrls = new Set();
-          let match;
-          while ((match = driveProxyRegex.exec(populatedHtml)) !== null) {
-            driveUrls.add(match[1]); // filename
-          }
-
-          // Cache each Drive file to public folder
-          for (const filename of driveUrls) {
-            const publicCachePath = path.join(publicCacheDir, filename);
-
-            // Skip if already cached
-            if (fs.existsSync(publicCachePath)) {
-              console.log(`  ✓ Already cached: ${filename}`);
-              continue;
-            }
-
-            try {
-              // Search for file in Drive
-              let files = await driveStorage.searchFiles(filename, 'assets');
-              if (files.length === 0) {
-                files = await driveStorage.searchFiles(filename, 'creatives');
-              }
-
-              if (files.length > 0) {
-                const fileId = files[0].id;
-                const fileData = await driveStorage.downloadFile(fileId);
-                fs.writeFileSync(publicCachePath, fileData);
-                console.log(`  ✓ Cached to public: ${filename}`);
-              } else {
-                console.warn(`  ⚠ File not found in Drive: ${filename}`);
-              }
-            } catch (cacheError) {
-              console.warn(`  ⚠ Failed to cache ${filename}:`, cacheError.message);
-            }
-          }
-
-          // Replace /api/drive/proxy/ URLs with /cache/drive/ for direct static serving
-          populatedHtml = populatedHtml.replace(/\/api\/drive\/proxy\//g, '/cache/drive/');
-
-          // Replace CSS links with the actual styles file
-          populatedHtml = populatedHtml.replace(
-            /<link rel="stylesheet" href="main\.css".*?>/g,
-            '<link rel="stylesheet" href="styles.css">'
-          );
-          populatedHtml = populatedHtml.replace(
-            /<link rel="stylesheet" href="\[\[css\]\]".*?>/g,
-            ''
-          );
-          // Remove size-specific CSS links (e.g., 300x250.css) - already included in styles.css
-          populatedHtml = populatedHtml.replace(
-            /<link rel="stylesheet" href="\d+x\d+\.css".*?>/g,
-            ''
-          );
-
-          // Save HTML file
-          fs.writeFileSync(path.join(adDir, 'index.html'), populatedHtml, 'utf8');
-
-          // Copy template support files to share folder
-          const templateSupportFiles = ['empty.png', 'thm.json', 'dynamic.content.js'];
-          for (const supportFile of templateSupportFiles) {
-            const sourceFile = path.join(templatesDir, creativeTemplateName, supportFile);
-            if (fs.existsSync(sourceFile)) {
-              fs.copyFileSync(sourceFile, path.join(adDir, supportFile));
-              console.log(`  ✓ Copied ${supportFile}`);
-            }
-          }
-
-          // Copy and populate manifest.json
-          const manifestSourcePath = path.join(templatesDir, creativeTemplateName, 'manifest.json');
-
-          if (fs.existsSync(manifestSourcePath)) {
-            try {
-              let manifestContent = fs.readFileSync(manifestSourcePath, 'utf8');
-              const manifest = JSON.parse(manifestContent);
-
-              // Replace {{ad.width}} and {{ad.height}} with actual values
-              manifest.width = creative.bannerSize.width.toString();
-              manifest.height = creative.bannerSize.height.toString();
-
-              // Set title: MC{Number}_{Variant}_{Version} - {Name}
-              const titleName = creative.messageData.name || `Message ${mcNumber}`;
-              manifest.title = `MC${mcNumber}_${mcVariant}_${version} - ${titleName}`;
-
-              // Save populated manifest
-              fs.writeFileSync(path.join(adDir, 'manifest.json'), JSON.stringify(manifest, null, 4), 'utf8');
-              console.log(`  ✓ Copied and populated manifest.json`);
-            } catch (manifestError) {
-              console.error(`  ✗ Error processing manifest.json:`, manifestError.message);
-            }
-          }
-
-          console.log(`✓ Created static ad: ${folderName}`);
-
-          // Add to processed assets list with new path and mark as local folder review
-          processedAssets.push({
-            ...creative,
-            staticPath: `/api/share-static/${shareId}/${folderName}/index.html`,
-            folderName,
-            isLocalFolderReview: true,
-            reviewType: 'static-local'
-          });
-        } catch (error) {
-          console.error(`Error processing dynamic ad ${creative.id}:`, error);
-          // Continue with other ads even if one fails
-        }
+        persistedCreatives.push({
+          folderName,
+          order: persistedCreatives.length,
+          templateName: creative.templateName || 'html',
+          isDynamic: true,
+          bannerSize: creative.bannerSize,
+          messageData: creative.messageData,
+          product: creative.product || null
+        });
       } else {
-        // Non-dynamic creative, keep as-is
-        processedAssets.push(creative);
+        // Non-dynamic (static asset); preserve the original shape for the frontend.
+        persistedCreatives.push({
+          order: persistedCreatives.length,
+          isDynamic: false,
+          passthrough: creative
+        });
       }
     }
-
-    // Create share metadata with ordered asset list for display
-    // Store only display-relevant data, not full creative objects
-    const assetDisplayData = processedAssets.map((asset, index) => ({
-      folderName: asset.folderName,
-      order: index,
-      // Display data for hover tags
-      product: asset.product || null,
-      messageData: asset.messageData ? {
-        number: asset.messageData.number,
-        variant: asset.messageData.variant,
-        version: asset.messageData.version,
-        name: asset.messageData.name,
-        template: asset.messageData.template
-      } : null
-    }));
 
     const shareMetadata = {
       title,
       baseColor,
-      assets: assetDisplayData, // Ordered list with display data
+      textFormatting, // stored so dynamic HTML endpoints can reapply span formatting
+      creatives: persistedCreatives,
       comments: []
     };
 
-    // Save to SQLite database with minimal data
-    // Assets are stored as files in public/share/{shareId}/ and can be read from folder names
     const shareStmt = sqlite.prepare(`
       INSERT INTO share_galleries (id, title, description, created_by, creative_ids, asset_ids, metadata, drive_file_ids, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1895,12 +1800,12 @@ app.post('/api/shares', async (req, res) => {
     shareStmt.run(
       shareId,
       title || null,
-      null, // description
-      null, // created_by
-      null, // creative_ids (not needed - read from folder)
-      null, // asset_ids (not needed - read from folder)
-      JSON.stringify(shareMetadata), // Minimal metadata: title, baseColor, comments
-      null, // drive_file_ids (not needed - files are cached publicly)
+      null,
+      null,
+      null,
+      null,
+      JSON.stringify(shareMetadata),
+      null,
       new Date().toISOString()
     );
 
@@ -1925,6 +1830,183 @@ app.post('/api/shares', async (req, res) => {
     console.error('Error creating share:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to create share', details: error.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Dynamic share rendering: /api/share-html/:shareId/:folderName/*
+//
+// Each route looks the share row up in SQLite, finds the matching creative in
+// metadata.creatives, reads the template files from src/templates/{templateName}/
+// on disk, and serves populated output. No per-share files on disk, no caching
+// beyond the regular Drive proxy cache used by image requests.
+// ---------------------------------------------------------------------------
+
+function resolveShareCreative(shareId, folderName) {
+  const sqlite = db.getSqlite();
+  const row = sqlite.prepare('SELECT metadata FROM share_galleries WHERE id = ?').get(shareId);
+  if (!row) return null;
+  const metadata = row.metadata ? JSON.parse(row.metadata) : {};
+  const creative = Array.isArray(metadata.creatives)
+    ? metadata.creatives.find(c => c.folderName === folderName)
+    : null;
+  if (!creative) return null;
+  return { creative, textFormatting: metadata.textFormatting || [] };
+}
+
+function buildTemplateImageBaseUrls(templateConfig) {
+  const urls = {};
+  if (templateConfig && templateConfig.placeholders) {
+    for (const placeholderName of Object.keys(templateConfig.placeholders)) {
+      const cfg = templateConfig.placeholders[placeholderName];
+      if (cfg.type === 'image' || cfg.type === 'video') {
+        const binding = cfg['binding-messagingmatrix'];
+        if (binding) {
+          const fieldName = binding.replace(/^message\./i, '').toLowerCase();
+          urls[fieldName] = cfg['path-messagingmatrix'] || '';
+        }
+      }
+    }
+  }
+  return urls;
+}
+
+// Populated HTML (entry point for the iframe and the download).
+app.get('/api/share-html/:shareId/:folderName/index.html', (req, res) => {
+  try {
+    const { shareId, folderName } = req.params;
+    const resolved = resolveShareCreative(shareId, folderName);
+    if (!resolved) return res.status(404).send('Share or creative not found');
+
+    const { creative, textFormatting } = resolved;
+    const templateName = creative.templateName || 'html';
+    const templateDir = path.join(templatesDir, templateName);
+    const templateHtmlPath = path.join(templateDir, 'index.html');
+    if (!fs.existsSync(templateHtmlPath)) {
+      return res.status(404).send(`Template not found: ${templateName}`);
+    }
+
+    const templateHtml = fs.readFileSync(templateHtmlPath, 'utf8');
+
+    let templateConfig = null;
+    const templateJsonPath = path.join(templateDir, 'template.json');
+    if (fs.existsSync(templateJsonPath)) {
+      templateConfig = JSON.parse(fs.readFileSync(templateJsonPath, 'utf8'));
+    }
+
+    const { width, height } = creative.bannerSize || {};
+    const dimensions = width && height ? `${width}x${height}` : '';
+
+    let html = populateTemplate(
+      templateHtml,
+      creative.messageData,
+      templateConfig,
+      buildTemplateImageBaseUrls(templateConfig),
+      dimensions,
+      textFormatting
+    );
+
+    // Adform upload block: uncomment so the share HTML is Adform-ready. Adform's
+    // delivery wrapper needs dhtml.* available to substitute the clickTAG macro.
+    html = html.replace(
+      /<!--\s*UNCOMMENT THESE FOR ADFORM UPLOAD\s*-->\s*<!--([\s\S]*?)-->\s*<!--\s*UNCOMMENT THESE FOR ADFORM UPLOAD\s*-->/,
+      '$1'
+    );
+
+    // CSS link cleanup — point at the dynamic styles endpoint, strip placeholders.
+    html = html.replace(/<link rel="stylesheet" href="main\.css".*?>/g, '<link rel="stylesheet" href="styles.css">');
+    html = html.replace(/<link rel="stylesheet" href="\[\[css\]\]".*?>/g, '');
+    html = html.replace(/<link rel="stylesheet" href="\d+x\d+\.css".*?>/g, '');
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    res.send(html);
+  } catch (error) {
+    console.error('Error serving share HTML:', error);
+    res.status(500).send('Error generating share HTML');
+  }
+});
+
+// Combined CSS (main.css + {size}.css) for a single creative.
+app.get('/api/share-html/:shareId/:folderName/styles.css', (req, res) => {
+  try {
+    const { shareId, folderName } = req.params;
+    const resolved = resolveShareCreative(shareId, folderName);
+    if (!resolved) return res.status(404).send('/* share or creative not found */');
+
+    const { creative } = resolved;
+    const templateName = creative.templateName || 'html';
+    const templateDir = path.join(templatesDir, templateName);
+    const { width, height } = creative.bannerSize || {};
+    const sizeKey = width && height ? `${width}x${height}` : '';
+
+    let combined = '';
+    const mainPath = path.join(templateDir, 'main.css');
+    if (fs.existsSync(mainPath)) combined += fs.readFileSync(mainPath, 'utf8') + '\n';
+    if (sizeKey) {
+      const sizePath = path.join(templateDir, `${sizeKey}.css`);
+      if (fs.existsSync(sizePath)) combined += fs.readFileSync(sizePath, 'utf8');
+    }
+
+    res.set('Content-Type', 'text/css; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    res.send(combined);
+  } catch (error) {
+    console.error('Error serving share CSS:', error);
+    res.status(500).send('/* error generating CSS */');
+  }
+});
+
+// Populated manifest.json.
+app.get('/api/share-html/:shareId/:folderName/manifest.json', (req, res) => {
+  try {
+    const { shareId, folderName } = req.params;
+    const resolved = resolveShareCreative(shareId, folderName);
+    if (!resolved) return res.status(404).json({ error: 'Share or creative not found' });
+
+    const { creative } = resolved;
+    const templateName = creative.templateName || 'html';
+    const manifestPath = path.join(templatesDir, templateName, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) return res.status(404).json({ error: 'manifest.json not in template' });
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const { width, height } = creative.bannerSize || {};
+    if (width) manifest.width = String(width);
+    if (height) manifest.height = String(height);
+
+    const md = creative.messageData || {};
+    const titleName = md.name || `Message ${md.number || ''}`;
+    manifest.title = `MC${md.number || '0'}_${md.variant || 'A'}_${md.version || 'v1'} - ${titleName}`;
+
+    res.set('Content-Type', 'application/json; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    res.send(JSON.stringify(manifest, null, 2));
+  } catch (error) {
+    console.error('Error serving share manifest:', error);
+    res.status(500).json({ error: 'Error generating manifest' });
+  }
+});
+
+// Pass-through support files from the template directory (empty.png, thm.json,
+// dynamic.content.js). Whitelisted so this cannot be used for arbitrary reads.
+const SHARE_SUPPORT_FILES = new Set(['empty.png', 'thm.json', 'dynamic.content.js']);
+app.get('/api/share-html/:shareId/:folderName/:file', (req, res) => {
+  try {
+    const { shareId, folderName, file } = req.params;
+    if (!SHARE_SUPPORT_FILES.has(file)) return res.status(404).send('Not found');
+
+    const resolved = resolveShareCreative(shareId, folderName);
+    if (!resolved) return res.status(404).send('Share or creative not found');
+
+    const templateName = resolved.creative.templateName || 'html';
+    const filePath = path.join(templatesDir, templateName, file);
+    if (!fs.existsSync(filePath)) return res.status(404).send('Support file missing');
+
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error serving share support file:', error);
+    res.status(500).send('Error serving support file');
   }
 });
 
@@ -2265,24 +2347,6 @@ app.post('/api/templates/:templateName/:fileName', (req, res) => {
   }
 });
 
-// Helper function to get email config from SQLite
-function getEmailConfigFromDb() {
-  try {
-    const sqlite = db.getSqlite();
-    const stmt = sqlite.prepare('SELECT value FROM config WHERE key = ?');
-    const row = stmt.get('emailAccount');
-
-    if (!row) {
-      throw new Error('Email account configuration not found in database');
-    }
-
-    return JSON.parse(row.value);
-  } catch (error) {
-    console.error('Error loading email config from database:', error);
-    throw error;
-  }
-}
-
 // Message search endpoint for MC matching
 // Searches messages by keywords across multiple fields
 app.get('/api/messages/search', async (req, res) => {
@@ -2376,704 +2440,6 @@ app.get('/api/messages/search', async (req, res) => {
   }
 });
 
-// Email endpoints
-// Get emails from IMAP server
-app.get('/api/emails', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
-    const unseenOnly = req.query.unseenOnly !== 'false';
-
-    // Get email config from SQLite database
-    const emailConfig = getEmailConfigFromDb();
-
-    const emails = await fetchEmails(limit, unseenOnly, emailConfig);
-    res.json({ emails });
-  } catch (error) {
-    console.error('Error fetching emails:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Convert emails to tasks using Claude
-app.post('/api/emails/convert-to-tasks', async (req, res) => {
-  try {
-    const { emails } = req.body;
-
-    if (!emails || !Array.isArray(emails)) {
-      return res.status(400).json({ error: 'emails array is required' });
-    }
-
-    // Use API key from environment
-    const apiKey = process.env.VITE_ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-      return res.status(500).json({ error: 'API key not configured in .env' });
-    }
-
-    // Create a prompt for Claude to analyze emails and create tasks
-    const emailSummaries = emails.map((email, idx) =>
-      `Email ${idx + 1}:\nFrom: ${email.fromName} <${email.from}>\nSubject: ${email.subject}\nDate: ${email.date}\nBody:\n${email.body}\n`
-    ).join('\n---\n\n');
-
-    const prompt = `You are an intelligent task manager for a creative/advertising workflow system. Analyze the following emails and extract actionable tasks.
-
-## CRITICAL: SPLIT BY PRODUCT
-If an email mentions MULTIPLE PRODUCTS, create a SEPARATE TASK for each product.
-
-Example: "Update rates for SZK and HK campaigns"
-→ Creates 2 tasks: one for SZK, one for HK
-
-## PRODUCT CODES (use these exact codes):
-- HK = Lakáshitel (Home Loan)
-- SZK = Személyi Kölcsön (Personal Loan)
-- SZA = Számlavezetés (Account Management)
-- HITEL = General Loans
-- MARKET = Marketplace/General
-- BIZTOS = Biztosítás (Insurance)
-- MEGTAKARITAS = Savings Products
-- KARTYA = Cards
-- GENERAL = If product unclear
-
-## TASK TYPE DETECTION:
-- "creation" = NEW creative (keywords: új, new, create, készíts, kampány indítás)
-- "modification" = UPDATE existing (keywords: módosítás, update, change, fix, javítás, rate change, copy change)
-
-## LANGUAGE RULE:
-Keep title, description, context, keywords in the ORIGINAL email language. Do NOT translate.
-
-## FIELD INSTRUCTIONS:
-
-**title**: Brief one-line task title (original language)
-
-**description**: 2-3 sentence summary of what needs to be done (original language)
-
-**product**: Use product code from list above (HK, SZK, SZA, etc.)
-
-**taskType**: "creation" or "modification"
-
-**suggestedMCName** (for creation tasks only):
-- Format: "[Product] - [Campaign/Topic] - [Audience]"
-- Example: "SZK - Őszi kampány - REM"
-
-**suggestedRelatedMC** (for modification tasks only):
-- Extract any MC name, PMMID, or creative reference mentioned
-- Examples: "MC123", "PMMID-456", "Lakáshitel_REMAlt_2024"
-- If none mentioned, set to null
-
-**context**: Full email thread in markdown format (original language)
-- Use ## headings for each message
-- Include timestamps
-- Preserve all details
-
-**keywords**: 3-8 searchable terms for finding related MCs
-
-**priority**:
-- "High" = urgent, ASAP, deadline within 2 days
-- "Medium" = normal request
-- "Low" = whenever possible, low priority mentioned
-
-**dueDate**: Extract deadline as ISO date string, or null
-
-## JSON OUTPUT FORMAT:
-[
-  {
-    "title": "Brief task title",
-    "description": "Summary of what needs to be done",
-    "context": "Markdown email thread",
-    "priority": "High|Medium|Low",
-    "dueDate": "2024-01-15 or null",
-    "source": "Email subject",
-    "from": "sender@email.com",
-    "status": "pending",
-    "emailUid": 12345,
-    "taskType": "creation|modification",
-    "keywords": ["keyword1", "keyword2"],
-    "product": "HK|SZK|SZA|HITEL|MARKET|etc",
-    "suggestedMCName": "For creation tasks or null",
-    "suggestedRelatedMC": "For modification tasks or null"
-  }
-]
-
-If email has no actionable tasks, skip it.
-
-Here are the emails:
-
-${emailSummaries}`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 8192,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Anthropic API error:', errorText);
-      return res.status(response.status).json({ error: errorText });
-    }
-
-    const data = await response.json();
-    const content = data.content[0].text;
-
-    // Extract JSON from Claude's response
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    let tasks = [];
-
-    if (jsonMatch) {
-      try {
-        tasks = JSON.parse(jsonMatch[0]);
-
-        // Load matrix data for MC search
-        let matrixData = null;
-        try {
-          const sheetsService = await import('./services/sheets.js');
-          matrixData = await sheetsService.loadFromSheets();
-        } catch (loadErr) {
-          console.log('Could not load matrix data for MC matching:', loadErr.message);
-        }
-
-        // Add email UIDs, original email content, and search for matching MCs
-        tasks = await Promise.all(tasks.map(async (task, idx) => {
-          const originalEmail = emails[idx];
-          const enhancedTask = {
-            ...task,
-            id: `task-${Date.now()}-${idx}`,
-            emailUid: originalEmail?.uid || null,
-            emailBody: originalEmail?.body || '',
-            emailSubject: originalEmail?.subject || '',
-            emailDate: originalEmail?.date || null,
-            createdAt: new Date().toISOString(),
-            // Set workflow type based on task type
-            workflowType: task.taskType === 'creation' || task.taskType === 'modification' ? 'creative' : 'general',
-            // Ensure keywords is an array
-            keywords: Array.isArray(task.keywords) ? task.keywords : [],
-            // New fields from improved prompt
-            product: task.product || null,
-            suggestedMCName: task.suggestedMCName || null,
-            suggestedRelatedMC: task.suggestedRelatedMC || null,
-            suggestedMCs: []
-          };
-
-          // For modification tasks, search for matching MCs
-          if (task.taskType === 'modification' && matrixData && enhancedTask.keywords.length > 0) {
-            try {
-              const keywords = enhancedTask.keywords.join(' ');
-              const messages = matrixData.messages || [];
-              const audiences = matrixData.audiences || [];
-              const topics = matrixData.topics || [];
-
-              // Score each message
-              const searchKeywords = keywords.toLowerCase().split(/[\s,]+/).filter(k => k.length > 1);
-              const scoredMessages = messages.map(msg => {
-                let score = 0;
-                const matchedFields = [];
-
-                const searchableFields = {
-                  name: (msg.name || msg.Name || '').toLowerCase(),
-                  pmmid: (msg.pmmid || msg.PMMID || '').toLowerCase(),
-                  copy1: (msg.copy1 || msg.Copy1 || '').toLowerCase(),
-                  comment: (msg.comment || msg.Comment || '').toLowerCase()
-                };
-
-                const audience = audiences.find(a => a.key === msg.audience);
-                const topic = topics.find(t => t.key === msg.topic);
-                if (audience) searchableFields.audienceName = (audience.name || '').toLowerCase();
-                if (topic) searchableFields.topicName = (topic.name || '').toLowerCase();
-
-                searchKeywords.forEach(kw => {
-                  Object.entries(searchableFields).forEach(([field, value]) => {
-                    if (value && value.includes(kw)) {
-                      const weight = field === 'name' || field === 'pmmid' ? 3 :
-                                    field === 'audienceName' || field === 'topicName' ? 2 : 1;
-                      score += weight;
-                      if (!matchedFields.includes(field)) matchedFields.push(field);
-                    }
-                  });
-                });
-
-                return {
-                  id: msg.id,
-                  pmmid: msg.pmmid || msg.PMMID || `MC${msg.number || msg.id}${msg.variant || ''}`,
-                  name: msg.name || msg.Name || '',
-                  audience: audience?.name || msg.audience,
-                  topic: topic?.name || msg.topic,
-                  status: msg.status,
-                  score,
-                  matchedFields
-                };
-              });
-
-              // Get top 5 matches
-              const results = scoredMessages
-                .filter(m => m.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 5);
-
-              const maxScore = results[0]?.score || 1;
-              enhancedTask.suggestedMCs = results.map(r => ({
-                id: r.id,
-                pmmid: r.pmmid,
-                name: r.name,
-                audience: r.audience,
-                topic: r.topic,
-                status: r.status,
-                matchScore: Math.round((r.score / maxScore) * 100) / 100,
-                matchedFields: r.matchedFields
-              }));
-
-              console.log(`🔍 Found ${enhancedTask.suggestedMCs.length} matching MCs for task: "${task.title}"`);
-            } catch (searchErr) {
-              console.error('Error searching for matching MCs:', searchErr);
-            }
-          }
-
-          return enhancedTask;
-        }));
-      } catch (err) {
-        console.error('Error parsing tasks JSON:', err);
-        return res.status(500).json({ error: 'Failed to parse tasks from Claude response' });
-      }
-    }
-
-    res.json({ tasks, rawResponse: content });
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Mark email as read
-app.post('/api/emails/:uid/mark-read', async (req, res) => {
-  try {
-    const uid = req.params.uid;
-
-    // Get email config from SQLite database
-    const emailConfig = getEmailConfigFromDb();
-
-    await markEmailAsSeen(uid, emailConfig);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error marking email as read:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Task endpoints (SQLite-backed)
-
-// Get available labels (products from config)
-app.get('/api/task-labels', (req, res) => {
-  try {
-    // Product labels from AiClientContext.txt
-    const productLabels = [
-      'SZK', 'HK', 'VAL', 'MIKRO', 'SZA', 'LTP', 'HITEL', 'MARKET',
-      'OtthonStart', 'MunkásHitel', 'Babaváró', 'Diak', 'Online',
-      'Cseperedő', 'BeErste', 'CARD', 'GEORGE'
-    ];
-
-    const labels = {
-      products: productLabels,
-      topics: [], // No topic labels as requested
-      all: productLabels
-    };
-
-    res.json(labels);
-  } catch (error) {
-    console.error('Error getting task labels:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all tasks (from SQLite)
-// v2 schema: id is auto-increment integer, no taskNumber/status/workflowType/labels/suggestedMCName/suggestedRelatedMC/suggestedMCs
-app.get('/api/tasks', (req, res) => {
-  try {
-    const sqlite = db.getSqlite();
-
-    const query = 'SELECT * FROM tasks ORDER BY created_at DESC';
-    const stmt = sqlite.prepare(query);
-    const tasks = stmt.all();
-
-    // Helper to parse comma-separated MC references to array
-    const parseCommaSeparated = (str) => {
-      if (!str) return [];
-      return str.split(',').map(s => s.trim()).filter(Boolean);
-    };
-
-    // Transform tasks to match frontend naming conventions
-    const transformedTasks = tasks.map(task => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      priority: task.priority,
-      dueDate: task.due_date,
-      source: task.source,
-      from: task.from,
-      emailUid: task.email_uid,
-      emailBody: task.email_body,
-      emailSubject: task.email_subject,
-      emailDate: task.email_date,
-      context: task.context,
-      userNotes: task.user_notes,
-      relatedContent: parseCommaSeparated(task.related_content),
-      outputContent: parseCommaSeparated(task.output_content),
-      shareLinks: parseCommaSeparated(task.share_links),
-      bucket: task.bucket,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at,
-      product: task.product,
-      audience: task.audience,
-      topic: task.topic,
-      taskType: task.task_type,
-      keywords: task.keywords ? task.keywords.split(',').map(s => s.trim()).filter(Boolean) : []
-    }));
-
-    res.json({ tasks: transformedTasks });
-  } catch (error) {
-    console.error('Error getting tasks:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Save tasks (bulk replace - to SQLite)
-// v2 schema: id is auto-increment, removed: taskNumber, status, workflowType, labels, suggestedMCName, suggestedMCs, suggestedRelatedMC
-app.post('/api/tasks', (req, res) => {
-  try {
-    const { tasks } = req.body;
-    if (!Array.isArray(tasks)) {
-      return res.status(400).json({ error: 'tasks must be an array' });
-    }
-
-    const sqlite = db.getSqlite();
-
-    // Helper to convert array to comma-separated string
-    const arrayToCommaSep = (arr) => {
-      if (!arr || !Array.isArray(arr)) return null;
-      return arr.length > 0 ? arr.join(',') : null;
-    };
-
-    // Replace all tasks with transaction
-    const transaction = sqlite.transaction(() => {
-      // Clear existing tasks
-      sqlite.prepare('DELETE FROM tasks').run();
-
-      // Insert new tasks - id is explicit to preserve existing IDs
-      const stmt = sqlite.prepare(`
-        INSERT INTO tasks (
-          id, title, description, priority, due_date,
-          source, "from", email_uid, email_body, email_subject, email_date,
-          context, user_notes, related_content, output_content, bucket, created_at, updated_at,
-          product, audience, topic, task_type, keywords
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      tasks.forEach(task => {
-        console.log(`💾 Saving task TC${task.id}: "${task.title?.substring(0, 30)}..."`);
-
-        stmt.run(
-          task.id,
-          task.title,
-          task.description || null,
-          task.priority || null,
-          task.dueDate || null,
-          task.source || null,
-          task.from || null,
-          task.emailUid || null,
-          task.emailBody || null,
-          task.emailSubject || null,
-          task.emailDate || null,
-          task.context || null,
-          task.userNotes || null,
-          arrayToCommaSep(task.relatedContent),
-          arrayToCommaSep(task.outputContent),
-          task.bucket || 'incoming',
-          task.createdAt || new Date().toISOString(),
-          task.updatedAt || new Date().toISOString(),
-          task.product || null,
-          task.audience || null,
-          task.topic || null,
-          task.taskType || null,
-          arrayToCommaSep(task.keywords)
-        );
-      });
-    });
-
-    transaction();
-
-    res.json({ success: true, tasks });
-  } catch (error) {
-    console.error('Error saving tasks:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Create a single task
-// v2 schema: id is auto-increment integer, no need to generate task_number
-app.post('/api/tasks/create', (req, res) => {
-  try {
-    const task = req.body;
-
-    if (!task.title) {
-      return res.status(400).json({ error: 'title is required' });
-    }
-
-    const sqlite = db.getSqlite();
-
-    // Helper to convert array to comma-separated string
-    const arrayToCommaSep = (arr) => {
-      if (!arr || !Array.isArray(arr)) return null;
-      return arr.length > 0 ? arr.join(',') : null;
-    };
-
-    const stmt = sqlite.prepare(`
-      INSERT INTO tasks (
-        title, description, priority, due_date,
-        source, "from", email_uid, bucket, created_at, updated_at,
-        context, user_notes, related_content, output_content,
-        product, audience, topic, task_type, keywords,
-        email_body, email_subject, email_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const now = new Date().toISOString();
-
-    const result = stmt.run(
-      task.title,
-      task.description || null,
-      task.priority || null,
-      task.dueDate || null,
-      task.source || null,
-      task.from || null,
-      task.emailUid || null,
-      task.bucket || 'incoming',
-      task.createdAt || now,
-      now,
-      task.context || null,
-      task.userNotes || null,
-      arrayToCommaSep(task.relatedContent),
-      arrayToCommaSep(task.outputContent),
-      task.product || null,
-      task.audience || null,
-      task.topic || null,
-      task.taskType || null,
-      arrayToCommaSep(task.keywords),
-      task.emailBody || null,
-      task.emailSubject || null,
-      task.emailDate || null
-    );
-
-    // Get the auto-generated ID
-    const newId = result.lastInsertRowid;
-
-    res.json({ success: true, task: { ...task, id: newId } });
-  } catch (error) {
-    console.error('Error creating task:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Update a single task
-// v2 schema: removed status, workflowType fields
-app.put('/api/tasks/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    const sqlite = db.getSqlite();
-
-    // Helper to convert array to comma-separated string
-    const arrayToCommaSep = (arr) => {
-      if (!arr || !Array.isArray(arr)) return null;
-      return arr.length > 0 ? arr.join(',') : null;
-    };
-
-    // Build dynamic update query
-    const fields = [];
-    const values = [];
-
-    if (updates.title !== undefined) {
-      fields.push('title = ?');
-      values.push(updates.title);
-    }
-    if (updates.description !== undefined) {
-      fields.push('description = ?');
-      values.push(updates.description);
-    }
-    if (updates.priority !== undefined) {
-      fields.push('priority = ?');
-      values.push(updates.priority);
-    }
-    if (updates.dueDate !== undefined) {
-      fields.push('due_date = ?');
-      values.push(updates.dueDate);
-    }
-    if (updates.bucket !== undefined) {
-      fields.push('bucket = ?');
-      values.push(updates.bucket);
-    }
-    if (updates.source !== undefined) {
-      fields.push('source = ?');
-      values.push(updates.source);
-    }
-    if (updates.from !== undefined) {
-      fields.push('"from" = ?');
-      values.push(updates.from);
-    }
-    if (updates.product !== undefined) {
-      fields.push('product = ?');
-      values.push(updates.product);
-    }
-    if (updates.audience !== undefined) {
-      fields.push('audience = ?');
-      values.push(updates.audience);
-    }
-    if (updates.topic !== undefined) {
-      fields.push('topic = ?');
-      values.push(updates.topic);
-    }
-    if (updates.taskType !== undefined) {
-      fields.push('task_type = ?');
-      values.push(updates.taskType);
-    }
-    if (updates.context !== undefined) {
-      fields.push('context = ?');
-      values.push(updates.context);
-    }
-    if (updates.userNotes !== undefined) {
-      fields.push('user_notes = ?');
-      values.push(updates.userNotes);
-    }
-    if (updates.relatedContent !== undefined) {
-      fields.push('related_content = ?');
-      values.push(arrayToCommaSep(updates.relatedContent));
-    }
-    if (updates.outputContent !== undefined) {
-      fields.push('output_content = ?');
-      values.push(arrayToCommaSep(updates.outputContent));
-    }
-    if (updates.keywords !== undefined) {
-      fields.push('keywords = ?');
-      values.push(arrayToCommaSep(updates.keywords));
-    }
-    if (updates.shareLinks !== undefined) {
-      fields.push('share_links = ?');
-      values.push(arrayToCommaSep(updates.shareLinks));
-    }
-
-    fields.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
-
-    const stmt = sqlite.prepare(`
-      UPDATE tasks
-      SET ${fields.join(', ')}
-      WHERE id = ?
-    `);
-
-    const result = stmt.run(...values);
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating task:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a single task
-app.delete('/api/tasks/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const sqlite = db.getSqlite();
-
-    const stmt = sqlite.prepare('DELETE FROM tasks WHERE id = ?');
-    const result = stmt.run(id);
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting task:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get processed email UIDs (from SQLite)
-app.get('/api/processed-emails', (req, res) => {
-  try {
-    const sqlite = db.getSqlite();
-    const stmt = sqlite.prepare('SELECT uid FROM processed_emails');
-    const rows = stmt.all();
-
-    // Return just the UIDs for backward compatibility
-    const processedEmails = rows.map(row => row.uid);
-
-    res.json({ processedEmails });
-  } catch (error) {
-    console.error('Error getting processed emails:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add processed email UIDs (to SQLite)
-app.post('/api/processed-emails', (req, res) => {
-  try {
-    const { emailUids, emailData } = req.body;
-
-    if (!Array.isArray(emailUids) && !emailData) {
-      return res.status(400).json({ error: 'emailUids array or emailData required' });
-    }
-
-    const sqlite = db.getSqlite();
-    const stmt = sqlite.prepare(`
-      INSERT OR IGNORE INTO processed_emails (uid, email_from, subject, tasks_created)
-      VALUES (?, ?, ?, ?)
-    `);
-
-    // If emailData provided (more detailed), use it
-    if (emailData) {
-      stmt.run(
-        emailData.uid,
-        emailData.from || null,
-        emailData.subject || null,
-        emailData.tasksCreated || 0
-      );
-    }
-    // Otherwise, batch insert UIDs only
-    else if (emailUids) {
-      const transaction = sqlite.transaction((uids) => {
-        uids.forEach(uid => {
-          stmt.run(uid, null, null, 0);
-        });
-      });
-      transaction(emailUids);
-    }
-
-    // Return all processed UIDs
-    const allStmt = sqlite.prepare('SELECT uid FROM processed_emails');
-    const processedEmails = allStmt.all().map(row => row.uid);
-
-    res.json({ success: true, processedEmails });
-  } catch (error) {
-    console.error('Error saving processed emails:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // User management endpoints (SQLite-backed, replaces localStorage)
 
@@ -4245,6 +3611,21 @@ app.get('/api/drive/proxy/:fileIdOrName', async (req, res) => {
     res.status(500).json({ error: 'Failed to proxy Drive file' });
   }
 });
+
+// ========================================
+// MCP Server (per-instance, at /mcp)
+// ========================================
+app.use('/mcp', createMcpRouter({
+  getAccessToken,
+  getSpreadsheetId: getSpreadsheetIdFromConfig,
+  getSqlite: () => db.getSqlite(),
+  version: '5.1.0',
+}));
+if (process.env.MCP_BEARER_TOKEN) {
+  console.log('✓ MCP server mounted at /mcp (bearer auth enabled)');
+} else {
+  console.warn('⚠ MCP_BEARER_TOKEN not set — /mcp endpoint returns 503 until configured');
+}
 
 // Serve static files from dist folder in production
 if (process.env.NODE_ENV === 'production') {

@@ -1,5 +1,8 @@
 # Messaging Matrix - Development Tasks
 
+> **⚠️ Superseded by [ROADMAP.md](./ROADMAP.md) as of 2026-04-19.**
+> This file is kept for the historical session log only. Add new work to ROADMAP.md; record shipped work in CHANGELOG.md.
+
 **Updated**: 2024-12-31
 
 ---

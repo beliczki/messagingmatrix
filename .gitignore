@@ -69,3 +69,6 @@ AI/
 # Instance data (contains sensitive credentials)
 instances/*/
 !instances/.gitkeep
+
+# AdForm report XLSX (contains third-party performance data)
+data/*.xlsx

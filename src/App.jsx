@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { Routes, Route, useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, CheckSquare, Package, Maximize, Minimize } from 'lucide-react';
+import { Menu, X, Table, Image, BarChart3, Users as UsersIcon, Settings as SettingsIcon, FileCode, LogOut, User, Package, Maximize, Minimize } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useMatrix } from './hooks/useMatrix';
 import './App.css';
@@ -11,7 +11,6 @@ const CreativeLibrary = lazy(() => import('./components/CreativeLibrary'));
 const Assets = lazy(() => import('./components/Assets'));
 const Monitoring = lazy(() => import('./components/Monitoring'));
 const Templates = lazy(() => import('./components/Templates'));
-const Tasks = lazy(() => import('./components/Tasks'));
 const Users = lazy(() => import('./components/Users'));
 const Settings = lazy(() => import('./components/Settings'));
 const Login = lazy(() => import('./components/Login'));
@@ -37,7 +36,6 @@ const modules = [
   { id: 'assets', name: 'Assets', icon: Package, component: Assets, color: 'purple' },
   { id: 'monitoring', name: 'Monitoring', icon: BarChart3, component: Monitoring, color: 'green' },
   { id: 'templates', name: 'Templates', icon: FileCode, component: Templates, color: 'orange' },
-  { id: 'tasks', name: 'Tasks', icon: CheckSquare, component: Tasks, color: 'indigo' },
   { id: 'users', name: 'Users', icon: UsersIcon, component: Users, color: 'purple', adminOnly: true },
   { id: 'settings', name: 'Settings', icon: SettingsIcon, component: Settings, color: 'gray', adminOnly: true }
 ];
@@ -318,6 +316,9 @@ const AuthenticatedLayout = ({ currentUser, logout, matrixData, lookAndFeel, mat
             <LogOut size={24} />
             <span>Logout</span>
           </button>
+
+          {/* App version */}
+          <div className="menu-version">v{__APP_VERSION__}</div>
         </div>
       </div>
 
