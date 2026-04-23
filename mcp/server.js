@@ -32,7 +32,10 @@ export function createMcpRouter({ getAccessToken, getSpreadsheetId, getSqlite, v
   const router = express.Router();
   router.use(requireBearer);
 
-  router.post('/', async (req, res) => {
+  // Streamable HTTP transport handles POST (client→server messages),
+  // GET (optional server→client SSE stream), and DELETE (session terminate).
+  // Route all three to the same handler; let the SDK transport decide what's valid.
+  const handleMcp = async (req, res) => {
     try {
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on('close', () => {
@@ -46,15 +49,11 @@ export function createMcpRouter({ getAccessToken, getSpreadsheetId, getSqlite, v
         res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: error.message }, id: null });
       }
     }
-  });
+  };
 
-  // GET on /mcp returns MCP endpoint info for clients that probe it
-  router.get('/', (req, res) => {
-    res.status(405).json({
-      error: 'Use POST for MCP requests. This endpoint speaks the Streamable HTTP transport.',
-      hint: 'Configure your MCP client to POST JSON-RPC messages here with Authorization: Bearer <token>',
-    });
-  });
+  router.post('/', handleMcp);
+  router.get('/', handleMcp);
+  router.delete('/', handleMcp);
 
   return router;
 }
