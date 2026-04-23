@@ -1,6 +1,8 @@
-// Bearer-token middleware for the MCP server.
-// Token is read from MCP_BEARER_TOKEN at request time (so env changes pick up
-// without restart, useful for testing).
+// Auth middleware for the MCP server.
+// Accepts either:
+//   (a) `?secret=<token>` query string — matches claude.ai connector convention
+//   (b) `Authorization: Bearer <token>` header — standard MCP client convention
+// Token read from MCP_BEARER_TOKEN at request time.
 
 export function requireBearer(req, res, next) {
   const token = process.env.MCP_BEARER_TOKEN;
@@ -9,9 +11,13 @@ export function requireBearer(req, res, next) {
       error: 'MCP is not configured: set MCP_BEARER_TOKEN in .env to enable',
     });
   }
+
+  const querySecret = typeof req.query?.secret === 'string' ? req.query.secret : '';
   const header = req.headers.authorization || '';
-  if (header !== `Bearer ${token}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  const headerToken = header.startsWith('Bearer ') ? header.slice(7) : '';
+
+  if (querySecret === token || headerToken === token) {
+    return next();
   }
-  next();
+  return res.status(401).json({ error: 'Unauthorized' });
 }

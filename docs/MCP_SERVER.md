@@ -20,12 +20,15 @@ Each deployment uses its own Google Sheets spreadsheet + service account + beare
 
 ## Authentication
 
-```
-Authorization: Bearer <MCP_BEARER_TOKEN>
-```
+Two equivalent ways to pass the token:
+
+- **Query string:** `https://erste.messagingmatrix.ai/mcp/?secret=<MCP_BEARER_TOKEN>` — use this for claude.ai connectors, which accept a single URL and have no headers UI.
+- **Header:** `Authorization: Bearer <MCP_BEARER_TOKEN>` — use this for Claude Desktop local config, curl, or any client that controls headers.
+
+Either one alone is sufficient.
 
 - Missing / wrong token → `401 Unauthorized`.
-- `MCP_BEARER_TOKEN` env var not set on the server → `503 Service Unavailable` ("MCP is not configured").
+- `MCP_BEARER_TOKEN` env var not set on the server → `503 Service Unavailable`.
 
 Generate a fresh token per instance:
 
@@ -33,32 +36,34 @@ Generate a fresh token per instance:
 openssl rand -hex 32
 ```
 
-Put it in the instance's `.env`, restart PM2 (`npm run pm2:restart`), and paste the same value into your MCP client config.
+Put it in the instance's `.env`, restart PM2, and paste the same value into your MCP client config (as the URL `?secret=...` or as the `Authorization: Bearer ...` header).
 
-## Claude Desktop config
+## Claude.ai connectors (recommended)
+
+Go to Claude.ai settings → Connectors → Add remote MCP server.
+
+- **Type:** Streamable HTTP (or "HTTP" depending on the UI label — whichever corresponds to the MCP Streamable HTTP transport)
+- **URL:** `https://erste.messagingmatrix.ai/mcp/?secret=<MCP_BEARER_TOKEN>` (include the trailing slash before the `?`)
+- Repeat per instance with that instance's token.
+
+Once connected it shows up in every Claude surface (claude.ai, Claude Desktop, Cowork).
+
+## Claude Desktop local config (alternative)
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
-    "messagingmatrix-erste": {
-      "url": "https://erste.messagingmatrix.ai/mcp",
-      "headers": {
-        "Authorization": "Bearer <your-token-here>"
-      }
-    },
-    "messagingmatrix-telekom": {
-      "url": "https://telekom.messagingmatrix.ai/mcp",
-      "headers": {
-        "Authorization": "Bearer <telekom-token-here>"
-      }
+    "mm-erste": {
+      "url": "https://erste.messagingmatrix.ai/mcp/",
+      "headers": { "Authorization": "Bearer <your-token-here>" }
     }
   }
 }
 ```
 
-Restart Claude Desktop. You should see the server + its tools listed in the "🔌" menu.
+Restart Claude Desktop.
 
 ## Tools (17)
 

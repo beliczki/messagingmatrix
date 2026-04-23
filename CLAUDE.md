@@ -220,7 +220,7 @@ Each deployment exposes an MCP endpoint at `<subdomain>/mcp` (e.g. `erste.messag
 
 1. `mcp/server.js` wires a `McpServer` with 17 tools at module load. Tool handlers live in `mcp/tools/{audiences,topics,messages,meta}.js`.
 2. `mcp/sheets.js` exposes single-row Google Sheets helpers (`appendRow`/`updateRow`/`deleteRow`/`findRow`) — the MCP writes per-row, **not** full-table like `src/services/sheets.js`. Reuses server.js `getAccessToken()` for Google auth.
-3. `mcp/auth.js` rejects any request without `Authorization: Bearer $MCP_BEARER_TOKEN`.
+3. `mcp/auth.js` accepts either `?secret=$MCP_BEARER_TOKEN` query string (used by claude.ai connectors) or `Authorization: Bearer $MCP_BEARER_TOKEN` header (Claude Desktop / curl). Either alone is sufficient.
 4. Tools: write — `audience_create/remove/update`, `topic_create/remove/update`, `mc_create/remove/update`; read — `list_audiences/list_topics/list_mc/mc_get`; reporting — `get_mc_reporting`; meta — `list_templates/list_products/matrix_status`.
 5. **Caveat:** MCP writes go directly to Sheets. If the matrix UI is open with unsaved edits, clicking Save will clobber MCP changes (`saveAll()` is a full-table rewrite). Save or reload UI before/after MCP batches.
 6. `mc_preview_image` is deferred — see `memory/mcp_preview_deferred.md`.
