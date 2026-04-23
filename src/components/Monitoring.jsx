@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart3, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AIAssistant from './AIAssistant';
 import MatrixStatePanel from './MatrixStatePanel';
+import MonitoringToolbar from './MonitoringToolbar';
+import MonitoringListView from './MonitoringListView';
 import { clearAndReloadApp } from '../utils/clearAndReload';
 import BottomBar from './BottomBar';
 import { apiGet, apiPost } from '../utils/api';
+import settings from '../services/settings';
 
 const DAYS_BACK_DEFAULT = 30;
 
@@ -19,7 +21,7 @@ function defaultDateRange() {
   return { from: formatIsoDate(from), to: formatIsoDate(to) };
 }
 
-const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }) => {
+const Monitoring = ({ matrixData }) => {
   const [saveProgress, setSaveProgress] = useState(null);
   const [campaignPrefix, setCampaignPrefix] = useState('26!');
   const [dateFrom, setDateFrom] = useState(() => defaultDateRange().from);
@@ -28,6 +30,24 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
   const [syncError, setSyncError] = useState(null);
   const [lastResult, setLastResult] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+
+  const [sortColumn, setSortColumn] = useState(() => localStorage.getItem('monitoring_sortColumn') || 'ctr');
+  const [sortDirection, setSortDirection] = useState(() => localStorage.getItem('monitoring_sortDirection') || 'desc');
+  const [productFilter, setProductFilter] = useState(() => {
+    try {
+      const saved = localStorage.getItem('monitoring_productFilter');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [showUnmatched, setShowUnmatched] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('monitoring_showUnmatched') || 'false'); }
+    catch { return false; }
+  });
+
+  useEffect(() => { localStorage.setItem('monitoring_sortColumn', sortColumn); }, [sortColumn]);
+  useEffect(() => { localStorage.setItem('monitoring_sortDirection', sortDirection); }, [sortDirection]);
+  useEffect(() => { localStorage.setItem('monitoring_productFilter', JSON.stringify(productFilter)); }, [productFilter]);
+  useEffect(() => { localStorage.setItem('monitoring_showUnmatched', JSON.stringify(showUnmatched)); }, [showUnmatched]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -102,109 +122,170 @@ const Monitoring = ({ onMenuToggle, currentModuleName, lookAndFeel, matrixData }
     }
   };
 
+  // Look up product via audience (primary) or topic (fallback) by key.
+  const productByMessage = useMemo(() => {
+    const audByKey = new Map((matrixData?.audiences || []).map(a => [a.key, a.product]));
+    const topByKey = new Map((matrixData?.topics || []).map(t => [t.key, t.product]));
+    return (m) => audByKey.get(m?.audience) || topByKey.get(m?.topic) || '';
+  }, [matrixData?.audiences, matrixData?.topics]);
+
+  // MC label → message lookup, plus MC number → first non-empty message image
+  // (image1/image2) across any variant — used as a fallback when the exact
+  // variant has no image. Values are raw drive IDs/filenames (not URLs).
+  const { messagesByMc, msgImgByNumber } = useMemo(() => {
+    const byMc = new Map();
+    const byNumber = new Map();
+    (matrixData?.messages || []).forEach(m => {
+      if (m.number == null || m.number === '') return;
+      const variant = (m.variant || 'a').toString().toLowerCase();
+      byMc.set(`MC${m.number}${variant}`, m);
+      if (!byNumber.has(m.number)) {
+        const img = m.image1 || m.image2;
+        if (img) byNumber.set(m.number, img);
+      }
+    });
+    return { messagesByMc: byMc, msgImgByNumber: byNumber };
+  }, [matrixData?.messages]);
+
+  // Resolve a creative → renderable thumbnail URL.
+  // Static images: serve via the drive proxy. HTML/dynamic: use Drive's auto
+  // thumbnail (File_thumbnail is typically a full https URL from Drive).
+  const resolveCreativeThumb = (c) => {
+    if (!c) return null;
+    const isImage =
+      (c.File_format && /jpe?g|png|gif|webp/i.test(c.File_format)) ||
+      (c.File_name && /\.(jpe?g|png|gif|webp)$/i.test(c.File_name));
+    if (isImage && c.File_driveID) return `/api/drive/proxy/${c.File_driveID}`;
+    if (c.File_thumbnail) return c.File_thumbnail;
+    return null;
+  };
+
+  // Index creatives by exact MC label and by MC number — covers both static
+  // image creatives and dynamic HTML banners (which have a Drive thumbnail).
+  const { creativeUrlByMc, creativeUrlByNumber } = useMemo(() => {
+    const byMc = new Map();
+    const byNumber = new Map();
+    (matrixData?.creatives || []).forEach(c => {
+      const url = resolveCreativeThumb(c);
+      if (!url) return;
+      const num = c.MC_Number;
+      const variant = (c.MC_Variant || '').toString().toLowerCase();
+      if (num && variant) {
+        const label = `MC${num}${variant}`;
+        if (!byMc.has(label)) byMc.set(label, url);
+      }
+      if (num && !byNumber.has(num)) byNumber.set(num, url);
+    });
+    return { creativeUrlByMc: byMc, creativeUrlByNumber: byNumber };
+  }, [matrixData?.creatives]);
+
+  // Banner-level reporting rows. By default only those whose MC label exists
+  // in the matrix; the "show unmatched" toggle relaxes this. Always drops
+  // low-volume rows (<50 impressions) — they're noise.
+  const matchedBanners = useMemo(() => {
+    return (matrixData?.reporting || [])
+      .filter(r => r.level === 'banner')
+      .filter(r => showUnmatched || (r.mcLabel && messagesByMc.has(r.mcLabel)))
+      .filter(r => (r.impressions || 0) >= 50)
+      .map(r => {
+        const msg = messagesByMc.get(r.mcLabel);
+        const msgImgId =
+          msg?.image1 ||
+          msg?.image2 ||
+          msgImgByNumber.get(msg?.number) ||
+          null;
+        const thumbnailUrl =
+          (msgImgId ? `/api/drive/proxy/${msgImgId}` : null) ||
+          creativeUrlByMc.get(r.mcLabel) ||
+          creativeUrlByNumber.get(msg?.number) ||
+          null;
+        return { ...r, thumbnailUrl, product: productByMessage(msg) };
+      });
+  }, [matrixData?.reporting, messagesByMc, msgImgByNumber, creativeUrlByMc, creativeUrlByNumber, productByMessage, showUnmatched]);
+
+  const totalBanners = useMemo(
+    () => (matrixData?.reporting || []).filter(r => r.level === 'banner').length,
+    [matrixData?.reporting]
+  );
+
+  const availableProducts = useMemo(() => {
+    const set = new Set();
+    matchedBanners.forEach(r => { if (r.product) set.add(r.product); });
+    return Array.from(set).sort();
+  }, [matchedBanners]);
+
+  // Drop stale entries when the product set changes (e.g. after a new sync).
+  useEffect(() => {
+    if (productFilter.length === 0 || availableProducts.length === 0) return;
+    const valid = productFilter.filter(p => availableProducts.includes(p));
+    if (valid.length !== productFilter.length) setProductFilter(valid);
+  }, [availableProducts, productFilter]);
+
+  const filteredBanners = useMemo(() => {
+    if (productFilter.length === 0) return matchedBanners;
+    return matchedBanners.filter(r => productFilter.includes(r.product));
+  }, [matchedBanners, productFilter]);
+
+  const sortedRows = useMemo(() => {
+    const arr = [...filteredBanners];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      const av = a[sortColumn];
+      const bv = b[sortColumn];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+    return arr;
+  }, [filteredBanners, sortColumn, sortDirection]);
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection(column === 'mcLabel' || column === 'size' || column === 'bannerName' || column === 'adformStatus' ? 'asc' : 'desc');
+    }
+  };
+
   return (
     <div className="matrix-fullscreen" style={{ backgroundColor: 'var(--color-primary)' }}>
       <div className="matrix-view-container">
-        <div className="p-8">
-          <div className="max-w-5xl mx-auto space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-8">
-              <div className="flex items-center gap-3 mb-6">
-                <BarChart3 size={32} className="text-green-600" />
-                <h2 className="text-xl font-bold text-gray-800">Monitoring — AdForm Sync</h2>
-              </div>
-
-              <p className="text-gray-600 mb-6">
-                Pulls impression and click data from AdForm for campaigns whose name starts with the
-                prefix below. Results are written to the <code className="bg-gray-100 px-1 py-0.5 rounded text-sm">Reporting</code> tab
-                of your matrix spreadsheet, at both banner level and MC-label level.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">Campaign prefix</span>
-                  <input
-                    type="text"
-                    value={campaignPrefix}
-                    onChange={(e) => setCampaignPrefix(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">From</span>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">To</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={handleSync}
-                  disabled={isSyncing || !campaignPrefix || !dateFrom || !dateTo}
-                  className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-                  {isSyncing ? 'Syncing…' : 'Sync now'}
-                </button>
-                {lastSync && (
-                  <span className="text-sm text-gray-500">
-                    Last sync: {new Date(lastSync).toLocaleString()}
-                  </span>
-                )}
-              </div>
-
-              {syncError && (
-                <div className="mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
-                  <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium">Sync failed</div>
-                    <div>{syncError}</div>
-                  </div>
-                </div>
-              )}
-
-              {lastResult && !syncError && (
-                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-md">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle size={16} className="text-green-600" />
-                    <span className="font-medium text-green-800">Last sync result</span>
-                  </div>
-                  <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                    <div>
-                      <dt className="text-gray-500">Campaigns</dt>
-                      <dd className="font-mono text-gray-900">{lastResult.campaignCount ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-gray-500">Banners</dt>
-                      <dd className="font-mono text-gray-900">{lastResult.bannerCount ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-gray-500">Matched to MC</dt>
-                      <dd className="font-mono text-gray-900">{lastResult.matchedCount ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-gray-500">Rows written</dt>
-                      <dd className="font-mono text-gray-900">{lastResult.rowsWritten ?? '—'}</dd>
-                    </div>
-                  </dl>
-                </div>
-              )}
-            </div>
+        <div className="monitoring-scroll p-8">
+          <div className="max-w-7xl mx-auto">
+            <MonitoringListView
+              rows={sortedRows}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
+              statusColors={settings.getStatusColors?.() || {}}
+            />
           </div>
         </div>
       </div>
+
+      <MonitoringToolbar
+        campaignPrefix={campaignPrefix}
+        setCampaignPrefix={setCampaignPrefix}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        isSyncing={isSyncing}
+        onSync={handleSync}
+        lastSync={lastSync}
+        syncError={syncError}
+        lastResult={lastResult}
+        filteredCount={sortedRows.length}
+        totalCount={totalBanners}
+        productFilter={productFilter}
+        setProductFilter={setProductFilter}
+        availableProducts={availableProducts}
+        showUnmatched={showUnmatched}
+        setShowUnmatched={setShowUnmatched}
+      />
 
       <BottomBar>
         <MatrixStatePanel

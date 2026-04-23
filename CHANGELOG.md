@@ -10,6 +10,19 @@ _Nothing yet._
 
 ---
 
+## [5.2.0] — 2026-04-23
+
+### Added
+- **Monitoring module — overhauled.** Replaced the centered sync card with a banner-level performance list joined to the matrix.
+  - `MonitoringListView.jsx` (new): table of banner-level reporting rows whose MC label exists in `messages`. Columns: thumbnail + MC | Product | Banner Name | Size | Impressions | Clicks | CTR | AdForm. Sortable per column; default sort = CTR desc. Sticky **totals row** under the header (sum of impressions/clicks + weighted average CTR).
+  - `MonitoringToolbar.jsx` (new): floating PocketKnife panel modeled on `MediaToolbar`. Hosts the AdForm sync controls (Campaign prefix + From/To on one row + Sync now), last-sync timestamp, and the result summary. Adds a multi-select **Products** filter pill (same UI as Creative Library) plus a **Show unmatched** checkbox to include banner rows whose MC label isn't in the matrix. All toolbar state persisted to localStorage (`monitoring_*`).
+  - **Thumbnails**: each row resolves an image with this fallback chain — message `image1` → `image2` → sibling-variant image — image creative matching MC label → image creative matching MC number — dynamic creative `File_thumbnail` (Drive auto-thumb).
+  - **Noise filter**: rows with <50 impressions are dropped before display.
+  - `Monitoring.jsx`: rewritten to compose the toolbar + list + existing BottomBar; product is derived from the message's audience (primary) or topic (fallback).
+- `.monitoring-scroll` style in `matrix.css` — full-height scroll container with thin custom webkit scrollbar and 96px bottom padding to clear the BottomBar.
+
+---
+
 ## [5.1.0] — 2026-04-23
 
 ### Added
